@@ -1,0 +1,247 @@
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Utilities used in components */
+.min-h-screen { min-height: 100vh; }
+.h-full { height: 100%; }
+.w-full { width: 100%; }
+.max-w-md { max-width: 28rem; }
+.flex { display: flex; }
+.flex-1 { flex: 1; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.text-center { text-align: center; }
+.overflow-hidden { overflow: hidden; }
+.cursor-pointer { cursor: pointer; }
+.hidden { display: none; }
+@media (min-width: 640px) {
+  .sm\:block { display: block; }
+}
+
+.m-4 { margin: 1rem; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-4 { margin-top: 1rem; }
+.mt-6 { margin-top: 1.5rem; }
+.mb-0 { margin-bottom: 0; }
+.mb-2 { margin-bottom: 0.5rem; }
+.mb-6 { margin-bottom: 1.5rem; }
+.mb-8 { margin-bottom: 2rem; }
+.ml-2 { margin-left: 0.5rem; }
+.mr-1 { margin-right: 0.25rem; }
+.mr-2 { margin-right: 0.5rem; }
+.mr-8 { margin-right: 2rem; }
+.p-4 { padding: 1rem; }
+.px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
+.px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
+.py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+.h-10 { height: 2.5rem; }
+.h-16 { height: 4rem; }
+.min-h-\[400px\] { min-height: 400px; }
+
+.text-xs { font-size: 0.75rem; line-height: 1rem; }
+.text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+.font-medium { font-weight: 500; }
+.font-bold { font-weight: 700; }
+
+.text-gray-400 { color: #9ca3af; }
+.text-gray-500 { color: #6b7280; }
+.text-green-600 { color: #16a34a; }
+.text-blue-600 { color: #2563eb; }
+.text-red-600 { color: #dc2626; }
+.bg-blue-500 { background-color: #3b82f6; }
+
+.shadow-sm { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+.shadow-lg { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+.hover\:shadow-md:hover { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+.border-0 { border-width: 0; }
+.rounded-2xl { border-radius: 1rem; }
+.rounded-full { border-radius: 9999px; }
+
+.transition-colors { transition-property: background-color, border-color, color, fill, stroke; transition-duration: 150ms; }
+.transition-shadow { transition-property: box-shadow; transition-duration: 150ms; }
+
+.hover\:bg-gray-100:hover { background-color: #f3f4f6; }
+
+html[data-theme='dark'] .hover\:bg-gray-800:hover { background-color: #1f2937; }
+html[data-theme='dark'] .bg-\[\#141414\] { background-color: #141414; }
+.bg-\[\#f0f2f5\] { background-color: #f0f2f5; }
+
+/* Additional Dashboard Utilities */
+.pb-8 { padding-bottom: 2rem; }
+.flex-col { flex-direction: column; }
+.justify-between { justify-content: space-between; }
+.items-end { align-items: flex-end; }
+.gap-4 { gap: 1rem; }
+.mb-1 { margin-bottom: 0.25rem; }
+.block { display: block; }
+.font-semibold { font-weight: 600; }
+.text-green-500 { color: #22c55e; }
+.text-red-500 { color: #ef4444; }
+.bg-green-50 { background-color: #f0fdf4; }
+.bg-blue-50 { background-color: #eff6ff; }
+.bg-red-50 { background-color: #fef2f2; }
+.rounded { border-radius: 0.25rem; }
+
+.border { border-width: 1px; border-style: solid; }
+.border-gray-200 { border-color: #e5e7eb; }
+.border-gray-100 { border-color: #f3f4f6; }
+.border-gray-800 { border-color: #1f2937; }
+
+/* Text Utilities */
+.text-sm { font-size: 0.875rem; }
+.text-xl { font-size: 1.25rem; }
+.font-medium { font-weight: 500; }
+.text-gray-400 { color: #9ca3af; }
+.ml-2 { margin-left: 0.5rem; }
+
+/* Layout Utilities */
+.p-3 { padding: 0.75rem; }
+.mt-1 { margin-top: 0.25rem; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-3 { margin-top: 0.75rem; }
+.mt-4 { margin-top: 1rem; }
+.mb-0 { margin-bottom: 0 !important; }
+.mb-4 { margin-bottom: 1rem; }
+.mb-6 { margin-bottom: 1.5rem; }
+.rounded-xl { border-radius: 0.75rem; }
+.rounded-full { border-radius: 9999px; }
+
+/* Colors */
+.text-blue-500 { color: #3b82f6; }
+.bg-blue-50 { background-color: #eff6ff; }
+.text-green-500 { color: #22c55e; }
+.bg-green-50 { background-color: #f0fdf4; }
+.text-red-500 { color: #ef4444; }
+.bg-red-50 { background-color: #fef2f2; }
+.text-orange-500 { color: #f97316; }
+.bg-orange-50 { background-color: #fff7ed; }
+.text-purple-500 { color: #a855f7; }
+.bg-purple-50 { background-color: #faf5ff; }
+.text-teal-500 { color: #14b8a6; }
+.bg-teal-50 { background-color: #f0fdfa; }
+
+html[data-theme='dark'] .border-gray-100 { border-color: #374151; }
+html[data-theme='dark'] .border-gray-200 { border-color: #374151; }
+html[data-theme='dark'] .bg-green-50 { background-color: rgba(34, 197, 94, 0.1); }
+html[data-theme='dark'] .bg-blue-50 { background-color: rgba(59, 130, 246, 0.1); }
+html[data-theme='dark'] .bg-red-50 { background-color: rgba(239, 68, 68, 0.1); }
+html[data-theme='dark'] .bg-orange-50 { background-color: rgba(249, 115, 22, 0.1); }
+html[data-theme='dark'] .bg-purple-50 { background-color: rgba(168, 85, 247, 0.1); }
+html[data-theme='dark'] .bg-teal-50 { background-color: rgba(20, 184, 166, 0.1); }
+
+/* Emerald & Rose Utilities */
+.text-emerald-600 { color: #059669; }
+.text-emerald-800 { color: #065f46; }
+.bg-emerald-50 { background-color: #ecfdf5; }
+.border-emerald-100 { border-color: #d1fae5; }
+html[data-theme='dark'] .bg-emerald-50 { background-color: rgba(5, 150, 105, 0.1); }
+html[data-theme='dark'] .border-emerald-100 { border-color: rgba(5, 150, 105, 0.2); }
+
+.text-rose-600 { color: #e11d48; }
+.bg-rose-50 { background-color: #fff1f2; }
+html[data-theme='dark'] .bg-rose-50 { background-color: rgba(225, 29, 72, 0.1); }
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Print Styles */
+@page {
+  size: auto;
+  margin: 0; 
+}
+
+@media print {
+  body {
+    padding: 15mm !important;
+    background: white !important;
+  }
+
+  /* Hide navigation, sidebar, and headers */
+  .ant-layout-sider, 
+  .ant-layout-header, 
+  .ant-breadcrumb,
+  .no-print,
+  .ant-btn:not(.print-visible),
+  .ant-form {
+    display: none !important;
+  }
+
+  /* Reset layout for print */
+  .ant-layout, 
+  .ant-layout-content,
+  .ant-card,
+  #root {
+    background: white !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    position: static !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Force zero margin for layout which usually has sidebar margin */
+  .ant-layout {
+    margin-left: 0 !important;
+  }
+
+  /* Ensure report container is visible and clean */
+  .ant-card-body {
+    padding: 0 !important;
+  }
+
+  #printable-report {
+    display: block !important;
+    width: 100% !important;
+    text-align: center !important;
+  }
+
+  /* Fix squashed text in headers */
+  #printable-report h3,
+  #printable-report .ant-space {
+    display: block !important;
+    width: 100% !important;
+    margin-bottom: 10px !important;
+  }
+
+  #printable-report .ant-space-item {
+    display: inline-block !important;
+    margin: 0 10px !important;
+  }
+
+  /* Fix table styles for print */
+  .ant-table-wrapper {
+    margin-top: 20px !important;
+    width: 100% !important;
+  }
+
+  .ant-table {
+    font-size: 11pt !important;
+    width: 100% !important;
+  }
+
+  /* Force colors to show in print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

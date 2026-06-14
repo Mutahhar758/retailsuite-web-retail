@@ -1,0 +1,102 @@
+{
+  "hash": "29602b2a",
+  "configHash": "6ac8ddb1",
+  "lockfileHash": "68c34b50",
+  "browserHash": "a651c545",
+  "optimized": {
+    "@ant-design/icons": {
+      "src": "../../node_modules/@ant-design/icons/es/index.js",
+      "file": "@ant-design_icons.js",
+      "fileHash": "1bcff77f",
+      "needsInterop": false
+    },
+    "antd": {
+      "src": "../../node_modules/antd/es/index.js",
+      "file": "antd.js",
+      "fileHash": "578c6539",
+      "needsInterop": false
+    },
+    "axios": {
+      "src": "../../node_modules/axios/index.js",
+      "file": "axios.js",
+      "fileHash": "680d67ad",
+      "needsInterop": false
+    },
+    "dayjs": {
+      "src": "../../node_modules/dayjs/dayjs.min.js",
+      "file": "dayjs.js",
+      "fileHash": "3b8ab01c",
+      "needsInterop": true
+    },
+    "dayjs/plugin/quarterOfYear": {
+      "src": "../../node_modules/dayjs/plugin/quarterOfYear.js",
+      "file": "dayjs_plugin_quarterOfYear.js",
+      "fileHash": "d5d0d553",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "cc9f9dbb",
+      "needsInterop": true
+    },
+    "react-router-dom": {
+      "src": "../../node_modules/react-router-dom/dist/index.mjs",
+      "file": "react-router-dom.js",
+      "fileHash": "cb3c120f",
+      "needsInterop": false
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "f45a30f7",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "5b40c40f",
+      "needsInterop": true
+    },
+    "recharts": {
+      "src": "../../node_modules/recharts/es6/index.js",
+      "file": "recharts.js",
+      "fileHash": "ee2dc8fc",
+      "needsInterop": false
+    },
+    "zustand": {
+      "src": "../../node_modules/zustand/esm/index.mjs",
+      "file": "zustand.js",
+      "fileHash": "3ed75511",
+      "needsInterop": false
+    },
+    "zustand/middleware": {
+      "src": "../../node_modules/zustand/esm/middleware.mjs",
+      "file": "zustand_middleware.js",
+      "fileHash": "b6d18f1c",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-CYJPkc-J": {
+      "file": "chunk-CYJPkc-J.js",
+      "isDynamicEntry": false
+    },
+    "client-BD5GgjMC": {
+      "file": "client-BD5GgjMC.js",
+      "isDynamicEntry": false
+    },
+    "clsx-CAT_cZ_M": {
+      "file": "clsx-CAT_cZ_M.js",
+      "isDynamicEntry": false
+    },
+    "react-dom-D3F9H82U": {
+      "file": "react-dom-D3F9H82U.js",
+      "isDynamicEntry": false
+    },
+    "ref-CzJ07Yrs": {
+      "file": "ref-CzJ07Yrs.js",
+      "isDynamicEntry": false
+    }
+  }
+}
