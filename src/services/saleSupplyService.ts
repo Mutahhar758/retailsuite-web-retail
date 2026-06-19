@@ -18,6 +18,7 @@ export interface SaleSupplyLine {
   narration?: string;
   narrationId?: string;
   description?: string;
+  supplyOrderMasterId?: number;
   customerId: string;
   unit?: string | null;
   qty: number;
@@ -44,6 +45,7 @@ export interface SaleSupplyLineRequest {
 export interface SaleSupplyCreateRequest {
   date: string;
   itemId: string;
+  supplyOrderMasterId?: number;
   narration?: string;
   description?: string;
   lines: SaleSupplyLineRequest[];
@@ -52,6 +54,7 @@ export interface SaleSupplyCreateRequest {
 export interface SaleSupplyUpdateRequest {
   date: string;
   itemId: string;
+  supplyOrderMasterId?: number;
   narration?: string;
   description?: string;
   lines: SaleSupplyLineRequest[];

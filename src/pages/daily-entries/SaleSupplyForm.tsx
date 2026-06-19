@@ -5,10 +5,10 @@ import {
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
-  TruckOutlined, AppstoreOutlined, FileTextOutlined
+  TruckOutlined, AppstoreOutlined, FileTextOutlined, CopyOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { saleSupplyService } from '../../services/saleSupplyService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
@@ -21,6 +21,7 @@ export const SaleSupplyForm: React.FC = () => {
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
   const navigate = useNavigate();
+  const location = useLocation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   
@@ -41,8 +42,24 @@ export const SaleSupplyForm: React.FC = () => {
     if (isEdit) {
       fetchDetail();
     } else {
-      setSupplyLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0 }]);
-      form.setFieldsValue({ date: dayjs() });
+      const copyFrom = (location.state as any)?.copyFrom;
+      if (copyFrom) {
+        // Pre-populate from Copy as New
+        form.setFieldsValue({
+          date: dayjs(),
+          itemId: copyFrom.itemId,
+          narration: copyFrom.narration,
+          description: copyFrom.description,
+          supplyOrderMasterId: copyFrom.supplyOrderMasterId
+        });
+        setSupplyLines((copyFrom.lines || []).map((l: any) => ({
+          ...l,
+          key: Date.now() + l.seq
+        })));
+      } else {
+        setSupplyLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0 }]);
+        form.setFieldsValue({ date: dayjs() });
+      }
     }
   }, [isEdit, voucherNo]);
 
@@ -56,7 +73,8 @@ export const SaleSupplyForm: React.FC = () => {
           date: dayjs(first.date),
           itemId: first.itemId,
           narration: first.narrationId,
-          description: first.description
+          description: first.description,
+          supplyOrderMasterId: first.supplyOrderMasterId ?? undefined
         });
 
         setSupplyLines(details.map(d => ({
@@ -154,6 +172,7 @@ export const SaleSupplyForm: React.FC = () => {
       const request = {
         ...values,
         date: values.date.format('YYYY-MM-DD'),
+        supplyOrderMasterId: values.supplyOrderMasterId,
         lines: validLines.map(l => {
           const masterItemId = form.getFieldValue('itemId') || values.itemId;
           const item = items.find(i => i.id === masterItemId);
@@ -327,6 +346,27 @@ export const SaleSupplyForm: React.FC = () => {
               <Button danger icon={<DeleteOutlined />}>Delete</Button>
             </Popconfirm>
           )}
+          {isEdit && (
+            <Button
+              icon={<CopyOutlined />}
+              onClick={() => {
+                const values = form.getFieldsValue();
+                navigate('/daily-entries/sale-supply/new', {
+                  state: {
+                    copyFrom: {
+                      itemId: values.itemId,
+                      narration: values.narration,
+                      description: values.description,
+                      supplyOrderMasterId: values.supplyOrderMasterId,
+                      lines: supplyLines
+                    }
+                  }
+                });
+              }}
+            >
+              Copy as New
+            </Button>
+          )}
           <Button 
             type="primary" 
             icon={<SaveOutlined />} 
@@ -366,9 +406,9 @@ export const SaleSupplyForm: React.FC = () => {
             </Form.Item>
           </Col>
           <Col xs={24} sm={24} lg={8}>
-            <Form.Item label="Load from Supply Order">
+            <Form.Item label="Supply Order Profile" name="supplyOrderMasterId">
               <Select
-                placeholder="Select Order to Load"
+                placeholder="Select Supply Order Profile"
                 onChange={handleLoadFromSupplyOrder}
                 allowClear
               >
