@@ -76,6 +76,12 @@ export const SaleSupplyList: React.FC = () => {
       render: (text: string) => <Text strong>{text}</Text>,
     },
     {
+      title: 'Profile',
+      dataIndex: 'supplyOrderTitle',
+      key: 'supplyOrderTitle',
+      render: (text: string) => text ? <Tag color="blue">{text}</Tag> : <Text type="secondary">-</Text>,
+    },
+    {
       title: 'Created By',
       dataIndex: 'createdBy',
       key: 'createdBy',

@@ -8,6 +8,8 @@ export interface SaleSupply {
   createdOn: string;
   lastModifiedBy?: string;
   lastModifiedOn?: string;
+  supplyOrderMasterId?: number;
+  supplyOrderTitle?: string;
 }
 
 export interface SaleSupplyLine {
