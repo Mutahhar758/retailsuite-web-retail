@@ -92,7 +92,7 @@ export const SaleSupplyForm: React.FC = () => {
   };
 
   const handleLoadFromSupplyOrder = async (orderId: number) => {
-    if (!orderId) return;
+    if (!orderId || isEdit) return;
     const masterItemId = form.getFieldValue('itemId');
     const item = items.find(i => i.id === masterItemId);
     
