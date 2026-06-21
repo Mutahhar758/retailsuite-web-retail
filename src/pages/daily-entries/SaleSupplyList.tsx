@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, TruckOutlined, 
-  SearchOutlined, ReloadOutlined 
+  SearchOutlined, ReloadOutlined, CopyOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -98,15 +98,58 @@ export const SaleSupplyList: React.FC = () => {
       title: 'Actions',
       key: 'action',
       render: (_: any, record: SaleSupply) => (
-        <Button 
-          type="primary" 
-          icon={<EditOutlined />} 
-          size="small"
-          style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}
-          onClick={() => navigate(`/daily-entries/sale-supply/${record.voucherNo}`)}
-        >
-          Edit
-        </Button>
+        <Space>
+          <Button 
+            type="primary" 
+            icon={<EditOutlined />} 
+            size="small"
+            style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}
+            onClick={() => navigate(`/daily-entries/sale-supply/${record.voucherNo}`)}
+          >
+            Edit
+          </Button>
+          <Button 
+            icon={<CopyOutlined />} 
+            size="small"
+            onClick={async () => {
+              try {
+                setLoading(true);
+                const details = await saleSupplyService.getDetail(record.voucherNo);
+                if (details && details.length > 0) {
+                  const first = details[0];
+                  navigate('/daily-entries/sale-supply/new', {
+                    state: {
+                      copyFrom: {
+                        itemId: first.itemId,
+                        narration: first.narrationId,
+                        description: first.description,
+                        supplyOrderMasterId: first.supplyOrderMasterId,
+                        lines: details.map(d => ({
+                          seq: d.seq,
+                          customerId: d.customerId,
+                          unit: d.unit,
+                          qty: d.qty,
+                          rate: d.rate,
+                          discount: d.discount,
+                          addLess: d.addLess,
+                          amount: d.amount
+                        }))
+                      }
+                    }
+                  });
+                } else {
+                  message.error('No details found to copy');
+                }
+              } catch (error) {
+                message.error('Failed to load details for copy');
+              } finally {
+                setLoading(false);
+              }
+            }}
+          >
+            Copy
+          </Button>
+        </Space>
       ),
     },
   ];
