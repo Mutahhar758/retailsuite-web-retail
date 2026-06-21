@@ -17,6 +17,8 @@ export interface HRInfoResponse {
   overtime: number;
   expenseAccount?: string;
   payableAccount?: string;
+  mediaId?: string;
+  mediaUrl?: string;
   createdBy?: string;
   createdOn?: string;
   lastModifiedBy?: string;
@@ -39,6 +41,7 @@ export interface HRInfoUpsertRequest {
   overtime: number;
   expenseAccount?: string;
   payableAccount?: string;
+  mediaId?: string;
 }
 
 export const hrInfoService = {
@@ -65,5 +68,10 @@ export const hrInfoService = {
   async delete(id: string) {
     const response = await api.delete(`/api/hrinfo/${id}`);
     return response.data.body as string;
+  },
+
+  async getPresignedUploadUrl(fileName: string) {
+    const response = await api.post('/api/hrinfo/presigned-upload-url', null, { params: { fileName } });
+    return response.data.body as { fileId: string; uploadUrl: string; expiresAt: string };
   }
 };

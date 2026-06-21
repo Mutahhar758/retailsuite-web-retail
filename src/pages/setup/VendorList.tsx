@@ -58,6 +58,7 @@ export const VendorList: React.FC = () => {
       render: (_: any, record: VendorResponse) => (
         <Space size="middle">
           <Avatar 
+            src={record.mediaUrl || undefined}
             icon={<ShopOutlined />} 
             style={{ backgroundColor: '#fff7e6', color: '#d46b08', border: '1px solid #ffd591' }} 
           />

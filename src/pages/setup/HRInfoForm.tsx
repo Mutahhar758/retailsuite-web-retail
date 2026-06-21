@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Card, Button, Space, Typography, Form, Input, Row, Col, 
-  Select, DatePicker, InputNumber, message, Divider, Avatar, Tag
+  Select, DatePicker, InputNumber, message, Divider, Avatar, Tag, Upload
 } from 'antd';
 import { 
   SaveOutlined, ArrowLeftOutlined, CameraOutlined,
   UserOutlined, DollarOutlined, 
   SolutionOutlined, IdcardOutlined, AccountBookOutlined,
-  AuditOutlined
+  AuditOutlined, LoadingOutlined
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
+import axios from 'axios';
 import { hrInfoService, type HRInfoUpsertRequest } from '../../services/hrInfoService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 
@@ -25,6 +26,8 @@ export const HRInfoForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [employeeName, setEmployeeName] = useState<string>('');
   const [accounts, setAccounts] = useState<ChartOfAccountHeadDto[]>([]);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   // Fetch Lookups and Employee Data
   const fetchData = useCallback(async () => {
@@ -54,7 +57,11 @@ export const HRInfoForm: React.FC = () => {
             overtime: emp.overtime,
             expenseAccount: emp.expenseAccount || null,
             payableAccount: emp.payableAccount || null,
+            mediaId: emp.mediaId || null,
           });
+          if (emp.mediaUrl) {
+            setImageUrl(emp.mediaUrl);
+          }
         } else {
           message.error('Employee record not found');
           navigate('/setup/hr-info');
@@ -92,6 +99,7 @@ export const HRInfoForm: React.FC = () => {
         overtime: values.overtime || 0,
         expenseAccount: values.expenseAccount || null,
         payableAccount: values.payableAccount || null,
+        mediaId: values.mediaId || null,
       };
 
       if (isEdit) {
@@ -112,6 +120,37 @@ export const HRInfoForm: React.FC = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCustomUpload = async (options: any) => {
+    const { file, onSuccess, onError } = options;
+    try {
+      setUploading(true);
+      const { fileId, uploadUrl } = await hrInfoService.getPresignedUploadUrl(file.name);
+      
+      const formData = new FormData();
+      formData.append('File', file);
+      
+      await axios.post(uploadUrl, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      form.setFieldsValue({ mediaId: fileId });
+      
+      const localUrl = URL.createObjectURL(file);
+      setImageUrl(localUrl);
+      
+      message.success('Employee photograph uploaded successfully');
+      onSuccess?.("ok");
+    } catch (err) {
+      console.error(err);
+      message.error('Failed to upload employee photograph');
+      onError?.(err as Error);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -163,65 +202,76 @@ export const HRInfoForm: React.FC = () => {
           overtime: 0
         }}
       >
+        {/* Hidden field to bind mediaId to form submit values */}
+        <Form.Item name="mediaId" noStyle><Input type="hidden" /></Form.Item>
+
         <Row gutter={24}>
           {/* Left Column: Avatar & Summary */}
           <Col xs={24} md={6} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
             <div className="text-center">
               <Text strong className="block mb-3">Employee Photograph</Text>
-              <div 
-                style={{ 
-                  position: 'relative', 
-                  width: '130px', 
-                  height: '130px', 
-                  borderRadius: '50%', 
-                  overflow: 'hidden',
-                  border: '3px solid #13c2c220',
-                  boxShadow: '0 4px 10px rgba(0, 0, 0, 0.05)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#f5f5f5'
-                }}
-                className="group transition-all hover:border-teal-400"
+              <Upload
+                accept="image/*"
+                showUploadList={false}
+                customRequest={handleCustomUpload}
+                disabled={uploading}
+                style={{ width: '130px', height: '130px', display: 'block' }}
               >
-                <Avatar 
-                  size={120} 
-                  icon={<UserOutlined style={{ fontSize: '60px', color: '#bfbfbf' }} />} 
-                  style={{ backgroundColor: '#fafafa' }}
-                />
                 <div 
                   style={{ 
-                    position: 'absolute', 
-                    top: 0, 
-                    left: 0, 
-                    right: 0, 
-                    bottom: 0, 
-                    backgroundColor: 'rgba(0, 0, 0, 0.5)', 
-                    display: 'flex', 
-                    flexDirection: 'column',
-                    alignItems: 'center', 
+                    position: 'relative', 
+                    width: '130px', 
+                    height: '130px', 
+                    borderRadius: '50%', 
+                    overflow: 'hidden',
+                    border: '3px solid #13c2c220',
+                    boxShadow: '0 4px 10px rgba(0, 0, 0, 0.05)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'center',
-                    opacity: 0,
-                    transition: 'opacity 0.3s ease-in-out'
+                    backgroundColor: '#f5f5f5'
                   }}
-                  className="hover-overlay"
-                  onMouseEnter={(e) => {
-                    const el = e.currentTarget as HTMLElement;
-                    el.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    const el = e.currentTarget as HTMLElement;
-                    el.style.opacity = '0';
-                  }}
-                  onClick={() => message.info('Photograph upload features will be available in future version.')}
+                  className="group transition-all hover:border-teal-400"
                 >
-                  <CameraOutlined style={{ color: '#fff', fontSize: '24px', marginBottom: '4px' }} />
-                  <Text style={{ color: '#fff', fontSize: '11px' }}>Upload Photo</Text>
+                  <Avatar 
+                    size={120} 
+                    src={imageUrl || undefined}
+                    icon={!imageUrl && (uploading ? <LoadingOutlined style={{ fontSize: '40px' }} /> : <UserOutlined style={{ fontSize: '60px', color: '#bfbfbf' }} />)} 
+                    style={{ backgroundColor: '#fafafa' }}
+                  />
+                  <div 
+                    style={{ 
+                      position: 'absolute', 
+                      top: 0, 
+                      left: 0, 
+                      right: 0, 
+                      bottom: 0, 
+                      backgroundColor: 'rgba(0, 0, 0, 0.5)', 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      opacity: 0,
+                      transition: 'opacity 0.3s ease-in-out'
+                    }}
+                    className="hover-overlay"
+                    onMouseEnter={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.opacity = '1';
+                    }}
+                    onMouseLeave={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.opacity = '0';
+                    }}
+                  >
+                    <CameraOutlined style={{ color: '#fff', fontSize: '24px', marginBottom: '4px' }} />
+                    <Text style={{ color: '#fff', fontSize: '11px' }}>{imageUrl ? 'Change Photo' : 'Upload Photo'}</Text>
+                  </div>
                 </div>
-              </div>
+              </Upload>
               <div style={{ marginTop: '12px' }}>
-                <Tag color="cyan" className="rounded-full">Photo Upload Placeholder</Tag>
+                <Tag color="cyan" className="rounded-full">{uploading ? 'Uploading...' : 'Click to Upload'}</Tag>
               </div>
               
               {isEdit && (

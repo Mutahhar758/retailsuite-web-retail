@@ -16,6 +16,8 @@ export interface VendorResponse {
   emailAlert: boolean;
   active: boolean;
   showInSales: boolean;
+  mediaId?: string;
+  mediaUrl?: string;
   createdBy?: string;
   createdOn?: string;
   lastModifiedBy?: string;
@@ -37,6 +39,7 @@ export interface VendorCreateRequest {
   emailAlert: boolean;
   active: boolean;
   showInSales: boolean;
+  mediaId?: string;
 }
 
 export interface VendorUpdateRequest {
@@ -54,6 +57,7 @@ export interface VendorUpdateRequest {
   emailAlert: boolean;
   active: boolean;
   showInSales: boolean;
+  mediaId?: string;
 }
 
 export const vendorService = {
@@ -70,5 +74,10 @@ export const vendorService = {
   async update(account: string, data: VendorUpdateRequest) {
     const response = await api.put(`/api/vendors/${account}`, data);
     return response.data.body as string;
+  },
+
+  async getPresignedUploadUrl(fileName: string) {
+    const response = await api.post('/api/vendors/presigned-upload-url', null, { params: { fileName } });
+    return response.data.body as { fileId: string; uploadUrl: string; expiresAt: string };
   }
 };

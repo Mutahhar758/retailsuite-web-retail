@@ -84,6 +84,7 @@ export const HRInfoList: React.FC = () => {
       render: (_: any, record: HRInfoResponse) => (
         <Space size="middle">
           <Avatar 
+            src={record.mediaUrl || undefined}
             icon={<UserOutlined />} 
             style={{ backgroundColor: '#e6fffb', color: '#13c2c2', border: '1px solid #87e8de' }} 
           />

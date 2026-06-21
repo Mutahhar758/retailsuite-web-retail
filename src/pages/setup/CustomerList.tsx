@@ -58,6 +58,7 @@ export const CustomerList: React.FC = () => {
       render: (_: any, record: CustomerResponse) => (
         <Space size="middle">
           <Avatar 
+            src={record.mediaUrl || undefined}
             icon={<UserOutlined />} 
             style={{ backgroundColor: '#e6f4ff', color: '#1677ff', border: '1px solid #bae0ff' }} 
           />

@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Card, Button, Space, Typography, Form, Input, Row, Col, Checkbox, 
-  message, Divider, Avatar, Tag
+  message, Divider, Avatar, Tag, Upload
 } from 'antd';
 import { 
   SaveOutlined, ArrowLeftOutlined, CameraOutlined,
-  MailOutlined, PhoneOutlined, AuditOutlined, BankOutlined, ShopOutlined
+  MailOutlined, PhoneOutlined, AuditOutlined, BankOutlined, ShopOutlined, LoadingOutlined
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
+import axios from 'axios';
 import { vendorService, type VendorCreateRequest, type VendorUpdateRequest } from '../../services/vendorService';
 
 const { Title, Text } = Typography;
@@ -20,6 +21,8 @@ export const VendorForm: React.FC = () => {
   
   const [loading, setLoading] = useState(false);
   const [vendorTitle, setVendorTitle] = useState<string>('');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -47,7 +50,11 @@ export const VendorForm: React.FC = () => {
             emailAlert: vendor.emailAlert,
             active: vendor.active,
             showInSales: vendor.showInSales,
+            mediaId: vendor.mediaId,
           });
+          if (vendor.mediaUrl) {
+            setImageUrl(vendor.mediaUrl);
+          }
         } else {
           message.error('Vendor not found');
           navigate('/setup/vendors');
@@ -86,6 +93,7 @@ export const VendorForm: React.FC = () => {
           emailAlert: !!values.emailAlert,
           active: values.active !== undefined ? values.active : true,
           showInSales: !!values.showInSales,
+          mediaId: values.mediaId || null,
         };
 
         await vendorService.update(account, updateRequest);
@@ -107,6 +115,7 @@ export const VendorForm: React.FC = () => {
           emailAlert: !!values.emailAlert,
           active: values.active !== undefined ? values.active : true,
           showInSales: !!values.showInSales,
+          mediaId: values.mediaId || null,
         };
 
         const generatedAccountCode = await vendorService.create(createRequest);
@@ -123,6 +132,37 @@ export const VendorForm: React.FC = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCustomUpload = async (options: any) => {
+    const { file, onSuccess, onError } = options;
+    try {
+      setUploading(true);
+      const { fileId, uploadUrl } = await vendorService.getPresignedUploadUrl(file.name);
+      
+      const formData = new FormData();
+      formData.append('File', file);
+      
+      await axios.post(uploadUrl, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      form.setFieldsValue({ mediaId: fileId });
+      
+      const localUrl = URL.createObjectURL(file);
+      setImageUrl(localUrl);
+      
+      message.success('Avatar uploaded successfully');
+      onSuccess?.("ok");
+    } catch (err) {
+      console.error(err);
+      message.error('Failed to upload avatar');
+      onError?.(err as Error);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -167,65 +207,76 @@ export const VendorForm: React.FC = () => {
         layout="vertical"
         initialValues={{ active: true, smsAlert: false, emailAlert: false, showInSales: false }}
       >
+        {/* Hidden field to bind mediaId to form submit values */}
+        <Form.Item name="mediaId" noStyle><Input type="hidden" /></Form.Item>
+
         <Row gutter={24}>
           {/* Left Column: Avatar Display & Action Placeholder */}
           <Col xs={24} md={6} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
             <div className="text-center">
               <Text strong className="block mb-3">Vendor Avatar</Text>
-              <div 
-                style={{ 
-                  position: 'relative', 
-                  width: '130px', 
-                  height: '130px', 
-                  borderRadius: '50%', 
-                  overflow: 'hidden',
-                  border: '3px solid #d46b0820',
-                  boxShadow: '0 4px 10px rgba(0, 0, 0, 0.05)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#f5f5f5'
-                }}
-                className="group transition-all hover:border-orange-400"
+              <Upload
+                accept="image/*"
+                showUploadList={false}
+                customRequest={handleCustomUpload}
+                disabled={uploading}
+                style={{ width: '130px', height: '130px', display: 'block' }}
               >
-                <Avatar 
-                  size={120} 
-                  icon={<ShopOutlined style={{ fontSize: '60px', color: '#bfbfbf' }} />} 
-                  style={{ backgroundColor: '#fafafa' }}
-                />
                 <div 
                   style={{ 
-                    position: 'absolute', 
-                    top: 0, 
-                    left: 0, 
-                    right: 0, 
-                    bottom: 0, 
-                    backgroundColor: 'rgba(0, 0, 0, 0.5)', 
-                    display: 'flex', 
-                    flexDirection: 'column',
-                    alignItems: 'center', 
+                    position: 'relative', 
+                    width: '130px', 
+                    height: '130px', 
+                    borderRadius: '50%', 
+                    overflow: 'hidden',
+                    border: '3px solid #d46b0820',
+                    boxShadow: '0 4px 10px rgba(0, 0, 0, 0.05)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'center',
-                    opacity: 0,
-                    transition: 'opacity 0.3s ease-in-out'
+                    backgroundColor: '#f5f5f5'
                   }}
-                  className="hover-overlay"
-                  onMouseEnter={(e) => {
-                    const el = e.currentTarget as HTMLElement;
-                    el.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    const el = e.currentTarget as HTMLElement;
-                    el.style.opacity = '0';
-                  }}
-                  onClick={() => message.info('Avatar uploading will be fully integrated in the future update.')}
+                  className="group transition-all hover:border-orange-400"
                 >
-                  <CameraOutlined style={{ color: '#fff', fontSize: '24px', marginBottom: '4px' }} />
-                  <Text style={{ color: '#fff', fontSize: '11px' }}>Update (Future)</Text>
+                  <Avatar 
+                    size={120} 
+                    src={imageUrl || undefined}
+                    icon={!imageUrl && (uploading ? <LoadingOutlined style={{ fontSize: '40px' }} /> : <ShopOutlined style={{ fontSize: '60px', color: '#bfbfbf' }} />)} 
+                    style={{ backgroundColor: '#fafafa' }}
+                  />
+                  <div 
+                    style={{ 
+                      position: 'absolute', 
+                      top: 0, 
+                      left: 0, 
+                      right: 0, 
+                      bottom: 0, 
+                      backgroundColor: 'rgba(0, 0, 0, 0.5)', 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      opacity: 0,
+                      transition: 'opacity 0.3s ease-in-out'
+                    }}
+                    className="hover-overlay"
+                    onMouseEnter={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.opacity = '1';
+                    }}
+                    onMouseLeave={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.opacity = '0';
+                    }}
+                  >
+                    <CameraOutlined style={{ color: '#fff', fontSize: '24px', marginBottom: '4px' }} />
+                    <Text style={{ color: '#fff', fontSize: '11px' }}>{imageUrl ? 'Change Photo' : 'Upload Photo'}</Text>
+                  </div>
                 </div>
-              </div>
+              </Upload>
               <div style={{ marginTop: '12px' }}>
-                <Tag color="orange" className="rounded-full">Photo Upload Placeholder</Tag>
+                <Tag color="orange" className="rounded-full">{uploading ? 'Uploading...' : 'Click to Upload'}</Tag>
               </div>
               
               {isEdit && (
