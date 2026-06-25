@@ -35,7 +35,7 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
 
-    if (currentTenantIdentifier && config.headers) {
+    if (currentTenantIdentifier && config.headers && !config.headers['X-Tenant-ID']) {
       config.headers['X-Tenant-ID'] = currentTenantIdentifier;
     }
 

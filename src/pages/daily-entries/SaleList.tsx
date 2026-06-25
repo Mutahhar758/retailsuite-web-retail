@@ -14,6 +14,7 @@ import { saleService, type Sale, type OfflineSaleEntry } from '../../services/sa
 import { offlineCacheService } from '../../services/offlineCacheService';
 import { offlineSyncService } from '../../services/offlineSyncService';
 import { useOfflineStore } from '../../stores/useOfflineStore';
+import { useAppStore } from '../../stores/useAppStore';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import type { ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 
@@ -45,7 +46,8 @@ export const SaleList: React.FC = () => {
   const { pendingCount, isSyncing } = useOfflineStore();
 
   const loadOfflineQueue = async () => {
-    const queue = await saleService.getOfflineQueue();
+    const { currentTenantIdentifier } = useAppStore.getState();
+    const queue = await saleService.getOfflineQueue(currentTenantIdentifier);
     setOfflineQueue(queue);
   };
 

@@ -7,6 +7,7 @@ import {
   type OfflineSaleEntry,
 } from './offlineDb';
 import { useOfflineStore } from '../stores/useOfflineStore';
+import { useAppStore } from '../stores/useAppStore';
 
 export type { OfflineSaleEntry };
 
@@ -112,19 +113,21 @@ export const saleService = {
     const tempVoucherNo = await getNextOfflineVoucherNo();
     const deviceId = tempVoucherNo.split('-')[0];
     const localSeq = parseInt(tempVoucherNo.split('-')[1], 10);
+    const { currentTenantIdentifier } = useAppStore.getState();
 
     const localId = await enqueueOfflineSale({
       deviceId,
       localSeq,
       tempVoucherNo,
       request,
+      tenantIdentifier: currentTenantIdentifier || '',
       createdAt: new Date().toISOString(),
       retryCount: 0,
       status: 'pending',
     });
 
     // Update pending count in store
-    const count = await getOfflineSaleCount();
+    const count = await this.getOfflinePendingCount(currentTenantIdentifier);
     useOfflineStore.getState().setPendingCount(count);
 
     console.info(`[OfflineSale] Queued as ${tempVoucherNo} (localId: ${localId})`);
@@ -135,8 +138,9 @@ export const saleService = {
    * Direct server call — used by offlineSyncService only.
    * Never falls back to offline queue.
    */
-  async createOnline(request: SaleCreateRequest): Promise<string> {
-    const response = await api.post('/api/sales', request);
+  async createOnline(request: SaleCreateRequest, tenantIdentifier?: string): Promise<string> {
+    const headers = tenantIdentifier ? { 'X-Tenant-ID': tenantIdentifier } : undefined;
+    const response = await api.post('/api/sales', request, { headers });
     return response.data.body as string;
   },
 
@@ -152,13 +156,18 @@ export const saleService = {
     await api.delete(`/api/sales/${voucherNo}/lines/${seq}`);
   },
 
-  /** Returns all entries in the offline sale queue (pending + failed). */
-  async getOfflineQueue(): Promise<OfflineSaleEntry[]> {
-    return getOfflineSaleQueue();
+  /** Returns entries in the offline sale queue matching the current tenant. */
+  async getOfflineQueue(tenantIdentifier?: string | null): Promise<OfflineSaleEntry[]> {
+    const all = await getOfflineSaleQueue();
+    if (!tenantIdentifier) return all;
+    return all.filter(e => e.tenantIdentifier === tenantIdentifier);
   },
 
-  /** Returns the number of pending (not-yet-synced) entries. */
-  async getOfflinePendingCount(): Promise<number> {
-    return getOfflineSaleCount();
+  /** Returns the number of pending (not-yet-synced) entries for the current tenant. */
+  async getOfflinePendingCount(tenantIdentifier?: string | null): Promise<number> {
+    const queue = await getOfflineSaleQueue();
+    return queue.filter(
+      (e) => e.status === 'pending' && (!tenantIdentifier || e.tenantIdentifier === tenantIdentifier)
+    ).length;
   },
 };

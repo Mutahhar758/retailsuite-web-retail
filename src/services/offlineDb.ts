@@ -1,5 +1,6 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import type { SaleCreateRequest } from './saleService';
+import { useAppStore } from '../stores/useAppStore';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -11,6 +12,7 @@ export interface OfflineSaleEntry {
   localSeq: number;
   tempVoucherNo: string;
   request: SaleCreateRequest;
+  tenantIdentifier: string;
   createdAt: string;       // ISO timestamp
   retryCount: number;
   status: 'pending' | 'failed';
@@ -157,6 +159,11 @@ export async function removeOfflineSale(localId: number): Promise<void> {
   await db.delete('offlineSaleQueue', localId);
 }
 
+export async function clearOfflineSaleQueue(): Promise<void> {
+  const db = await getDb();
+  await db.clear('offlineSaleQueue');
+}
+
 export async function updateOfflineSaleRetry(
   localId: number,
   retryCount: number,
@@ -177,21 +184,18 @@ export async function updateOfflineSaleRetry(
 export type CacheStore = 'cachedItems' | 'cachedCustomers' | 'cachedNarrations' | 'cachedUnits';
 
 export async function saveReferenceCache(store: CacheStore, data: unknown[]): Promise<void> {
+  const { currentTenantIdentifier } = useAppStore.getState();
+  const tenantKey = currentTenantIdentifier || 'default';
+
   const db = await getDb();
   const tx = db.transaction([store, 'cacheMetadata'], 'readwrite');
   
-  // Clear old data
-  await tx.objectStore(store).clear();
+  // Store the entire array under the tenantKey
+  await tx.objectStore(store).put(data, tenantKey);
   
-  // Write new records using index as key
-  const objStore = tx.objectStore(store);
-  for (let i = 0; i < data.length; i++) {
-    await objStore.put(data[i], i);
-  }
-  
-  // Update TTL timestamp
+  // Update TTL timestamp per tenant
   await tx.objectStore('cacheMetadata').put({
-    key: store,
+    key: `${tenantKey}_${store}`,
     cachedAt: Date.now(),
   } as CacheMeta);
   
@@ -199,13 +203,20 @@ export async function saveReferenceCache(store: CacheStore, data: unknown[]): Pr
 }
 
 export async function getReferenceCache<T>(store: CacheStore): Promise<T[]> {
+  const { currentTenantIdentifier } = useAppStore.getState();
+  const tenantKey = currentTenantIdentifier || 'default';
+
   const db = await getDb();
-  return (await db.getAll(store)) as T[];
+  const data = await db.get(store, tenantKey);
+  return (data as T[]) || [];
 }
 
 export async function isCacheValid(store: CacheStore): Promise<boolean> {
+  const { currentTenantIdentifier } = useAppStore.getState();
+  const tenantKey = currentTenantIdentifier || 'default';
+
   const db = await getDb();
-  const meta = await db.get('cacheMetadata', store) as CacheMeta | undefined;
+  const meta = await db.get('cacheMetadata', `${tenantKey}_${store}`) as CacheMeta | undefined;
   if (!meta) return false;
   return Date.now() - meta.cachedAt < CACHE_TTL_MS;
 }

@@ -71,12 +71,17 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
-  const { theme } = useAppStore();
+  const { theme, currentTenantIdentifier } = useAppStore();
   const { setDeviceId, setPendingCount } = useOfflineStore();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  // Reactive pending count update on tenant change
+  useEffect(() => {
+    saleService.getOfflinePendingCount(currentTenantIdentifier).then(n => setPendingCount(n));
+  }, [currentTenantIdentifier, setPendingCount]);
 
   // Offline system bootstrap (runs once on app load)
   useEffect(() => {
@@ -88,10 +93,7 @@ function App() {
       offlineCacheService.warmCache().catch(console.error);
     }
 
-    // 3. Load initial pending count from IndexedDB
-    saleService.getOfflinePendingCount().then(n => setPendingCount(n));
-
-    // 4. Register the 'online' event listener for auto-sync
+    // 3. Register the 'online' event listener for auto-sync
     offlineSyncService.startListening();
 
     return () => {

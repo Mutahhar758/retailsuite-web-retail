@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layout, Menu, Button, Avatar, Dropdown, Space, theme, Breadcrumb, Tooltip, Badge, message } from 'antd';
+import { Layout, Menu, Button, Avatar, Dropdown, Space, theme, Breadcrumb, Tooltip, Badge, message, Modal } from 'antd';
 import { 
   MenuFoldOutlined, 
   MenuUnfoldOutlined, 
@@ -57,6 +57,17 @@ export const MainLayout: React.FC = () => {
     fetchProfile();
   }, []);
 
+  React.useEffect(() => {
+    if (!isOnline) {
+      const allowedPaths = ['/daily-entries/sale', '/daily-entries/pos-sale'];
+      const currentPath = location.pathname;
+      const isAllowed = allowedPaths.some(path => currentPath.startsWith(path));
+      if (!isAllowed) {
+        navigate('/daily-entries/sale', { replace: true });
+      }
+    }
+  }, [isOnline, location.pathname, navigate]);
+
   const breadcrumbItems = location.pathname.split('/').filter(i => i).map((path, index, array) => {
     const url = `/${array.slice(0, index + 1).join('/')}`;
     const labelMap: Record<string, string> = {
@@ -76,10 +87,29 @@ export const MainLayout: React.FC = () => {
 
   const currentOrgName = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier)?.name || 'Unknown Org';
 
-  const handleLogout = async () => {
+  const doLogout = async () => {
     await logoutService.logout();
     logout();
     navigate('/login');
+  };
+
+  const handleLogout = () => {
+    if (pendingCount > 0) {
+      Modal.confirm({
+        title: 'Pending Sync Vouchers',
+        content: (
+          <div>
+            <p>You have <strong>{pendingCount}</strong> offline sale voucher{pendingCount > 1 ? 's' : ''} that {pendingCount > 1 ? 'have' : 'has'} not been synced to the server yet.</p>
+            <p style={{ color: '#d46b08', marginTop: 8 }}>ℹ️ They are saved securely on this device and will automatically sync the next time you log back in to this organization.</p>
+          </div>
+        ),
+        okText: 'Log Out Now',
+        cancelText: 'Cancel',
+        onOk: doLogout,
+      });
+    } else {
+      doLogout();
+    }
   };
 
   const toggleTheme = () => {
