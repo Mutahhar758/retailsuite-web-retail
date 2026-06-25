@@ -14,11 +14,16 @@ import {
   LayoutOutlined,
   BellOutlined,
   PushpinOutlined,
-  PushpinFilled
+  PushpinFilled,
+  DisconnectOutlined,
+  RocketOutlined,
+  ShoppingCartOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useAppStore } from '../stores/useAppStore';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { useOfflineStore } from '../stores/useOfflineStore';
 import { profileService, logoutService } from '../services/profileService';
 
 const { Header, Sider, Content } = Layout;
@@ -30,6 +35,8 @@ export const MainLayout: React.FC = () => {
   const { logout, user, setUser } = useAuthStore();
   const { theme: appTheme, setTheme, layout, setLayout, currentTenantIdentifier, licenses } = useAppStore();
   const { token } = theme.useToken();
+  const { isOnline } = useNetworkStatus();
+  const { pendingCount } = useOfflineStore();
 
   React.useEffect(() => {
     const fetchProfile = async () => {
@@ -228,6 +235,22 @@ export const MainLayout: React.FC = () => {
 
   const menuItems = transformMenuItems(baseMenuItemsWithShortcuts);
 
+  // ── Offline mode: only show Sale and POS Sale ──────────────────────────────
+  const offlineMenuItems = [
+    {
+      key: '/daily-entries/sale',
+      icon: <RocketOutlined />,
+      label: 'Sale Voucher',
+    },
+    {
+      key: '/daily-entries/pos-sale',
+      icon: <ShoppingCartOutlined />,
+      label: 'POS Touch Sale',
+    },
+  ];
+
+  const activeMenuItems = isOnline ? menuItems : offlineMenuItems;
+
   const userMenu = {
     items: [
       { key: 'org', label: <div className="text-gray-500 text-xs px-2 py-1">{currentOrgName}</div>, disabled: true },
@@ -256,19 +279,58 @@ export const MainLayout: React.FC = () => {
             top: 0,
             bottom: 0,
             borderRight: appTheme === 'light' ? `1px solid ${token.colorBorderSecondary}` : 'none',
-            zIndex: 100
+            zIndex: 100,
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
-          <div className="h-16 flex items-center justify-center m-4 text-xl font-bold" style={{ color: token.colorPrimary }}>
-            {collapsed ? 'R' : 'Retail'}
+          {/* Logo / brand */}
+          <div className="h-16 flex items-center justify-center m-4 text-xl font-bold" style={{ color: !isOnline ? '#d46b08' : token.colorPrimary }}>
+            {collapsed
+              ? (!isOnline ? '✕' : 'R')
+              : (!isOnline ? '⚡ Offline' : 'Retail')
+            }
           </div>
-          <Menu
-            theme={appTheme}
-            mode="inline"
-            selectedKeys={[location.pathname]}
-            items={menuItems}
-            onClick={({ key }) => navigate(key)}
-          />
+
+          {/* Menu */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <Menu
+              theme={appTheme}
+              mode="inline"
+              selectedKeys={[location.pathname]}
+              items={activeMenuItems}
+              onClick={({ key }) => navigate(key)}
+            />
+          </div>
+
+          {/* Offline mode strip at bottom of sider */}
+          {!isOnline && (
+            <div style={{
+              padding: collapsed ? '12px 8px' : '10px 16px',
+              backgroundColor: '#fff7e6',
+              borderTop: '1px solid #ffd591',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 11,
+              fontWeight: 600,
+              color: '#d46b08',
+              flexShrink: 0,
+              justifyContent: collapsed ? 'center' : 'flex-start',
+            }}>
+              <DisconnectOutlined style={{ fontSize: 14 }} />
+              {!collapsed && (
+                <span>
+                  OFFLINE MODE<br />
+                  {pendingCount > 0 && (
+                    <span style={{ fontWeight: 400, fontSize: 10 }}>
+                      {pendingCount} voucher{pendingCount > 1 ? 's' : ''} pending sync
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+          )}
         </Sider>
       )}
       
@@ -298,12 +360,14 @@ export const MainLayout: React.FC = () => {
             
             {isHorizontal && (
               <>
-                <div className="text-xl font-bold mr-8" style={{ color: token.colorPrimary }}>RetailSuite Portal</div>
+                <div className="text-xl font-bold mr-8" style={{ color: !isOnline ? '#d46b08' : token.colorPrimary }}>
+                  {!isOnline ? '⚡ Offline Mode' : 'RetailSuite Portal'}
+                </div>
                 <Menu
                   theme={appTheme}
                   mode="horizontal"
                   selectedKeys={[location.pathname]}
-                  items={menuItems}
+                  items={activeMenuItems}
                   onClick={({ key }) => navigate(key)}
                   style={{ flex: 1, borderBottom: 'none', lineHeight: '62px' }}
                 />
