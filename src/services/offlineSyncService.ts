@@ -3,7 +3,6 @@ import {
   getOfflineSaleQueue,
   removeOfflineSale,
   updateOfflineSaleRetry,
-  getOfflineSaleCount,
 } from './offlineDb';
 import { saleService } from './saleService';
 import { useOfflineStore } from '../stores/useOfflineStore';

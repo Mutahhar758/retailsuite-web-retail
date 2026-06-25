@@ -3,7 +3,6 @@ import {
   getNextOfflineVoucherNo,
   enqueueOfflineSale,
   getOfflineSaleQueue,
-  getOfflineSaleCount,
   type OfflineSaleEntry,
 } from './offlineDb';
 import { useOfflineStore } from '../stores/useOfflineStore';
