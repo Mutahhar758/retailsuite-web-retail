@@ -55,7 +55,12 @@ import { OpeningBalance } from './pages/setup/OpeningBalance';
 import { Profile } from './pages/auth/Profile';
 import { useAppStore } from './stores/useAppStore';
 import { useAuthStore } from './stores/useAuthStore';
+import { useOfflineStore } from './stores/useOfflineStore';
 import { lightTheme, darkTheme } from './theme/themeConfig';
+import { getOrCreateDeviceId } from './services/offlineDb';
+import { offlineCacheService } from './services/offlineCacheService';
+import { offlineSyncService } from './services/offlineSyncService';
+import { saleService } from './services/saleService';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuthStore();
@@ -67,10 +72,33 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   const { theme } = useAppStore();
+  const { setDeviceId, setPendingCount } = useOfflineStore();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  // Offline system bootstrap (runs once on app load)
+  useEffect(() => {
+    // 1. Establish device identity
+    getOrCreateDeviceId().then(id => setDeviceId(id));
+
+    // 2. Warm reference data cache if we're online
+    if (navigator.onLine) {
+      offlineCacheService.warmCache().catch(console.error);
+    }
+
+    // 3. Load initial pending count from IndexedDB
+    saleService.getOfflinePendingCount().then(n => setPendingCount(n));
+
+    // 4. Register the 'online' event listener for auto-sync
+    offlineSyncService.startListening();
+
+    return () => {
+      offlineSyncService.stopListening();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <ConfigProvider theme={theme === 'light' ? lightTheme : darkTheme}>

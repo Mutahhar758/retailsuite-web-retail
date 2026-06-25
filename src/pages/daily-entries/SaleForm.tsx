@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
-  Table, Space, message, InputNumber, Popconfirm, Tag
+  Table, Space, message, InputNumber, Popconfirm, Tag, Alert
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
-  RocketOutlined, UserOutlined, FileTextOutlined
+  RocketOutlined, UserOutlined, FileTextOutlined, WifiOutlined, DisconnectOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate, useParams } from 'react-router-dom';
 import { saleService } from '../../services/saleService';
-import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
-import { narrationService, type NarrationDto } from '../../services/narrationService';
-import { inventoryService, type Item } from '../../services/inventoryService';
+import { offlineCacheService, OfflineCacheMissError } from '../../services/offlineCacheService';
+import type { ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
+import type { NarrationDto } from '../../services/narrationService';
+import type { Item } from '../../services/inventoryService';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 
 const { Title, Text } = Typography;
 
@@ -22,18 +24,17 @@ export const SaleForm: React.FC = () => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  
+  const { isOnline } = useNetworkStatus();
+
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [units, setUnits] = useState<{ code: string; title: string }[]>([]);
   const [saleLines, setSaleLines] = useState<any[]>([]);
+  const [cacheMissError, setCacheMissError] = useState<string | null>(null);
 
   useEffect(() => {
-    chartOfAccountService.getCustomerAccounts().then(setCustomers);
-    narrationService.getActiveNarrations().then(setNarrations);
-    inventoryService.getItems().then(setItems);
-    inventoryService.getUnits().then(setUnits);
+    loadReferenceData();
 
     if (isEdit) {
       fetchDetail();
@@ -42,6 +43,28 @@ export const SaleForm: React.FC = () => {
       form.setFieldsValue({ date: dayjs() });
     }
   }, [isEdit, voucherNo]);
+
+  const loadReferenceData = async () => {
+    try {
+      const [customers, narrations, items, units] = await Promise.all([
+        offlineCacheService.getCustomers(),
+        offlineCacheService.getNarrations(),
+        offlineCacheService.getItems(),
+        offlineCacheService.getUnits(),
+      ]);
+      setCustomers(customers);
+      setNarrations(narrations);
+      setItems(items);
+      setUnits(units);
+      setCacheMissError(null);
+    } catch (err) {
+      if (err instanceof OfflineCacheMissError) {
+        setCacheMissError(err.message);
+      } else {
+        message.error('Failed to load reference data');
+      }
+    }
+  };
 
   const fetchDetail = async () => {
     setLoading(true);
@@ -66,7 +89,7 @@ export const SaleForm: React.FC = () => {
           amount: d.amount
         })));
       }
-    } catch (error) {
+    } catch {
       message.error('Failed to fetch sale details');
     } finally {
       setLoading(false);
@@ -81,10 +104,10 @@ export const SaleForm: React.FC = () => {
   };
 
   const handleRemoveRow = async (key: number, seq: number) => {
-    if (isEdit && typeof key === 'number' && key < 1000000000) { // Existing line
+    if (isEdit && typeof key === 'number' && key < 1000000000) {
       try {
         await saleService.deleteLine(voucherNo!, seq);
-      } catch (error) {
+      } catch {
         message.error('Failed to delete line from server');
         return;
       }
@@ -97,7 +120,7 @@ export const SaleForm: React.FC = () => {
       const newLines = prev.map(l => {
         if (l.key === key) {
           const updated = { ...l, [field]: value };
-          
+
           if (field === 'itemId') {
             const item = items.find(i => i.id === value);
             if (item) {
@@ -115,13 +138,12 @@ export const SaleForm: React.FC = () => {
         return l;
       });
 
-      // Auto add row if the updated row is the last row and has an item
       const lastRow = newLines[newLines.length - 1];
       if (lastRow.key === key && lastRow.itemId) {
         const newSeq = newLines.length > 0 ? Math.max(...newLines.map(l => l.seq)) + 1 : 1;
         return [...newLines, { key: Date.now() + 1, seq: newSeq, qty: 1, rate: 0, discount: 0, amount: 0 }];
       }
-      
+
       return newLines;
     });
   };
@@ -131,7 +153,6 @@ export const SaleForm: React.FC = () => {
   const cashBack = Form.useWatch('cashBack', form) || 0;
   const balance = totalAmount - cashReceipt + cashBack;
 
-  // Auto calculate cash back when cash receipt or total amount changes
   useEffect(() => {
     if (!isEdit || (isEdit && loading === false)) {
       const suggestedCashBack = Math.max(0, cashReceipt - totalAmount);
@@ -142,10 +163,16 @@ export const SaleForm: React.FC = () => {
   }, [totalAmount, cashReceipt]);
 
   const handleSave = async () => {
+    // Guard: cannot edit existing vouchers offline
+    if (isEdit && !isOnline) {
+      message.error('Editing existing vouchers requires an internet connection.');
+      return;
+    }
+
     try {
       const values = await form.validateFields();
       const validLines = saleLines.filter(l => l.itemId && l.qty > 0);
-      
+
       if (validLines.length === 0) {
         message.error('Please add at least one item');
         return;
@@ -174,13 +201,27 @@ export const SaleForm: React.FC = () => {
         await saleService.update(voucherNo!, request);
         message.success('Sale updated successfully');
       } else {
-        const newVno = await saleService.create(request);
-        message.success('Sale created successfully');
-        navigate(`/daily-entries/sale/${newVno}`);
+        const newVno = await saleService.create(request, { offlineFallback: true });
+
+        if (newVno.includes('-') && newVno.length <= 10) {
+          // Offline temp voucher number (e.g. A3F1-0007)
+          message.warning({
+            content: `Sale saved offline as ${newVno}. It will sync automatically when you reconnect.`,
+            duration: 8,
+          });
+          navigate('/daily-entries/sale');
+        } else {
+          message.success('Sale created successfully');
+          navigate(`/daily-entries/sale/${newVno}`);
+        }
       }
     } catch (error) {
       console.error(error);
-      message.error('Failed to save sale');
+      if (error instanceof Error && error.message.includes('internet')) {
+        message.error(error.message);
+      } else {
+        message.error('Failed to save sale');
+      }
     } finally {
       setLoading(false);
     }
@@ -192,7 +233,7 @@ export const SaleForm: React.FC = () => {
       await saleService.delete(voucherNo!);
       message.success('Sale deleted successfully');
       navigate('/daily-entries/sale');
-    } catch (error) {
+    } catch {
       message.error('Failed to delete sale');
     } finally {
       setLoading(false);
@@ -226,10 +267,10 @@ export const SaleForm: React.FC = () => {
       width: 120,
       render: (text: string, record: any) => {
         const item = items.find(i => i.id === record.itemId);
-        const filteredUnits = item 
+        const filteredUnits = item
           ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit)
           : units;
-          
+
         return (
           <Select
             style={{ width: '100%' }}
@@ -300,10 +341,10 @@ export const SaleForm: React.FC = () => {
       key: 'actions',
       width: 60,
       render: (_: any, record: any) => (
-        <Button 
-          type="text" 
-          danger 
-          icon={<DeleteOutlined />} 
+        <Button
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
           onClick={() => handleRemoveRow(record.key, record.seq)}
           disabled={saleLines.length === 1}
         />
@@ -311,8 +352,43 @@ export const SaleForm: React.FC = () => {
     }
   ];
 
+  // Cannot edit existing vouchers while offline
+  const editOfflineBlocked = isEdit && !isOnline;
+
   return (
     <Card className="shadow-sm border-gray-100 rounded-xl">
+      {/* ── Offline / Online status banner ── */}
+      {!isOnline && (
+        <Alert
+          className="mb-4"
+          type={editOfflineBlocked ? 'error' : 'warning'}
+          showIcon
+          icon={<DisconnectOutlined />}
+          message={
+            editOfflineBlocked
+              ? 'You are offline — editing existing vouchers requires an internet connection.'
+              : 'You are offline — new sales will be queued and synced automatically when you reconnect.'
+          }
+        />
+      )}
+      {isOnline && (
+        <div className="flex items-center gap-1.5 text-xs text-green-600 mb-3">
+          <WifiOutlined />
+          <span>Online</span>
+        </div>
+      )}
+
+      {/* ── Cache miss error ── */}
+      {cacheMissError && (
+        <Alert
+          className="mb-4"
+          type="error"
+          showIcon
+          message="Reference Data Not Available Offline"
+          description={cacheMissError}
+        />
+      )}
+
       <div className="flex justify-between items-center mb-6">
         <Space align="center">
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/daily-entries/sale')} type="text" />
@@ -333,18 +409,20 @@ export const SaleForm: React.FC = () => {
               okText="Yes"
               cancelText="No"
               okButtonProps={{ danger: true, loading }}
+              disabled={!isOnline}
             >
-              <Button danger icon={<DeleteOutlined />}>Delete</Button>
+              <Button danger icon={<DeleteOutlined />} disabled={!isOnline}>Delete</Button>
             </Popconfirm>
           )}
-          <Button 
-            type="primary" 
-            icon={<SaveOutlined />} 
-            onClick={handleSave} 
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            onClick={handleSave}
             loading={loading}
+            disabled={editOfflineBlocked || !!cacheMissError}
             style={{ backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' }}
           >
-            Save Sale
+            {!isOnline && !isEdit ? 'Save Offline' : 'Save Sale'}
           </Button>
         </Space>
       </div>
@@ -363,8 +441,8 @@ export const SaleForm: React.FC = () => {
           </Col>
           <Col xs={24} sm={8} lg={8}>
             <Form.Item label="Customer" name="account" rules={[{ required: true }]}>
-              <Select 
-                showSearch 
+              <Select
+                showSearch
                 placeholder="Select Customer"
                 prefix={<UserOutlined />}
                 optionFilterProp="children"
@@ -398,7 +476,7 @@ export const SaleForm: React.FC = () => {
           <Title level={5} style={{ margin: 0 }}>Item Details</Title>
           <Button type="dashed" onClick={handleAddRow} icon={<PlusOutlined />}>Add Row</Button>
         </div>
-        
+
         <Table
           dataSource={saleLines}
           columns={columns}
@@ -409,9 +487,7 @@ export const SaleForm: React.FC = () => {
           className="mb-6"
           summary={pageData => {
             let total = 0;
-            pageData.forEach(({ amount }) => {
-              total += amount || 0;
-            });
+            pageData.forEach(({ amount }) => { total += amount || 0; });
             return (
               <Table.Summary fixed>
                 <Table.Summary.Row>
@@ -430,22 +506,22 @@ export const SaleForm: React.FC = () => {
           <Row gutter={24} align="bottom">
             <Col xs={24} sm={8} lg={6}>
               <Form.Item label="Cash Receipt" name="cashReceipt">
-                <InputNumber 
-                  style={{ width: '100%' }} 
+                <InputNumber
+                  style={{ width: '100%' }}
                   size="large"
-                  min={0} 
-                  placeholder="0.00" 
+                  min={0}
+                  placeholder="0.00"
                   formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                 />
               </Form.Item>
             </Col>
             <Col xs={24} sm={8} lg={6}>
               <Form.Item label="Cash Back" name="cashBack">
-                <InputNumber 
-                  style={{ width: '100%' }} 
+                <InputNumber
+                  style={{ width: '100%' }}
                   size="large"
-                  min={0} 
-                  placeholder="0.00" 
+                  min={0}
+                  placeholder="0.00"
                   formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                 />
               </Form.Item>

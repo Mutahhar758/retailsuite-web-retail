@@ -1,21 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Row, Col, Typography, Button, Input, Space, message, Tag, Modal, List, Badge
+  Row, Col, Typography, Button, Input, Space, message, Tag, Modal, List, Badge, Alert
 } from 'antd';
 import { useThermalPrinter, centerLine, padLine, divider, type ConnectionMethod } from '../../hooks/useThermalPrinter';
 import { useAppStore } from '../../stores/useAppStore';
 import {
   PlusOutlined, MinusOutlined, DeleteOutlined, ShoppingCartOutlined,
   PrinterOutlined, RedoOutlined, CheckCircleOutlined, UserOutlined,
-  FileTextOutlined, ArrowLeftOutlined, SearchOutlined, DollarOutlined
+  FileTextOutlined, ArrowLeftOutlined, SearchOutlined, DollarOutlined,
+  DisconnectOutlined, CloudServerOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import { saleService } from '../../services/saleService';
-import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
-import { inventoryService, type Item } from '../../services/inventoryService';
+import { offlineCacheService, OfflineCacheMissError } from '../../services/offlineCacheService';
+import type { ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
+import type { Item } from '../../services/inventoryService';
 import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCategoryService';
-import { narrationService, type NarrationDto } from '../../services/narrationService';
+import type { NarrationDto } from '../../services/narrationService';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 
 const { Title, Text } = Typography;
 
@@ -32,6 +35,8 @@ export const POSSaleForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { currentTenantIdentifier, licenses } = useAppStore();
   const currentOrgName = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier)?.name || 'Retail Store';
+  const { isOnline } = useNetworkStatus();
+  const [isOfflineSaved, setIsOfflineSaved] = useState(false);
 
   // Data states
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
@@ -104,17 +109,31 @@ export const POSSaleForm: React.FC = () => {
   };
 
   useEffect(() => {
-    // Load initial configurations
-    chartOfAccountService.getCustomerAccounts().then(data => {
-      setCustomers(data);
-      if (data.length > 0) {
-        setSelectedCustomer(data[0]); // Default to first customer
-      }
-    });
+    // Load initial configurations (via cache service — works online AND offline)
+    offlineCacheService.getCustomers()
+      .then(data => {
+        setCustomers(data);
+        if (data.length > 0) setSelectedCustomer(data[0]);
+      })
+      .catch(err => {
+        if (err instanceof OfflineCacheMissError) {
+          message.warning('Customer data not cached. Please go online first.');
+        }
+      });
 
     itemCategoryService.getActiveItemCategories().then(setCategories);
-    inventoryService.getItems().then(setItems);
-    narrationService.getActiveNarrations().then(setNarrations);
+
+    offlineCacheService.getItems()
+      .then(setItems)
+      .catch(err => {
+        if (err instanceof OfflineCacheMissError) {
+          message.warning('Item data not cached. Please go online first.');
+        }
+      });
+
+    offlineCacheService.getNarrations()
+      .then(setNarrations)
+      .catch(() => { /* Non-critical */ });
   }, []);
 
   // Filter Items
@@ -361,11 +380,17 @@ export const POSSaleForm: React.FC = () => {
         }))
       };
 
-      const newVno = await saleService.create(request);
+      const newVno = await saleService.create(request, { offlineFallback: true });
+      const isOfflineResult = newVno.includes('-') && newVno.length <= 10;
+      setIsOfflineSaved(isOfflineResult);
       setSavedVoucherNo(newVno);
       setIsPaymentModalVisible(false);
       setSuccessModalVisible(true);
-      message.success('POS Sale saved successfully');
+      if (isOfflineResult) {
+        message.warning(`Saved offline as ${newVno} — will sync when you reconnect`, 6);
+      } else {
+        message.success('POS Sale saved successfully');
+      }
     } catch (error) {
       console.error(error);
       message.error('Failed to save POS sale');
@@ -385,11 +410,26 @@ export const POSSaleForm: React.FC = () => {
 
   const handleNewTransaction = () => {
     setSuccessModalVisible(false);
+    setIsOfflineSaved(false);
     handleResetAll();
   };
 
   return (
     <div style={{ margin: -24, padding: 24, height: 'calc(100vh - 140px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      {/* ── Offline mode banner ── */}
+      {!isOnline && (
+        <Alert
+          style={{ marginBottom: 12, flexShrink: 0 }}
+          type="warning"
+          showIcon
+          icon={<DisconnectOutlined />}
+          message={
+            <span>
+              <strong>OFFLINE MODE</strong> — Sales will be queued and synced automatically when internet is restored.
+            </span>
+          }
+        />
+      )}
       {/* POS Top Header - Zero Keyboard */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexShrink: 0 }}>
         <Space align="center">
@@ -905,10 +945,21 @@ export const POSSaleForm: React.FC = () => {
         bodyStyle={{ padding: 24, textAlign: 'center' }}
         style={{ top: 20 }}
       >
-        <CheckCircleOutlined style={{ fontSize: 56, color: '#16a34a', marginBottom: 12 }} />
-        <Title level={3} style={{ margin: 0, fontWeight: 800 }}>Sale Completed!</Title>
+        <CheckCircleOutlined style={{ fontSize: 56, color: isOfflineSaved ? '#f59e0b' : '#16a34a', marginBottom: 12 }} />
+        <Title level={3} style={{ margin: 0, fontWeight: 800 }}>
+          {isOfflineSaved ? 'Sale Queued Offline!' : 'Sale Completed!'}
+        </Title>
+        {isOfflineSaved && (
+          <Alert
+            type="warning"
+            showIcon
+            icon={<CloudServerOutlined />}
+            message={`Saved as ${savedVoucherNo} — will sync when you reconnect`}
+            style={{ marginBottom: 12, textAlign: 'left' }}
+          />
+        )}
         <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 20 }}>
-          Voucher Created: <b>{savedVoucherNo}</b>
+          Voucher: <b>{savedVoucherNo}</b>
         </Text>
 
         {/* THERMAL RECEIPT DISPLAY */}
