@@ -520,14 +520,17 @@ export const POSSaleForm: React.FC = () => {
               style={{ 
                 height: 44, 
                 borderRadius: 22, 
-                padding: '0 24px', 
+                padding: '0 20px 0 8px', 
                 fontWeight: 600,
                 fontSize: 14,
                 backgroundColor: activeCategory === 'all' ? '#0ea5e9' : undefined,
-                borderColor: activeCategory === 'all' ? '#0ea5e9' : undefined
+                borderColor: activeCategory === 'all' ? '#0ea5e9' : undefined,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8
               }}
             >
-              ⭐ All Products
+              <span style={{ fontSize: 16 }}>⭐</span> All Products
             </Button>
             {categories.map(cat => (
               <Button
@@ -537,13 +540,25 @@ export const POSSaleForm: React.FC = () => {
                 style={{ 
                   height: 44, 
                   borderRadius: 22, 
-                  padding: '0 24px', 
+                  padding: cat.mediaUrl ? '0 20px 0 8px' : '0 24px', 
                   fontWeight: 600,
                   fontSize: 14,
                   backgroundColor: activeCategory === cat.code ? '#0ea5e9' : undefined,
-                  borderColor: activeCategory === cat.code ? '#0ea5e9' : undefined
+                  borderColor: activeCategory === cat.code ? '#0ea5e9' : undefined,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8
                 }}
               >
+                {cat.mediaUrl ? (
+                  <img 
+                    src={cat.mediaUrl} 
+                    alt={cat.title} 
+                    style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} 
+                  />
+                ) : (
+                  <span style={{ fontSize: 16 }}>📦</span>
+                )}
                 {cat.title}
               </Button>
             ))}

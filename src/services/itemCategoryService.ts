@@ -4,16 +4,20 @@ export interface ItemCategoryDto {
   code: string;
   title: string;
   active: boolean;
+  mediaId?: string;
+  mediaUrl?: string;
 }
 
 export interface CreateItemCategoryRequest {
   title: string;
   active: boolean;
+  mediaId?: string;
 }
 
 export interface UpdateItemCategoryRequest {
   title: string;
   active: boolean;
+  mediaId?: string;
 }
 
 export const itemCategoryService = {
@@ -35,5 +39,10 @@ export const itemCategoryService = {
   async delete(code: string) {
     const response = await api.delete(`/api/itemcategories/${code}`);
     return response.data.body;
+  },
+
+  async getPresignedUploadUrl(fileName: string) {
+    const response = await api.post(`/api/itemcategories/presigned-upload-url?fileName=${encodeURIComponent(fileName)}`);
+    return response.data.body as { fileId: string; uploadUrl: string };
   },
 };

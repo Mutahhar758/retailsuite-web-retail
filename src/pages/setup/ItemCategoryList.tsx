@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
-  Modal, Form, Input, Popconfirm, Tooltip, Checkbox
+  Modal, Form, Input, Popconfirm, Tooltip, Checkbox, Upload
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, 
-  ReloadOutlined, AppstoreOutlined
+  ReloadOutlined, AppstoreOutlined, UploadOutlined, LoadingOutlined
 } from '@ant-design/icons';
 import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCategoryService';
+import axios from 'axios';
 
 const { Title, Text } = Typography;
 
@@ -16,6 +17,8 @@ export const ItemCategoryList: React.FC = () => {
   const [data, setData] = useState<ItemCategoryDto[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingRecord, setEditingRecord] = useState<ItemCategoryDto | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [form] = Form.useForm();
 
   const fetchData = useCallback(async () => {
@@ -36,6 +39,7 @@ export const ItemCategoryList: React.FC = () => {
 
   const handleAdd = () => {
     setEditingRecord(null);
+    setImageUrl(null);
     form.resetFields();
     form.setFieldValue('active', true);
     setIsModalVisible(true);
@@ -43,9 +47,11 @@ export const ItemCategoryList: React.FC = () => {
 
   const handleEdit = (record: ItemCategoryDto) => {
     setEditingRecord(record);
+    setImageUrl(record.mediaUrl || null);
     form.setFieldsValue({ 
       title: record.title,
-      active: record.active 
+      active: record.active,
+      mediaId: record.mediaId
     });
     setIsModalVisible(true);
   };
@@ -60,19 +66,51 @@ export const ItemCategoryList: React.FC = () => {
     }
   };
 
+  const handleCustomUpload = async (options: any) => {
+    const { file, onSuccess, onError } = options;
+    try {
+      setUploading(true);
+      const { fileId, uploadUrl } = await itemCategoryService.getPresignedUploadUrl(file.name);
+      
+      const formData = new FormData();
+      formData.append('File', file);
+      
+      await axios.post(uploadUrl, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      form.setFieldsValue({ mediaId: fileId });
+      const localUrl = URL.createObjectURL(file);
+      setImageUrl(localUrl);
+      
+      message.success('Image uploaded successfully');
+      onSuccess?.("ok");
+    } catch (err) {
+      console.error(err);
+      message.error('Failed to upload image');
+      onError?.(err as Error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleModalOk = async () => {
     try {
       const values = await form.validateFields();
       if (editingRecord) {
         await itemCategoryService.update(editingRecord.code, {
           title: values.title,
-          active: values.active
+          active: values.active,
+          mediaId: values.mediaId || null
         });
         message.success('Item category updated successfully');
       } else {
         await itemCategoryService.create({
           title: values.title,
-          active: values.active
+          active: values.active,
+          mediaId: values.mediaId || null
         });
         message.success('Item category created successfully');
       }
@@ -84,6 +122,19 @@ export const ItemCategoryList: React.FC = () => {
   };
 
   const columns = [
+    {
+      title: 'Image',
+      dataIndex: 'mediaUrl',
+      key: 'mediaUrl',
+      width: '80px',
+      render: (url: string) => url ? (
+        <img src={url} alt="Category" style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', border: '1px solid #f0f0f0' }} />
+      ) : (
+        <div style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #d9d9d9' }}>
+          <AppstoreOutlined style={{ color: '#bfbfbf' }} />
+        </div>
+      )
+    },
     {
       title: 'Code',
       dataIndex: 'code',
@@ -199,6 +250,11 @@ export const ItemCategoryList: React.FC = () => {
               <Input value={editingRecord.code} disabled />
             </Form.Item>
           )}
+
+          <Form.Item name="mediaId" noStyle>
+            <Input type="hidden" />
+          </Form.Item>
+
           <Form.Item
             name="title"
             label="Category Title"
@@ -208,6 +264,71 @@ export const ItemCategoryList: React.FC = () => {
               placeholder="Enter category name" 
               autoFocus
             />
+          </Form.Item>
+
+          <Form.Item label="Category Image">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              {imageUrl ? (
+                <div style={{ position: 'relative', width: 80, height: 80, borderRadius: 8, overflow: 'hidden', border: '1px solid #f0f0f0' }}>
+                  <img 
+                    src={imageUrl} 
+                    alt="Category" 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  />
+                </div>
+              ) : (
+                <div 
+                  style={{ 
+                    width: 80, 
+                    height: 80, 
+                    borderRadius: 8, 
+                    backgroundColor: '#fafafa', 
+                    border: '1px dashed #d9d9d9',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <AppstoreOutlined style={{ fontSize: 24, color: '#bfbfbf', marginBottom: 4 }} />
+                  <Text type="secondary" style={{ fontSize: 10 }}>No Image</Text>
+                </div>
+              )}
+
+              <div style={{ flex: 1 }}>
+                <Upload
+                  accept="image/*"
+                  showUploadList={false}
+                  customRequest={handleCustomUpload}
+                  disabled={uploading}
+                >
+                  <Button 
+                    icon={uploading ? <LoadingOutlined /> : <UploadOutlined />} 
+                    loading={uploading}
+                    type="dashed"
+                  >
+                    {imageUrl ? 'Change Image' : 'Upload Image'}
+                  </Button>
+                </Upload>
+                {imageUrl && (
+                  <Button 
+                    type="link" 
+                    danger 
+                    size="small" 
+                    style={{ padding: '4px 0', display: 'block', marginTop: 4 }}
+                    onClick={() => {
+                      setImageUrl(null);
+                      form.setFieldsValue({ mediaId: undefined });
+                    }}
+                  >
+                    Remove Image
+                  </Button>
+                )}
+                <Text type="secondary" style={{ display: 'block', marginTop: 4, fontSize: 11 }}>
+                  JPG, PNG or JPEG. Max 5MB.
+                </Text>
+              </div>
+            </div>
           </Form.Item>
 
           <Form.Item
