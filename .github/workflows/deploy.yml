@@ -35,7 +35,7 @@ jobs:
         Start-Sleep -Seconds 5
         
         # 2. Copy build output (dist directory) to the IIS Website directory
-        Copy-Item -Path "./dist/*" -Destination "D:\Websites\RetailSuite_Web" -Recurse -Force
+        Copy-Item -Path "./dist/*" -Destination "D:\Websites\RetailSuite" -Recurse -Force
         
         # 3. Start the App Pool back up
         Start-WebAppPool -Name "RetailSuite"
