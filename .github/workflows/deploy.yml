@@ -1,0 +1,41 @@
+name: Deploy Retail Web App to IIS
+
+on:
+  push:
+    branches: [ "master" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Dependencies
+      run: npm ci
+      working-directory: ./
+
+    - name: Build Web App
+      run: npm run build
+      working-directory: ./
+
+    - name: Deploy to IIS
+      shell: powershell
+      run: |
+        # 1. Stop the App Pool to prevent file locking
+        Stop-WebAppPool -Name "RetailSuite"
+        
+        # Give IIS time to gracefully shut down and release the file locks
+        Start-Sleep -Seconds 5
+        
+        # 2. Copy build output (dist directory) to the IIS Website directory
+        Copy-Item -Path "./dist/*" -Destination "D:\Websites\RetailSuite_Web" -Recurse -Force
+        
+        # 3. Start the App Pool back up
+        Start-WebAppPool -Name "RetailSuite"
