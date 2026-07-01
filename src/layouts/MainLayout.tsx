@@ -75,7 +75,20 @@ export const MainLayout: React.FC = () => {
       'item-categories': 'Product Category',
       'item-ledger': 'Product Ledger'
     };
-    const label = labelMap[path] || path.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    
+    let label = labelMap[path] || path.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    
+    // Check if the current segment is an ID parameter following a list route
+    const isIdSegment = index > 0 && [
+      'users', 'hr-info', 'customers', 'vendors', 'supply-order', 'item-details',
+      'payment-voucher', 'receipt-voucher', 'journal-voucher', 'purchase', 'sale',
+      'pos-sale', 'sale-supply', 'sale-return', 'purchase-return', 'stock-adjustment'
+    ].includes(array[index - 1]);
+    
+    if (isIdSegment && path !== 'new') {
+      label = 'Edit';
+    }
+
     return { title: index === array.length - 1 ? label : <a onClick={(e) => { e.preventDefault(); navigate(url); }}>{label}</a> };
   });
 
@@ -135,6 +148,7 @@ export const MainLayout: React.FC = () => {
         { key: '/setup/units', label: 'Unit Index' },
         { key: '/setup/narrations', label: 'Narration' },
         { key: '/setup/hr-info', label: 'HR Info' },
+        { key: '/setup/users', label: 'Users' },
         { key: '/setup/supply-order', label: 'Supply Order' },
         { key: '/setup/printer-settings', label: 'Printer Settings' },
         { key: '/setup/opening-balance', label: 'Opening Balance' },

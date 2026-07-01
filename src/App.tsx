@@ -51,6 +51,8 @@ import { VendorList } from './pages/setup/VendorList';
 import { VendorForm } from './pages/setup/VendorForm';
 import { HRInfoList } from './pages/setup/HRInfoList';
 import { HRInfoForm } from './pages/setup/HRInfoForm';
+import { UserList } from './pages/setup/UserList';
+import { UserForm } from './pages/setup/UserForm';
 import { OpeningBalance } from './pages/setup/OpeningBalance';
 import { Profile } from './pages/auth/Profile';
 import { useAppStore } from './stores/useAppStore';
@@ -189,6 +191,10 @@ function App() {
             <Route path="setup/hr-info" element={<HRInfoList />} />
             <Route path="setup/hr-info/new" element={<HRInfoForm />} />
             <Route path="setup/hr-info/:id" element={<HRInfoForm />} />
+            
+            <Route path="setup/users" element={<UserList />} />
+            <Route path="setup/users/new" element={<UserForm />} />
+            <Route path="setup/users/:id" element={<UserForm />} />
             
             <Route path="setup/supply-order" element={<SupplyOrderList />} />
             <Route path="setup/supply-order/new" element={<SupplyOrderForm />} />
