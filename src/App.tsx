@@ -53,6 +53,8 @@ import { HRInfoList } from './pages/setup/HRInfoList';
 import { HRInfoForm } from './pages/setup/HRInfoForm';
 import { UserList } from './pages/setup/UserList';
 import { UserForm } from './pages/setup/UserForm';
+import { RoleList } from './pages/setup/RoleList';
+import { RoleForm } from './pages/setup/RoleForm';
 import { OpeningBalance } from './pages/setup/OpeningBalance';
 import { Profile } from './pages/auth/Profile';
 import { useAppStore } from './stores/useAppStore';
@@ -195,6 +197,10 @@ function App() {
             <Route path="setup/users" element={<UserList />} />
             <Route path="setup/users/new" element={<UserForm />} />
             <Route path="setup/users/:id" element={<UserForm />} />
+            
+            <Route path="setup/roles" element={<RoleList />} />
+            <Route path="setup/roles/new" element={<RoleForm />} />
+            <Route path="setup/roles/:id" element={<RoleForm />} />
             
             <Route path="setup/supply-order" element={<SupplyOrderList />} />
             <Route path="setup/supply-order/new" element={<SupplyOrderForm />} />

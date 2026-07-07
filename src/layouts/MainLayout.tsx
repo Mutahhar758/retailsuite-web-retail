@@ -80,7 +80,7 @@ export const MainLayout: React.FC = () => {
     
     // Check if the current segment is an ID parameter following a list route
     const isIdSegment = index > 0 && [
-      'users', 'hr-info', 'customers', 'vendors', 'supply-order', 'item-details',
+      'users', 'roles', 'hr-info', 'customers', 'vendors', 'supply-order', 'item-details',
       'payment-voucher', 'receipt-voucher', 'journal-voucher', 'purchase', 'sale',
       'pos-sale', 'sale-supply', 'sale-return', 'purchase-return', 'stock-adjustment'
     ].includes(array[index - 1]);
@@ -149,6 +149,7 @@ export const MainLayout: React.FC = () => {
         { key: '/setup/narrations', label: 'Narration' },
         { key: '/setup/hr-info', label: 'HR Info' },
         { key: '/setup/users', label: 'Users' },
+        { key: '/setup/roles', label: 'Roles & Permissions' },
         { key: '/setup/supply-order', label: 'Supply Order' },
         { key: '/setup/printer-settings', label: 'Printer Settings' },
         { key: '/setup/opening-balance', label: 'Opening Balance' },
