@@ -29,7 +29,9 @@ export const AddLicenseModal: React.FC<AddLicenseModalProps> = ({ open, onCancel
         addLicense({
           licenseKey: values.licenseKey,
           tenantIdentifier,
-          name
+          name,
+          hasSupplyFeature: !!tenantData?.hasSupplyFeature,
+          hasSecondaryQty: !!tenantData?.hasSecondaryQty
         });
         message.success(`Successfully added license for ${name}`);
         form.resetFields();

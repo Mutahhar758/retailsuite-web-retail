@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useAppStore } from '../../stores/useAppStore';
 import { saleSupplyService } from '../../services/saleSupplyService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
@@ -18,6 +19,10 @@ import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrder
 const { Title, Text } = Typography;
 
 export const SaleSupplyForm: React.FC = () => {
+  const { licenses, currentTenantIdentifier } = useAppStore();
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
+  const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
   const navigate = useNavigate();
@@ -54,10 +59,13 @@ export const SaleSupplyForm: React.FC = () => {
         });
         setSupplyLines((copyFrom.lines || []).map((l: any) => ({
           ...l,
-          key: Date.now() + l.seq
+          key: Date.now() + l.seq,
+          secQty: l.secQty || 0,
+          secRate: l.secRate || 0,
+          secUnit: l.secUnit || null
         })));
       } else {
-        setSupplyLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0 }]);
+        setSupplyLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0, secQty: 0, secRate: 0 }]);
         form.setFieldsValue({ date: dayjs() });
       }
     }
@@ -81,7 +89,10 @@ export const SaleSupplyForm: React.FC = () => {
           ...d,
           key: d.seq,
           customerId: d.customerId,
-          addLess: d.addLess
+          addLess: d.addLess,
+          secQty: d.secQty,
+          secRate: d.secRate,
+          secUnit: d.secUnit
         })));
       }
     } catch (error) {
@@ -123,7 +134,7 @@ export const SaleSupplyForm: React.FC = () => {
 
   const handleAddRow = () => {
     const newSeq = supplyLines.length > 0 ? Math.max(...supplyLines.map(l => l.seq)) + 1 : 1;
-    setSupplyLines([...supplyLines, { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0 }]);
+    setSupplyLines([...supplyLines, { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0, secQty: 0, secRate: 0 }]);
   };
 
   const handleRemoveRow = async (key: number, seq: number) => {
@@ -146,7 +157,9 @@ export const SaleSupplyForm: React.FC = () => {
         const rate = updated.rate || 0;
         const disc = updated.discount || 0;
         const addLess = updated.addLess || 0;
-        updated.amount = (qty * (rate - disc)) + addLess;
+        const secQty = updated.secQty || 0;
+        const secRate = updated.secRate || 0;
+        updated.amount = (qty * (rate - disc)) + addLess + (secQty * secRate);
         return updated;
       }
       return l;
@@ -183,7 +196,10 @@ export const SaleSupplyForm: React.FC = () => {
             qty: l.qty,
             rate: l.rate,
             discount: l.discount,
-            addLess: l.addLess
+            addLess: l.addLess,
+            secUnit: l.secUnit || null,
+            secQty: l.secQty || 0,
+            secRate: l.secRate || 0
           };
         })
       };
@@ -236,42 +252,44 @@ export const SaleSupplyForm: React.FC = () => {
         </Select>
       )
     },
-    {
-      title: 'Unit',
-      dataIndex: 'unit',
-      key: 'unit',
-      width: 120,
-      render: (text: string, record: any) => {
-        const masterItemId = form.getFieldValue('itemId');
-        const item = items.find(i => i.id === masterItemId);
-        const filteredUnits = item 
-          ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit)
-          : units;
-          
-        return (
-          <Select
-            style={{ width: '100%' }}
-            value={text}
-            onChange={(val) => updateLine(record.key, 'unit', val)}
-          >
-            {filteredUnits.map(u => (
-              <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
-            ))}
-          </Select>
-        );
+    ...(!hasSecondaryQty ? [
+      {
+        title: 'Unit',
+        dataIndex: 'unit',
+        key: 'unit',
+        width: 120,
+        render: (text: string, record: any) => {
+          const masterItemId = form.getFieldValue('itemId');
+          const item = items.find(i => i.id === masterItemId);
+          const filteredUnits = item 
+            ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit)
+            : units;
+            
+          return (
+            <Select
+              style={{ width: '100%' }}
+              value={text}
+              onChange={(val) => updateLine(record.key, 'unit', val)}
+            >
+              {filteredUnits.map(u => (
+                <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
+              ))}
+            </Select>
+          );
+        }
       }
-    },
+    ] : []),
     {
-      title: 'Qty',
+      title: hasSecondaryQty ? 'Single Qty' : 'Qty',
       dataIndex: 'qty',
       key: 'qty',
       width: 100,
       render: (val: number, record: any) => (
-        <InputNumber style={{ width: '100%' }} value={val} min={0.01} onChange={(v) => updateLine(record.key, 'qty', v)} />
+        <InputNumber style={{ width: '100%' }} value={val} min={0} onChange={(v) => updateLine(record.key, 'qty', v)} />
       )
     },
     {
-      title: 'Rate',
+      title: hasSecondaryQty ? 'Single Rate' : 'Rate',
       dataIndex: 'rate',
       key: 'rate',
       width: 120,
@@ -285,6 +303,32 @@ export const SaleSupplyForm: React.FC = () => {
         />
       )
     },
+    ...(hasSecondaryQty ? [
+      {
+        title: 'Pack Qty',
+        dataIndex: 'secQty',
+        key: 'secQty',
+        width: 100,
+        render: (val: number, record: any) => (
+          <InputNumber style={{ width: '100%' }} value={val} min={0} onChange={(v) => updateLine(record.key, 'secQty', v)} />
+        )
+      },
+      {
+        title: 'Pack Rate',
+        dataIndex: 'secRate',
+        key: 'secRate',
+        width: 120,
+        render: (val: number, record: any) => (
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            onChange={(v) => updateLine(record.key, 'secRate', v)}
+          />
+        )
+      }
+    ] : []),
     {
       title: 'Disc',
       dataIndex: 'discount',

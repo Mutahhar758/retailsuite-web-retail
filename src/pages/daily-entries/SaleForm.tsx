@@ -15,10 +15,15 @@ import type { ChartOfAccountHeadDto } from '../../services/chartOfAccountService
 import type { NarrationDto } from '../../services/narrationService';
 import type { Item } from '../../services/inventoryService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { useAppStore } from '../../stores/useAppStore';
 
 const { Title, Text } = Typography;
 
 export const SaleForm: React.FC = () => {
+  const { licenses, currentTenantIdentifier } = useAppStore();
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
+  const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
   const navigate = useNavigate();
@@ -39,7 +44,7 @@ export const SaleForm: React.FC = () => {
     if (isEdit) {
       fetchDetail();
     } else {
-      setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0 }]);
+      setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }]);
       form.setFieldsValue({ date: dayjs() });
     }
   }, [isEdit, voucherNo]);
@@ -86,7 +91,10 @@ export const SaleForm: React.FC = () => {
           key: d.seq,
           rate: d.rate,
           discount: d.discount,
-          amount: d.amount
+          amount: d.amount,
+          secUnit: d.secUnit,
+          secQty: d.secQty,
+          secRate: d.secRate
         })));
       }
     } catch {
@@ -99,7 +107,7 @@ export const SaleForm: React.FC = () => {
   const handleAddRow = () => {
     setSaleLines(prev => {
       const newSeq = prev.length > 0 ? Math.max(...prev.map(l => l.seq)) + 1 : 1;
-      return [...prev, { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, amount: 0 }];
+      return [...prev, { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }];
     });
   };
 
@@ -126,13 +134,18 @@ export const SaleForm: React.FC = () => {
             if (item) {
               updated.unit = item.defaultUnit;
               updated.rate = item.priRate;
+              updated.secUnit = item.secondaryUnit;
+              updated.secRate = item.secRate || 0;
+              updated.secQty = 0;
             }
           }
 
           const qty = updated.qty || 0;
           const rate = updated.rate || 0;
           const disc = updated.discount || 0;
-          updated.amount = qty * (rate - disc);
+          const secQty = updated.secQty || 0;
+          const secRate = updated.secRate || 0;
+          updated.amount = (qty * (rate - disc)) + (secQty * secRate);
           return updated;
         }
         return l;
@@ -141,7 +154,7 @@ export const SaleForm: React.FC = () => {
       const lastRow = newLines[newLines.length - 1];
       if (lastRow.key === key && lastRow.itemId) {
         const newSeq = newLines.length > 0 ? Math.max(...newLines.map(l => l.seq)) + 1 : 1;
-        return [...newLines, { key: Date.now() + 1, seq: newSeq, qty: 1, rate: 0, discount: 0, amount: 0 }];
+        return [...newLines, { key: Date.now() + 1, seq: newSeq, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }];
       }
 
       return newLines;
@@ -192,7 +205,10 @@ export const SaleForm: React.FC = () => {
             unit: item?.itemType === 'Service' ? null : (l.unit || null),
             qty: l.qty,
             rate: l.rate,
-            discount: l.discount
+            discount: l.discount,
+            secUnit: l.secUnit || null,
+            secQty: l.secQty || 0,
+            secRate: l.secRate || 0
           };
         })
       };
@@ -260,50 +276,52 @@ export const SaleForm: React.FC = () => {
         </Select>
       )
     },
-    {
-      title: 'Unit',
-      dataIndex: 'unit',
-      key: 'unit',
-      width: 120,
-      render: (text: string, record: any) => {
-        const item = items.find(i => i.id === record.itemId);
-        const filteredUnits = item
-          ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit)
-          : units;
+    ...(!hasSecondaryQty ? [
+      {
+        title: 'Unit',
+        dataIndex: 'unit',
+        key: 'unit',
+        width: 100,
+        render: (text: string, record: any) => {
+          const item = items.find(i => i.id === record.itemId);
+          const filteredUnits = item
+            ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit)
+            : units;
 
-        return (
-          <Select
-            style={{ width: '100%' }}
-            value={text}
-            disabled={!record.itemId}
-            onChange={(val) => updateLine(record.key, 'unit', val)}
-          >
-            {filteredUnits.map(u => (
-              <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
-            ))}
-          </Select>
-        );
+          return (
+            <Select
+              style={{ width: '100%' }}
+              value={text}
+              disabled={!record.itemId}
+              onChange={(val) => updateLine(record.key, 'unit', val)}
+            >
+              {filteredUnits.map(u => (
+                <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
+              ))}
+            </Select>
+          );
+        }
       }
-    },
+    ] : []),
     {
-      title: 'Qty',
+      title: hasSecondaryQty ? 'Single Qty' : 'Qty',
       dataIndex: 'qty',
       key: 'qty',
-      width: 100,
+      width: 90,
       render: (val: number, record: any) => (
         <InputNumber
           style={{ width: '100%' }}
           value={val}
-          min={0.01}
+          min={0}
           onChange={(v) => updateLine(record.key, 'qty', v)}
         />
       )
     },
     {
-      title: 'Rate',
+      title: hasSecondaryQty ? 'Single Rate' : 'Rate',
       dataIndex: 'rate',
       key: 'rate',
-      width: 120,
+      width: 100,
       render: (val: number, record: any) => (
         <InputNumber
           style={{ width: '100%' }}
@@ -314,11 +332,42 @@ export const SaleForm: React.FC = () => {
         />
       )
     },
+    ...(hasSecondaryQty ? [
+      {
+        title: 'Pack Qty',
+        dataIndex: 'secQty',
+        key: 'secQty',
+        width: 90,
+        render: (val: number, record: any) => (
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            onChange={(v) => updateLine(record.key, 'secQty', v)}
+          />
+        )
+      },
+      {
+        title: 'Pack Rate',
+        dataIndex: 'secRate',
+        key: 'secRate',
+        width: 100,
+        render: (val: number, record: any) => (
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            onChange={(v) => updateLine(record.key, 'secRate', v)}
+          />
+        )
+      }
+    ] : []),
     {
       title: 'Disc',
       dataIndex: 'discount',
       key: 'discount',
-      width: 100,
+      width: 90,
       render: (val: number, record: any) => (
         <InputNumber
           style={{ width: '100%' }}
@@ -332,7 +381,7 @@ export const SaleForm: React.FC = () => {
       title: 'Amount',
       dataIndex: 'amount',
       key: 'amount',
-      width: 150,
+      width: 120,
       align: 'right' as const,
       render: (val: number) => <Text strong>{(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
     },

@@ -133,6 +133,9 @@ export const MainLayout: React.FC = () => {
     setLayout(layout === 'vertical' ? 'horizontal' : 'vertical');
   };
 
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
+  const hasSupplyFeature = currentOrg?.hasSupplyFeature ?? false;
+
   const baseMenuItems = [
     { 
       key: '/setup', 
@@ -150,10 +153,10 @@ export const MainLayout: React.FC = () => {
         { key: '/setup/hr-info', label: 'HR Info' },
         { key: '/setup/users', label: 'Users' },
         { key: '/setup/roles', label: 'Roles & Permissions' },
-        { key: '/setup/supply-order', label: 'Supply Order' },
+        hasSupplyFeature ? { key: '/setup/supply-order', label: 'Supply Order' } : null,
         { key: '/setup/printer-settings', label: 'Printer Settings' },
         { key: '/setup/opening-balance', label: 'Opening Balance' },
-      ]
+      ].filter(Boolean) as any[]
     },
     { 
       key: '/daily-entries', 
@@ -166,13 +169,13 @@ export const MainLayout: React.FC = () => {
         { key: '/daily-entries/purchase', label: 'Purchase' },
         { key: '/daily-entries/sale', label: 'Sale' },
         { key: '/daily-entries/pos-sale', label: 'POS Touch Sale' },
-        { key: '/daily-entries/sale-supply', label: 'Sale Supply' },
+        hasSupplyFeature ? { key: '/daily-entries/sale-supply', label: 'Sale Supply' } : null,
         { key: '/daily-entries/purchase-return', label: 'Purchase Return' },
         { key: '/daily-entries/sale-return', label: 'Sale Return' },
         { key: '/daily-entries/stock-adjustment', label: 'Stock Adjustment' },
         { key: '/daily-entries/bank-reconciliation', label: 'Bank Reconciliation' },
         { key: '/daily-entries/payroll', label: 'Payroll' },
-      ]
+      ].filter(Boolean) as any[]
     },
     { 
       key: '/reports', 

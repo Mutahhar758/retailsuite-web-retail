@@ -5,6 +5,8 @@ export interface OrganizationLicense {
   licenseKey: string;
   tenantIdentifier: string;
   name: string;
+  hasSupplyFeature?: boolean;
+  hasSecondaryQty?: boolean;
 }
 
 interface AppState {

@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useAppStore } from '../../stores/useAppStore';
 import { stockAdjustmentService } from '../../services/stockAdjustmentService';
 import { inventoryService, type Item, type Unit } from '../../services/inventoryService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
@@ -16,6 +17,10 @@ import { narrationService, type NarrationDto } from '../../services/narrationSer
 const { Title, Text } = Typography;
 
 export const StockAdjustmentForm: React.FC = () => {
+  const { licenses, currentTenantIdentifier } = useAppStore();
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
+  const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
   const navigate = useNavigate();
@@ -47,7 +52,7 @@ export const StockAdjustmentForm: React.FC = () => {
     if (isEdit) {
       fetchDetail();
     } else {
-      setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0 }]);
+      setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0 }]);
       form.setFieldsValue({ date: dayjs() });
     }
   }, [isEdit, voucherNo]);
@@ -67,10 +72,14 @@ export const StockAdjustmentForm: React.FC = () => {
         setAdjustmentLines(details.map(d => ({
           ...d,
           key: d.seq || Date.now() + Math.random(),
-          amount: d.amount || ((d.qtyIn - d.qtyOut) * d.rate)
+          amount: d.amount || (((d.qtyIn - d.qtyOut) * d.rate) + (((d.secQtyIn ?? 0) - (d.secQtyOut ?? 0)) * (d.secRate ?? 0))),
+          secQtyIn: d.secQtyIn,
+          secQtyOut: d.secQtyOut,
+          secRate: d.secRate,
+          secUnit: d.secUnit
         })));
       } else {
-        setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0 }]);
+        setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0 }]);
       }
     } catch (error) {
       message.error('Failed to fetch stock adjustment details');
@@ -82,7 +91,7 @@ export const StockAdjustmentForm: React.FC = () => {
   const handleAddRow = () => {
     setAdjustmentLines(prev => {
       const newSeq = prev.length > 0 ? Math.max(...prev.map(l => l.seq)) + 1 : 1;
-      return [...prev, { key: Date.now(), seq: newSeq, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0 }];
+      return [...prev, { key: Date.now(), seq: newSeq, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0 }];
     });
   };
 
@@ -109,21 +118,28 @@ export const StockAdjustmentForm: React.FC = () => {
               updated.unit = item.defaultUnit || item.primaryUnit;
               updated.rate = item.priRate;
               updated.itemCategoryCode = item.itemCategoryCode;
+              updated.secUnit = item.secondaryUnit;
+              updated.secRate = item.secRate || 0;
+              updated.secQtyIn = 0;
+              updated.secQtyOut = 0;
             }
           }
           const qtyIn = updated.qtyIn || 0;
           const qtyOut = updated.qtyOut || 0;
           const rate = updated.rate || 0;
-          updated.amount = (qtyIn - qtyOut) * rate;
+          const secQtyIn = updated.secQtyIn || 0;
+          const secQtyOut = updated.secQtyOut || 0;
+          const secRate = updated.secRate || 0;
+          updated.amount = ((qtyIn - qtyOut) * rate) + ((secQtyIn - secQtyOut) * secRate);
           return updated;
         }
         return l;
       });
 
       const lastRow = newLines[newLines.length - 1];
-      if (lastRow.key === key && lastRow.itemId && (lastRow.qtyIn !== 0 || lastRow.qtyOut !== 0)) {
+      if (lastRow.key === key && lastRow.itemId && (lastRow.qtyIn !== 0 || lastRow.qtyOut !== 0 || (lastRow.secQtyIn || 0) !== 0 || (lastRow.secQtyOut || 0) !== 0)) {
         const newSeq = newLines.length > 0 ? Math.max(...newLines.map(l => l.seq)) + 1 : 1;
-        return [...newLines, { key: Date.now() + 1, seq: newSeq, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0 }];
+        return [...newLines, { key: Date.now() + 1, seq: newSeq, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0 }];
       }
       return newLines;
     });
@@ -134,7 +150,7 @@ export const StockAdjustmentForm: React.FC = () => {
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
-      const validLines = adjustmentLines.filter(l => l.itemId && ((l.qtyIn || 0) !== 0 || (l.qtyOut || 0) !== 0));
+      const validLines = adjustmentLines.filter(l => l.itemId && ((l.qtyIn || 0) !== 0 || (l.qtyOut || 0) !== 0 || (l.secQtyIn || 0) !== 0 || (l.secQtyOut || 0) !== 0));
       if (validLines.length === 0) {
         message.error('Please add at least one item');
         return;
@@ -149,10 +165,14 @@ export const StockAdjustmentForm: React.FC = () => {
           seq: l.seq,
           itemId: l.itemId,
           itemCategoryCode: l.itemCategoryCode,
-          unit: l.unit,
+          unit: l.unit || null,
           qtyIn: l.qtyIn,
           qtyOut: l.qtyOut,
-          rate: l.rate
+          rate: l.rate,
+          secUnit: l.secUnit || null,
+          secQtyIn: l.secQtyIn || 0,
+          secQtyOut: l.secQtyOut || 0,
+          secRate: l.secRate || 0
         }))
       };
 
@@ -204,25 +224,27 @@ export const StockAdjustmentForm: React.FC = () => {
         </Select>
       )
     },
-    {
-      title: 'Unit',
-      dataIndex: 'unit',
-      key: 'unit',
-      width: 120,
-      render: (text: string, record: any) => {
-        const item = items.find(i => i.id === record.itemId);
-        const filteredUnits = item ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit) : units;
-        return (
-          <Select style={{ width: '100%' }} value={text} disabled={!record.itemId} onChange={(val) => updateLine(record.key, 'unit', val)}>
-            {filteredUnits.map(u => (
-              <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
-            ))}
-          </Select>
-        );
+    ...(!hasSecondaryQty ? [
+      {
+        title: 'Unit',
+        dataIndex: 'unit',
+        key: 'unit',
+        width: 120,
+        render: (text: string, record: any) => {
+          const item = items.find(i => i.id === record.itemId);
+          const filteredUnits = item ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit) : units;
+          return (
+            <Select style={{ width: '100%' }} value={text} disabled={!record.itemId} onChange={(val) => updateLine(record.key, 'unit', val)}>
+              {filteredUnits.map(u => (
+                <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
+              ))}
+            </Select>
+          );
+        }
       }
-    },
+    ] : []),
     {
-      title: 'Qty In',
+      title: hasSecondaryQty ? 'Single Qty In' : 'Qty In',
       dataIndex: 'qtyIn',
       key: 'qtyIn',
       width: 100,
@@ -237,7 +259,7 @@ export const StockAdjustmentForm: React.FC = () => {
       )
     },
     {
-      title: 'Qty Out',
+      title: hasSecondaryQty ? 'Single Qty Out' : 'Qty Out',
       dataIndex: 'qtyOut',
       key: 'qtyOut',
       width: 100,
@@ -252,7 +274,7 @@ export const StockAdjustmentForm: React.FC = () => {
       )
     },
     {
-      title: 'Rate',
+      title: hasSecondaryQty ? 'Single Rate' : 'Rate',
       dataIndex: 'rate',
       key: 'rate',
       width: 120,
@@ -267,6 +289,54 @@ export const StockAdjustmentForm: React.FC = () => {
         />
       )
     },
+    ...(hasSecondaryQty ? [
+      {
+        title: 'Pack Qty In',
+        dataIndex: 'secQtyIn',
+        key: 'secQtyIn',
+        width: 100,
+        render: (val: number, record: any) => (
+          <InputNumber 
+            style={{ width: '100%' }} 
+            value={val} 
+            step={0.001}
+            precision={3}
+            onChange={(v) => updateLine(record.key, 'secQtyIn', v)} 
+          />
+        )
+      },
+      {
+        title: 'Pack Qty Out',
+        dataIndex: 'secQtyOut',
+        key: 'secQtyOut',
+        width: 100,
+        render: (val: number, record: any) => (
+          <InputNumber 
+            style={{ width: '100%' }} 
+            value={val} 
+            step={0.001}
+            precision={3}
+            onChange={(v) => updateLine(record.key, 'secQtyOut', v)} 
+          />
+        )
+      },
+      {
+        title: 'Pack Rate',
+        dataIndex: 'secRate',
+        key: 'secRate',
+        width: 120,
+        render: (val: number, record: any) => (
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            precision={2}
+            formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            onChange={(v) => updateLine(record.key, 'secRate', v)}
+          />
+        )
+      }
+    ] : []),
     {
       title: 'Amount',
       dataIndex: 'amount',
