@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, ReloadOutlined,
-  UserOutlined, SearchOutlined, MailOutlined, PhoneOutlined,
+  SearchOutlined, MailOutlined, PhoneOutlined,
   CheckCircleOutlined, StopOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';

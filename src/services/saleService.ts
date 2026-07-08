@@ -38,6 +38,9 @@ export interface SaleLine {
   amount: number;
   cashReceipt: number;
   cashBack: number;
+  secQty?: number;
+  secRate?: number;
+  secUnit?: string | null;
   createdBy: string;
   createdOn: string;
   lastModifiedBy?: string;
@@ -51,6 +54,9 @@ export interface SaleLineRequest {
   qty: number;
   rate: number;
   discount: number;
+  secQty?: number;
+  secRate?: number;
+  secUnit?: string | null;
 }
 
 export interface SaleCreateRequest {

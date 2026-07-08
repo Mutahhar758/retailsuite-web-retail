@@ -18,6 +18,9 @@ export interface PurchaseReturnLine {
   rate: number;
   addLess: number;
   amount: number;
+  secQty?: number;
+  secRate?: number;
+  secUnit?: string | null;
   itemTitle?: string;
   narration?: string;
   narrationId?: string;
@@ -38,6 +41,9 @@ export interface PurchaseReturnCreateRequest {
     qty: number;
     rate: number;
     addLess: number;
+    secQty?: number;
+    secRate?: number;
+    secUnit?: string | null;
   }[];
 }
 

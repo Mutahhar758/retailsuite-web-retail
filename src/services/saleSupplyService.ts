@@ -28,6 +28,9 @@ export interface SaleSupplyLine {
   discount: number;
   addLess: number;
   amount: number;
+  secQty?: number;
+  secRate?: number;
+  secUnit?: string | null;
   createdBy: string;
   createdOn: string;
   lastModifiedBy?: string;
@@ -42,6 +45,9 @@ export interface SaleSupplyLineRequest {
   rate: number;
   discount: number;
   addLess: number;
+  secQty?: number;
+  secRate?: number;
+  secUnit?: string | null;
 }
 
 export interface SaleSupplyCreateRequest {

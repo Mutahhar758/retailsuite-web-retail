@@ -20,6 +20,10 @@ export interface StockAdjustmentLine {
   qtyOut: number;
   rate: number;
   amount: number;
+  secQtyIn?: number;
+  secQtyOut?: number;
+  secRate?: number;
+  secUnit?: string | null;
   narration?: string;
   narrationId?: string;
   date?: string;
@@ -34,6 +38,10 @@ export interface StockAdjustmentLineRequest {
   qtyIn: number;
   qtyOut: number;
   rate: number;
+  secQtyIn?: number;
+  secQtyOut?: number;
+  secRate?: number;
+  secUnit?: string | null;
 }
 
 export interface StockAdjustmentRequest {

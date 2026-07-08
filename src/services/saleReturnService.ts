@@ -24,6 +24,9 @@ export interface SaleReturnLine {
   rate: number;
   discount: number;
   amount: number;
+  secQty?: number;
+  secRate?: number;
+  secUnit?: string | null;
   createdBy: string;
   createdOn: string;
 }
@@ -35,6 +38,9 @@ export interface SaleReturnLineRequest {
   qty: number;
   rate: number;
   discount: number;
+  secQty?: number;
+  secRate?: number;
+  secUnit?: string | null;
 }
 
 export interface SaleReturnCreateRequest {
