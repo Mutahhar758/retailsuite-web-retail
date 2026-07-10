@@ -43,6 +43,7 @@ export const POSSaleForm: React.FC = () => {
   const [categories, setCategories] = useState<ItemCategoryDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
+  const [units, setUnits] = useState<{ code: string; title: string }[]>([]);
 
   // Selection states
   const [activeCategory, setActiveCategory] = useState<string>('all');
@@ -133,6 +134,10 @@ export const POSSaleForm: React.FC = () => {
 
     offlineCacheService.getNarrations()
       .then(setNarrations)
+      .catch(() => { /* Non-critical */ });
+
+    offlineCacheService.getUnits()
+      .then(setUnits)
       .catch(() => { /* Non-critical */ });
   }, []);
 
@@ -415,149 +420,297 @@ export const POSSaleForm: React.FC = () => {
   };
 
   return (
-    <div style={{ margin: -24, padding: 24, height: 'calc(100vh - 140px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ margin: -24, padding: 24, height: 'calc(100vh - 140px)', overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc' }}>
+      <style>{`
+        /* Modern POS Enhancements */
+        .pos-search-input {
+          transition: all 0.2s ease !important;
+          border-color: #cbd5e1 !important;
+        }
+        .pos-search-input:focus, .pos-search-input:hover {
+          border-color: #3b82f6 !important;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+        }
+        .pos-category-btn {
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .pos-category-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        .pos-category-btn:active {
+          transform: translateY(0);
+        }
+        .pos-item-card {
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          background: #ffffff;
+        }
+        .pos-item-card:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08) !important;
+          border-color: #3b82f6 !important;
+        }
+        .pos-item-card:active {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 12px rgba(15, 23, 42, 0.06) !important;
+        }
+        .pos-qty-btn {
+          transition: all 0.2s ease !important;
+          border-color: #cbd5e1 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+        .pos-qty-btn:hover {
+          transform: scale(1.1);
+          background-color: #f1f5f9 !important;
+          border-color: #94a3b8 !important;
+          color: #0f172a !important;
+        }
+        .pos-qty-btn:active {
+          transform: scale(0.95);
+        }
+        .pos-pay-btn {
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          position: relative;
+          overflow: hidden;
+        }
+        .pos-pay-btn:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(22, 163, 74, 0.35) !important;
+          filter: brightness(1.05);
+        }
+        .pos-pay-btn:active:not(:disabled) {
+          transform: translateY(0);
+        }
+        .pos-cash-note-btn {
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .pos-cash-note-btn:hover {
+          transform: translateY(-3px) scale(1.02);
+          filter: brightness(1.08);
+          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15) !important;
+        }
+        .pos-cash-note-btn:active {
+          transform: translateY(0) scale(1);
+        }
+        .pos-cash-coin-btn {
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .pos-cash-coin-btn:hover {
+          transform: translateY(-3px) scale(1.06);
+          filter: brightness(1.08);
+          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2) !important;
+        }
+        .pos-cash-coin-btn:active {
+          transform: translateY(0) scale(1);
+        }
+        /* Readable, modern scrollbar for touch screen/seniors */
+        .pos-scrollbar::-webkit-scrollbar {
+          width: 12px;
+          height: 12px;
+        }
+        .pos-scrollbar::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 8px;
+        }
+        .pos-scrollbar::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 8px;
+          border: 3px solid #f1f5f9;
+        }
+        .pos-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+        /* Custom styles for Ant Design lists & inputs in modals */
+        .pos-modal-list-item {
+          transition: all 0.2s ease;
+        }
+        .pos-modal-list-item:hover {
+          background-color: #f8fafc !important;
+        }
+      `}</style>
+
       {/* ── Offline mode banner ── */}
       {!isOnline && (
         <Alert
-          style={{ marginBottom: 12, flexShrink: 0 }}
+          style={{ marginBottom: 16, flexShrink: 0, borderRadius: 12, padding: '12px 20px', fontSize: 15 }}
           type="warning"
           showIcon
-          icon={<DisconnectOutlined />}
+          icon={<DisconnectOutlined style={{ fontSize: 18 }} />}
           message={
             <span>
-              <strong>OFFLINE MODE</strong> — Sales will be queued and synced automatically when internet is restored.
+              <strong>OFFLINE MODE ACTIVE</strong> — Sales will be saved locally and auto-synced when you reconnect.
             </span>
           }
         />
       )}
-      {/* POS Top Header - Zero Keyboard */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexShrink: 0 }}>
-        <Space align="center">
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/daily-entries/sale')} type="text" />
-          <Title level={3} style={{ margin: 0, fontWeight: 700, letterSpacing: '-0.5px' }}>
-            ⚡ POS Touch Terminal
-          </Title>
-        </Space>
-        
-        <Space size="middle">
-          {/* Touch Customer Button */}
-          <Button 
-            type="primary" 
-            icon={<UserOutlined />} 
-            onClick={() => setIsCustomerModalVisible(true)}
-            style={{ 
-              height: 48, 
-              borderRadius: 8, 
-              fontWeight: 600, 
-              backgroundColor: '#0284c7', 
-              borderColor: '#0284c7',
-              boxShadow: '0 4px 6px -1px rgba(2, 132, 199, 0.2)' 
-            }}
-          >
-            Cust: {selectedCustomer ? selectedCustomer.title : 'Select Customer'}
-          </Button>
-
-          {/* Touch Narration Button */}
-          <Button 
-            type="default" 
-            icon={<FileTextOutlined />} 
-            onClick={() => setIsNarrationModalVisible(true)}
-            style={{ height: 48, borderRadius: 8, fontWeight: 600 }}
-          >
-            Narr: {selectedNarration ? selectedNarration.title : 'None'}
-          </Button>
-
-          <Button 
-            danger 
-            icon={<RedoOutlined />} 
-            onClick={handleResetAll} 
-            style={{ height: 48, borderRadius: 8, fontWeight: 600 }}
-          >
-            Clear All
-          </Button>
-        </Space>
-      </div>
 
       {/* Main Terminal Area */}
-      <div style={{ display: 'flex', flex: 1, gap: 20, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, gap: 24, overflow: 'hidden' }}>
         
         {/* Left Side: Category selector and Item grid (65% width) */}
         <div style={{ flex: 1.8, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
           
-          {/* Quick Filters */}
-          <div style={{ marginBottom: 12, display: 'flex', gap: 10, flexShrink: 0 }}>
+          {/* Search bar & Touch Controls Row */}
+          <div style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', flexShrink: 0 }}>
+            {/* Search Input */}
             <Input
-              prefix={<SearchOutlined style={{ color: '#bfbfbf', fontSize: 16 }} />}
-              placeholder="Tap to search items..."
+              className="pos-search-input"
+              prefix={<SearchOutlined style={{ color: '#64748b', fontSize: 18 }} />}
+              placeholder="Search products..."
               value={searchItemQuery}
               onChange={e => setSearchItemQuery(e.target.value)}
-              style={{ height: 44, borderRadius: 8, fontSize: 15 }}
+              style={{ height: 50, borderRadius: 12, fontSize: 15, flex: 1.5 }}
               suffix={
                 searchItemQuery && (
-                  <Button type="text" size="small" onClick={() => setSearchItemQuery('')} style={{ margin: 0, padding: 0 }}>
+                  <Button 
+                    type="text" 
+                    onClick={() => setSearchItemQuery('')} 
+                    style={{ 
+                      margin: 0, 
+                      padding: '0 10px', 
+                      height: 30, 
+                      fontSize: 13, 
+                      fontWeight: 700,
+                      backgroundColor: '#e2e8f0',
+                      borderRadius: 6
+                    }}
+                  >
                     Clear
                   </Button>
                 )
               }
             />
+
+            {/* Customer select button */}
+            <Button 
+              type="primary" 
+              icon={<UserOutlined style={{ fontSize: 14 }} />} 
+              onClick={() => setIsCustomerModalVisible(true)}
+              style={{ 
+                height: 50, 
+                borderRadius: 12, 
+                fontWeight: 700, 
+                fontSize: 14,
+                flex: 1,
+                backgroundColor: '#0284c7', 
+                borderColor: '#0284c7',
+                boxShadow: '0 2px 6px rgba(2, 132, 199, 0.15)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6
+              }}
+            >
+              Cust: {selectedCustomer ? selectedCustomer.title : 'Select Customer'}
+            </Button>
+
+            {/* Narration Select button */}
+            <Button 
+              type="default" 
+              icon={<FileTextOutlined style={{ fontSize: 14 }} />} 
+              onClick={() => setIsNarrationModalVisible(true)}
+              style={{ 
+                height: 50, 
+                borderRadius: 12, 
+                fontWeight: 700, 
+                fontSize: 14,
+                flex: 0.9,
+                color: '#334155',
+                borderColor: '#cbd5e1',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6
+              }}
+            >
+              Narr: {selectedNarration ? selectedNarration.title : 'None'}
+            </Button>
+
+            {/* Clear All button */}
+            <Button 
+              danger 
+              icon={<RedoOutlined style={{ fontSize: 14 }} />} 
+              onClick={handleResetAll} 
+              style={{ 
+                height: 50, 
+                borderRadius: 12, 
+                fontWeight: 700, 
+                fontSize: 14,
+                flex: 0.8,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6
+              }}
+            >
+              Clear All
+            </Button>
           </div>
 
           {/* Category Tabs */}
           <div 
+            className="pos-scrollbar"
             style={{ 
               display: 'flex', 
-              gap: 8, 
+              gap: 10, 
               overflowX: 'auto', 
-              paddingBottom: 8, 
-              marginBottom: 12, 
-              flexShrink: 0,
-              scrollbarWidth: 'none'
+              paddingBottom: 10, 
+              marginBottom: 16, 
+              flexShrink: 0
             }}
           >
             <Button
+              className="pos-category-btn"
               type={activeCategory === 'all' ? 'primary' : 'default'}
               onClick={() => setActiveCategory('all')}
               style={{ 
-                height: 44, 
-                borderRadius: 22, 
-                padding: '0 20px 0 8px', 
-                fontWeight: 600,
-                fontSize: 14,
-                backgroundColor: activeCategory === 'all' ? '#0ea5e9' : undefined,
-                borderColor: activeCategory === 'all' ? '#0ea5e9' : undefined,
+                height: 50, 
+                borderRadius: 25, 
+                padding: '0 24px 0 10px', 
+                fontWeight: 700,
+                fontSize: 15,
+                backgroundColor: activeCategory === 'all' ? '#2563eb' : '#ffffff',
+                borderColor: activeCategory === 'all' ? '#2563eb' : '#e2e8f0',
+                color: activeCategory === 'all' ? '#ffffff' : '#475569',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 8
+                gap: 10,
+                boxShadow: activeCategory === 'all' ? '0 4px 12px rgba(37, 99, 235, 0.2)' : '0 2px 6px rgba(0,0,0,0.02)'
               }}
             >
-              <span style={{ fontSize: 16 }}>⭐</span> All Products
+              <span style={{ fontSize: 20 }}>⭐</span> All Products
             </Button>
             {categories.map(cat => (
               <Button
                 key={cat.code}
+                className="pos-category-btn"
                 type={activeCategory === cat.code ? 'primary' : 'default'}
                 onClick={() => setActiveCategory(cat.code)}
                 style={{ 
-                  height: 44, 
-                  borderRadius: 22, 
-                  padding: cat.mediaUrl ? '0 20px 0 8px' : '0 24px', 
-                  fontWeight: 600,
-                  fontSize: 14,
-                  backgroundColor: activeCategory === cat.code ? '#0ea5e9' : undefined,
-                  borderColor: activeCategory === cat.code ? '#0ea5e9' : undefined,
+                  height: 50, 
+                  borderRadius: 25, 
+                  padding: cat.mediaUrl ? '0 24px 0 10px' : '0 28px', 
+                  fontWeight: 700,
+                  fontSize: 15,
+                  backgroundColor: activeCategory === cat.code ? '#2563eb' : '#ffffff',
+                  borderColor: activeCategory === cat.code ? '#2563eb' : '#e2e8f0',
+                  color: activeCategory === cat.code ? '#ffffff' : '#475569',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 8
+                  gap: 10,
+                  boxShadow: activeCategory === cat.code ? '0 4px 12px rgba(37, 99, 235, 0.2)' : '0 2px 6px rgba(0,0,0,0.02)'
                 }}
               >
                 {cat.mediaUrl ? (
                   <img 
                     src={cat.mediaUrl} 
                     alt={cat.title} 
-                    style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} 
+                    style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} 
                   />
                 ) : (
-                  <span style={{ fontSize: 16 }}>📦</span>
+                  <span style={{ fontSize: 20 }}>📦</span>
                 )}
                 {cat.title}
               </Button>
@@ -565,40 +718,33 @@ export const POSSaleForm: React.FC = () => {
           </div>
 
           {/* Items Grid Container */}
-          <div style={{ flex: 1, overflowY: 'auto', paddingRight: 4 }}>
-            <Row gutter={[12, 12]}>
+          <div className="pos-scrollbar" style={{ flex: 1, overflowY: 'auto', paddingRight: 4 }}>
+            <Row gutter={[16, 16]}>
               {filteredItems.map(item => (
-                <Col xs={12} sm={8} md={6} key={item.id}>
+                <Col xs={12} sm={8} md={8} key={item.id}>
                   <div
+                    className="pos-item-card"
                     onClick={() => handleAddToCart(item)}
                     style={{
-                      borderRadius: 14,
+                      borderRadius: 16,
                       overflow: 'hidden',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
-                      height: 180,
-                      boxShadow: '0 2px 10px rgba(0,0,0,0.10)',
-                      border: '1px solid #e8edf2',
-                      transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                    }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
-                      (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 20px rgba(0,0,0,0.14)';
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
-                      (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 10px rgba(0,0,0,0.10)';
+                      height: 210,
+                      boxShadow: '0 4px 12px rgba(15, 23, 42, 0.03)',
+                      border: '1px solid #e2e8f0'
                     }}
                   >
                     {/* Image area — fills card, full picture visible */}
                     <div style={{
                       flex: 1,
-                      backgroundColor: '#f5f7fa',
+                      backgroundColor: '#f8fafc',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       overflow: 'hidden',
+                      position: 'relative'
                     }}>
                       {item.mediaUrl ? (
                         <img
@@ -608,19 +754,20 @@ export const POSSaleForm: React.FC = () => {
                             width: '100%',
                             height: '100%',
                             objectFit: 'contain',
+                            padding: 8
                           }}
                         />
                       ) : (
                         <div style={{
                           width: '100%',
                           height: '100%',
-                          background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+                          background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          fontSize: 36,
-                          fontWeight: 800,
-                          color: '#3b82f6',
+                          fontSize: 44,
+                          fontWeight: 900,
+                          color: '#2563eb',
                         }}>
                           {item.title.charAt(0).toUpperCase()}
                         </div>
@@ -629,19 +776,19 @@ export const POSSaleForm: React.FC = () => {
 
                     {/* Info strip at bottom */}
                     <div style={{
-                      padding: '6px 8px',
+                      padding: '12px 14px',
                       backgroundColor: '#ffffff',
-                      borderTop: '1px solid #eef1f5',
+                      borderTop: '1px solid #f1f5f9',
                       flexShrink: 0,
                     }}>
                       <div style={{
-                        fontWeight: 600,
-                        fontSize: 12,
-                        color: '#1e293b',
+                        fontWeight: 700,
+                        fontSize: 18,
+                        color: '#0f172a',
                         overflow: 'hidden',
                         whiteSpace: 'nowrap',
                         textOverflow: 'ellipsis',
-                        marginBottom: 2,
+                        marginBottom: 4,
                       }}>
                         {item.title}
                       </div>
@@ -651,14 +798,14 @@ export const POSSaleForm: React.FC = () => {
                         justifyContent: 'space-between',
                       }}>
                         <span style={{
-                          fontWeight: 700,
-                          fontSize: 12,
-                          color: '#0ea5e9',
+                          fontWeight: 800,
+                          fontSize: 16,
+                          color: '#16a34a',
                         }}>
-                          Rs.{item.priRate}
+                          Rs. {item.priRate}
                         </span>
                         {item.barcode && (
-                          <span style={{ fontSize: 9, color: '#94a3b8' }}>{item.barcode}</span>
+                          <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{item.barcode}</span>
                         )}
                       </div>
                     </div>
@@ -666,9 +813,9 @@ export const POSSaleForm: React.FC = () => {
                 </Col>
               ))}
               {filteredItems.length === 0 && (
-                <div style={{ width: '100%', textAlign: 'center', padding: '60px 0', color: '#8c8c8c' }}>
-                  <ShoppingCartOutlined style={{ fontSize: 48, marginBottom: 12, color: '#d9d9d9' }} />
-                  <p style={{ fontSize: 15 }}>No items found in this category.</p>
+                <div style={{ width: '100%', textAlign: 'center', padding: '80px 0', color: '#64748b' }}>
+                  <ShoppingCartOutlined style={{ fontSize: 64, marginBottom: 16, color: '#cbd5e1' }} />
+                  <p style={{ fontSize: 18, fontWeight: 600 }}>No items found in this category.</p>
                 </div>
               )}
             </Row>
@@ -683,23 +830,27 @@ export const POSSaleForm: React.FC = () => {
             flexDirection: 'column', 
             height: '100%', 
             backgroundColor: '#ffffff',
-            borderRadius: 16, 
-            border: '1px solid #f0f0f0', 
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.02)',
-            padding: 16,
+            borderRadius: 20, 
+            border: '1px solid #e2e8f0', 
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+            padding: 20,
             overflow: 'hidden'
           }}
         >
           {/* Cart Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexShrink: 0 }}>
-            <span style={{ fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <ShoppingCartOutlined style={{ color: '#0ea5e9' }} /> Cart Items
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexShrink: 0 }}>
+            <span style={{ fontSize: 18, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, color: '#0f172a' }}>
+              <ShoppingCartOutlined style={{ color: '#2563eb', fontSize: 20 }} /> Cart Items
             </span>
-            <Badge count={cart.reduce((sum, i) => sum + i.qty, 0)} showZero style={{ backgroundColor: '#0ea5e9' }} />
+            <Badge 
+              count={cart.reduce((sum, i) => sum + i.qty, 0)} 
+              showZero 
+              style={{ backgroundColor: '#2563eb', fontSize: 14, height: 24, minWidth: 24, borderRadius: 12, lineHeight: '24px' }} 
+            />
           </div>
 
           {/* Cart List */}
-          <div style={{ flex: 1, overflowY: 'auto', marginBottom: 12, borderBottom: '1px dashed #e8e8e8', paddingRight: 4 }}>
+          <div className="pos-scrollbar" style={{ flex: 1, overflowY: 'auto', marginBottom: 16, borderBottom: '1px dashed #e2e8f0', paddingRight: 4 }}>
             {cart.map(line => (
               <div 
                 key={line.item.id} 
@@ -707,21 +858,22 @@ export const POSSaleForm: React.FC = () => {
                   display: 'flex', 
                   justifyContent: 'space-between', 
                   alignItems: 'center', 
-                  padding: '6px 8px', 
-                  borderRadius: 10,
-                  backgroundColor: '#f9fafb',
-                  marginBottom: 6
+                  padding: '10px 12px', 
+                  borderRadius: 12,
+                  backgroundColor: '#f8fafc',
+                  marginBottom: 8,
+                  border: '1px solid #f1f5f9'
                 }}
               >
                 {line.item.mediaUrl && (
                   <div 
                     style={{ 
-                      width: '28px', 
-                      height: '28px', 
-                      borderRadius: '4px', 
+                      width: '36px', 
+                      height: '36px', 
+                      borderRadius: '6px', 
                       overflow: 'hidden', 
-                      border: '1px solid #eef2f6',
-                      marginRight: '8px',
+                      border: '1px solid #e2e8f0',
+                      marginRight: '10px',
                       flexShrink: 0
                     }}
                   >
@@ -733,137 +885,155 @@ export const POSSaleForm: React.FC = () => {
                   </div>
                 )}
                 <div style={{ flex: 1.5, minWidth: 0, paddingRight: 8 }}>
-                  <Text strong style={{ display: 'block', fontSize: 13, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                  <Text strong style={{ display: 'block', fontSize: 16, color: '#0f172a', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                     {line.item.title}
                   </Text>
-                  <Text type="secondary" style={{ fontSize: 11 }}>
-                    Rate: Rs.{line.rate} | Unit: {line.unit}
+                  <Text type="secondary" style={{ fontSize: 13, fontWeight: 500 }}>
+                    Rs. {line.rate} | Unit: {units.find(u => u.code === line.unit)?.title || line.unit}
                   </Text>
                 </div>
                 
                 {/* Touch Quantity Controls */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'center' }}>
                   <Button 
+                    className="pos-qty-btn"
                     shape="circle" 
-                    size="small" 
-                    icon={<MinusOutlined style={{ fontSize: 10 }} />} 
+                    icon={<MinusOutlined style={{ fontSize: 12, fontWeight: 900 }} />} 
                     onClick={() => handleUpdateQty(line.item.id, false)}
+                    style={{ width: 36, height: 36 }}
                   />
-                  <span style={{ fontSize: 14, fontWeight: 700, minWidth: 20, textAlign: 'center' }}>{line.qty}</span>
+                  <span style={{ fontSize: 16, fontWeight: 800, minWidth: 24, textAlign: 'center', color: '#0f172a' }}>{line.qty}</span>
                   <Button 
+                    className="pos-qty-btn"
                     shape="circle" 
-                    size="small" 
-                    icon={<PlusOutlined style={{ fontSize: 10 }} />} 
+                    icon={<PlusOutlined style={{ fontSize: 12, fontWeight: 900 }} />} 
                     onClick={() => handleUpdateQty(line.item.id, true)}
+                    style={{ width: 36, height: 36 }}
                   />
                 </div>
 
-                <div style={{ flex: 1, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                  <Text strong style={{ fontSize: 13 }}>
+                <div style={{ flex: 1, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                  <Text strong style={{ fontSize: 15, color: '#0f172a' }}>
                     Rs. {line.qty * line.rate}
                   </Text>
                   <Button 
                     type="text" 
                     danger 
-                    size="small" 
-                    icon={<DeleteOutlined style={{ fontSize: 12 }} />} 
+                    icon={<DeleteOutlined style={{ fontSize: 14 }} />} 
                     onClick={() => handleRemoveFromCart(line.item.id)}
-                    style={{ height: 20, padding: 0 }}
-                  />
+                    style={{ height: 24, padding: '0 4px', fontSize: 12, display: 'inline-flex', alignItems: 'center' }}
+                  >
+                    Remove
+                  </Button>
                 </div>
               </div>
             ))}
             {cart.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: '#bfbfbf' }}>
-                <ShoppingCartOutlined style={{ fontSize: 32, marginBottom: 8, color: '#e8e8e8' }} />
-                <p style={{ fontSize: 12 }}>Cart is empty. Tap products to add.</p>
+              <div style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>
+                <ShoppingCartOutlined style={{ fontSize: 48, marginBottom: 12, color: '#cbd5e1' }} />
+                <p style={{ fontSize: 15, fontWeight: 600 }}>Cart is empty.<br />Tap products on the left to add.</p>
               </div>
             )}
           </div>
 
-          {/* Quick Discounts Panel */}
-          <div style={{ marginBottom: 8, flexShrink: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <span style={{ fontSize: 11, color: '#8c8c8c', fontWeight: 600 }}>QUICK DISCOUNT</span>
-              {totalDiscount > 0 && <Tag color="orange" style={{ margin: 0, fontSize: 10 }}>Rs. {Math.round(totalDiscount)} Off</Tag>}
+          {/* Totals & Notes Section Side-by-Side */}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'stretch', flexShrink: 0 }}>
+            {/* Totals Summary */}
+            <div style={{ flex: 1.5, backgroundColor: '#f1f5f9', borderRadius: 12, padding: '10px 14px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                <Text type="secondary" style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>Gross</Text>
+                <Text strong style={{ fontSize: 14, color: '#0f172a' }}>Rs. {grossTotal.toLocaleString()}</Text>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text type="secondary" style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>Discount</Text>
+                <Text strong style={{ fontSize: 14, color: '#ea580c' }}>- Rs. {totalDiscount.toLocaleString()}</Text>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Net Due</span>
+                <span style={{ fontSize: 22, fontWeight: 900, color: '#2563eb' }}>Rs. {netAmount.toLocaleString()}</span>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <Button size="small" onClick={() => handleQuickDiscount(5)} style={{ borderRadius: 6, fontSize: 11 }}>5%</Button>
-              <Button size="small" onClick={() => handleQuickDiscount(10)} style={{ borderRadius: 6, fontSize: 11 }}>10%</Button>
-              <Button size="small" onClick={() => handleQuickFlatDiscount(100)} style={{ borderRadius: 6, fontSize: 11 }}>Rs. 100</Button>
-              <Button size="small" onClick={() => handleQuickFlatDiscount(500)} style={{ borderRadius: 6, fontSize: 11 }}>Rs. 500</Button>
-              <Button size="small" danger onClick={() => { setDiscountPercent(0); setDiscountFlat(0); }} style={{ borderRadius: 6, fontSize: 11 }}>Reset</Button>
+
+            {/* Right column: Discounts on top, Pay Button on bottom */}
+            <div style={{ flex: 1.1, display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'space-between' }}>
+              {/* Quick Discounts Grid */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  <Button onClick={() => handleQuickDiscount(5)} style={{ flex: 1, minWidth: '32px', height: 28, padding: 0, fontSize: 11, borderRadius: 6, fontWeight: 700 }}>5%</Button>
+                  <Button onClick={() => handleQuickDiscount(10)} style={{ flex: 1, minWidth: '32px', height: 28, padding: 0, fontSize: 11, borderRadius: 6, fontWeight: 700 }}>10%</Button>
+                  <Button onClick={() => handleQuickFlatDiscount(100)} style={{ flex: 1, minWidth: '36px', height: 28, padding: 0, fontSize: 11, borderRadius: 6, fontWeight: 700 }}>100</Button>
+                  <Button onClick={() => handleQuickFlatDiscount(500)} style={{ flex: 1, minWidth: '36px', height: 28, padding: 0, fontSize: 11, borderRadius: 6, fontWeight: 700 }}>500</Button>
+                </div>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <Button danger onClick={() => { setDiscountPercent(0); setDiscountFlat(0); }} style={{ flex: 1, height: 28, padding: 0, fontSize: 11, borderRadius: 6, fontWeight: 800 }}>Reset</Button>
+                  {totalDiscount > 0 && (
+                    <Tag color="orange" style={{ margin: 0, fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 4, flex: 1, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      -Rs. {Math.round(totalDiscount)}
+                    </Tag>
+                  )}
+                </div>
+              </div>
+
+              {/* Payment Button */}
+              <Button
+                className="pos-pay-btn"
+                type="primary"
+                size="large"
+                icon={<DollarOutlined style={{ fontSize: 18 }} />}
+                onClick={() => {
+                  if (cart.length === 0) {
+                    message.error('Cart is empty. Please add items');
+                    return;
+                  }
+                  setIsPaymentModalVisible(true);
+                }}
+                disabled={cart.length === 0}
+                style={{
+                  height: 48,
+                  borderRadius: 10,
+                  fontWeight: 800,
+                  backgroundColor: '#16a34a',
+                  borderColor: '#16a34a',
+                  boxShadow: '0 4px 10px rgba(22, 163, 74, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  width: '100%'
+                }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Pay Now</span>
+              </Button>
             </div>
           </div>
-
-          {/* Totals & Notes Section */}
-          <div style={{ backgroundColor: '#f8fafc', borderRadius: 12, padding: 12, marginBottom: 12, flexShrink: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>Gross Total</Text>
-              <Text strong style={{ fontSize: 12 }}>Rs. {grossTotal.toLocaleString()}</Text>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>Discount</Text>
-              <Text strong style={{ fontSize: 12, color: '#ea580c' }}>- Rs. {totalDiscount.toLocaleString()}</Text>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e2e8f0', paddingTop: 6, marginBottom: 4 }}>
-              <span style={{ fontSize: 15, fontWeight: 800 }}>Net Payable</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Rs. {netAmount.toLocaleString()}</span>
-            </div>
-          </div>
-
-          {/* Proceed to Payment Checkout Button */}
-          <Button
-            type="primary"
-            size="large"
-            icon={<DollarOutlined />}
-            onClick={() => {
-              if (cart.length === 0) {
-                message.error('Cart is empty. Please add items');
-                return;
-              }
-              setIsPaymentModalVisible(true);
-            }}
-            disabled={cart.length === 0}
-            style={{
-              height: 48,
-              borderRadius: 10,
-              fontWeight: 800,
-              fontSize: 15,
-              backgroundColor: '#16a34a',
-              borderColor: '#16a34a',
-              boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)',
-              flexShrink: 0
-            }}
-          >
-            PROCEED TO PAYMENT
-          </Button>
         </div>
       </div>
 
       {/* Customer Selection Modal */}
       <Modal
-        title={<div style={{ fontSize: 18, fontWeight: 800 }}>👥 Touch Customer Directory</div>}
+        title={<div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '1px solid #f1f5f9', paddingBottom: 12 }}>👥 Touch Customer Directory</div>}
         open={isCustomerModalVisible}
         onCancel={() => setIsCustomerModalVisible(false)}
         footer={null}
-        width={500}
-        bodyStyle={{ padding: '12px 0 24px' }}
+        width={550}
+        bodyStyle={{ padding: '16px 0 24px' }}
       >
-        <div style={{ padding: '0 24px 12px' }}>
+        <div style={{ padding: '0 24px 16px' }}>
           <Input
-            prefix={<SearchOutlined />}
-            placeholder="Tap to search customer by name..."
+            className="pos-search-input"
+            prefix={<SearchOutlined style={{ fontSize: 18, color: '#64748b' }} />}
+            placeholder="Tap and type to search customer..."
             value={searchCustomerQuery}
             onChange={e => setSearchCustomerQuery(e.target.value)}
-            style={{ height: 44, borderRadius: 8 }}
+            style={{ height: 48, borderRadius: 10, fontSize: 15 }}
           />
         </div>
-        <div style={{ maxHeight: 300, overflowY: 'auto', padding: '0 12px' }}>
+        <div className="pos-scrollbar" style={{ maxHeight: 350, overflowY: 'auto', padding: '0 12px' }}>
           <List
             dataSource={filteredCustomers}
             renderItem={item => (
               <List.Item
+                className="pos-modal-list-item"
                 onClick={() => {
                   setSelectedCustomer(item);
                   setIsCustomerModalVisible(false);
@@ -871,32 +1041,34 @@ export const POSSaleForm: React.FC = () => {
                   message.success(`Selected customer: ${item.title}`);
                 }}
                 style={{
-                  padding: '12px 16px',
-                  borderRadius: 10,
+                  padding: '14px 20px',
+                  borderRadius: 12,
                   cursor: 'pointer',
                   backgroundColor: selectedCustomer?.account === item.account ? '#eff6ff' : 'transparent',
                   border: selectedCustomer?.account === item.account ? '1px solid #bfdbfe' : '1px solid transparent',
-                  marginBottom: 4
+                  marginBottom: 6,
+                  transition: 'all 0.2s ease'
                 }}
               >
                 <List.Item.Meta
                   avatar={
                     <div style={{ 
-                      width: 36, 
-                      height: 36, 
-                      borderRadius: 18, 
-                      backgroundColor: selectedCustomer?.account === item.account ? '#3b82f6' : '#f3f4f6', 
-                      color: selectedCustomer?.account === item.account ? '#ffffff' : '#4b5563', 
+                      width: 42, 
+                      height: 42, 
+                      borderRadius: 21, 
+                      backgroundColor: selectedCustomer?.account === item.account ? '#2563eb' : '#f1f5f9', 
+                      color: selectedCustomer?.account === item.account ? '#ffffff' : '#475569', 
                       display: 'flex', 
                       alignItems: 'center', 
                       justifyContent: 'center',
-                      fontWeight: 700
+                      fontWeight: 800,
+                      fontSize: 16
                     }}>
                       {item.title.charAt(0).toUpperCase()}
                     </div>
                   }
-                  title={<span style={{ fontWeight: 700, fontSize: 14 }}>{item.title}</span>}
-                  description={<span style={{ fontSize: 11 }}>Code: {item.account}</span>}
+                  title={<span style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{item.title}</span>}
+                  description={<span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>Code: {item.account}</span>}
                 />
               </List.Item>
             )}
@@ -906,48 +1078,53 @@ export const POSSaleForm: React.FC = () => {
 
       {/* Narration Selection Modal */}
       <Modal
-        title={<div style={{ fontSize: 18, fontWeight: 800 }}>📝 Select Narration</div>}
+        title={<div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '1px solid #f1f5f9', paddingBottom: 12 }}>📝 Select Narration</div>}
         open={isNarrationModalVisible}
         onCancel={() => setIsNarrationModalVisible(false)}
         footer={null}
-        width={400}
-        bodyStyle={{ padding: '12px 0 24px' }}
+        width={450}
+        bodyStyle={{ padding: '16px 0 24px' }}
       >
-        <div style={{ maxHeight: 300, overflowY: 'auto', padding: '0 12px' }}>
+        <div className="pos-scrollbar" style={{ maxHeight: 350, overflowY: 'auto', padding: '0 12px' }}>
           <List
             dataSource={narrations}
             renderItem={item => (
               <List.Item
+                className="pos-modal-list-item"
                 onClick={() => {
                   setSelectedNarration(item);
                   setIsNarrationModalVisible(false);
                   message.success(`Selected narration: ${item.title}`);
                 }}
                 style={{
-                  padding: '12px 16px',
-                  borderRadius: 10,
+                  padding: '14px 20px',
+                  borderRadius: 12,
                   cursor: 'pointer',
                   backgroundColor: selectedNarration?.code === item.code ? '#f0fdf4' : 'transparent',
                   border: selectedNarration?.code === item.code ? '1px solid #bbf7d0' : '1px solid transparent',
-                  marginBottom: 4
+                  marginBottom: 6,
+                  transition: 'all 0.2s ease'
                 }}
               >
-                <div style={{ fontWeight: 600 }}>{item.title}</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{item.title}</div>
               </List.Item>
             )}
           />
-          <Button 
-            block 
-            danger 
-            onClick={() => {
-              setSelectedNarration(null);
-              setIsNarrationModalVisible(false);
-              message.info('Narration cleared');
-            }}
-            style={{ marginTop: 12, borderRadius: 8 }}
-          >
-            Clear Narration
-          </Button>
+          <div style={{ padding: '12px 12px 0' }}>
+            <Button 
+              block 
+              danger 
+              size="large"
+              onClick={() => {
+                setSelectedNarration(null);
+                setIsNarrationModalVisible(false);
+                message.info('Narration cleared');
+              }}
+              style={{ height: 48, borderRadius: 10, fontWeight: 700, fontSize: 15 }}
+            >
+              Clear Narration
+            </Button>
+          </div>
         </div>
       </Modal>
 
@@ -956,121 +1133,131 @@ export const POSSaleForm: React.FC = () => {
         open={successModalVisible}
         footer={null}
         closable={false}
-        width={400}
+        width={450}
         bodyStyle={{ padding: 24, textAlign: 'center' }}
         style={{ top: 20 }}
       >
-        <CheckCircleOutlined style={{ fontSize: 56, color: isOfflineSaved ? '#f59e0b' : '#16a34a', marginBottom: 12 }} />
-        <Title level={3} style={{ margin: 0, fontWeight: 800 }}>
+        <CheckCircleOutlined style={{ fontSize: 64, color: isOfflineSaved ? '#f59e0b' : '#16a34a', marginBottom: 16 }} />
+        <Title level={3} style={{ margin: 0, fontWeight: 900, fontSize: 24 }}>
           {isOfflineSaved ? 'Sale Queued Offline!' : 'Sale Completed!'}
         </Title>
         {isOfflineSaved && (
           <Alert
             type="warning"
             showIcon
-            icon={<CloudServerOutlined />}
+            icon={<CloudServerOutlined style={{ fontSize: 16 }} />}
             message={`Saved as ${savedVoucherNo} — will sync when you reconnect`}
-            style={{ marginBottom: 12, textAlign: 'left' }}
+            style={{ marginBottom: 16, marginTop: 12, textAlign: 'left', borderRadius: 10, fontSize: 14 }}
           />
         )}
-        <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 20 }}>
-          Voucher: <b>{savedVoucherNo}</b>
+        <Text type="secondary" style={{ fontSize: 14, display: 'block', marginBottom: 20 }}>
+          Voucher: <b style={{ color: '#0f172a' }}>{savedVoucherNo}</b>
         </Text>
 
         {/* THERMAL RECEIPT DISPLAY */}
         <div 
           id="printable-report"
+          className="pos-scrollbar"
           style={{ 
-            border: '1px solid #e8e8e8', 
-            borderRadius: 8, 
+            border: '1px solid #cbd5e1', 
+            borderRadius: 12, 
             padding: 16, 
             textAlign: 'left', 
             backgroundColor: '#ffffff',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.04)',
             fontFamily: 'monospace',
-            fontSize: 11,
-            lineHeight: 1.4,
+            fontSize: 13,
+            lineHeight: 1.5,
             color: '#000000',
-            marginBottom: 24
+            marginBottom: 24,
+            maxHeight: 250,
+            overflowY: 'auto'
           }}
         >
           <div style={{ textAlign: 'center', marginBottom: 12 }}>
-            <h3 style={{ margin: '0 0 4px', fontWeight: 800 }}>{currentOrgName.toUpperCase()}</h3>
-            <p style={{ margin: 0, fontSize: 9 }}>POS Transaction Receipt</p>
-            <p style={{ margin: 0, fontSize: 9 }}>Voucher: {savedVoucherNo}</p>
-            <p style={{ margin: 0, fontSize: 9 }}>Date: {dayjs().format('DD-MMM-YYYY HH:mm')}</p>
+            <h3 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 15 }}>{currentOrgName.toUpperCase()}</h3>
+            <p style={{ margin: 0, fontSize: 11 }}>POS Transaction Receipt</p>
+            <p style={{ margin: 0, fontSize: 11 }}>Voucher: {savedVoucherNo}</p>
+            <p style={{ margin: 0, fontSize: 11 }}>Date: {dayjs().format('DD-MMM-YYYY HH:mm')}</p>
           </div>
 
-          <div style={{ borderBottom: '1px dashed #000', paddingBottom: 6, marginBottom: 8 }}>
+          <div style={{ borderBottom: '1px dashed #000', paddingBottom: 8, marginBottom: 8 }}>
             <strong>Customer:</strong> {selectedCustomer?.title}<br />
             <strong>Type:</strong> POS CASH SALE<br />
             {selectedNarration && <><strong>Narration:</strong> {selectedNarration.title}<br /></>}
           </div>
 
           {/* Lines */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, marginBottom: 8 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 8 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #000' }}>
-                <th style={{ textAlign: 'left' }}>Item</th>
-                <th style={{ textAlign: 'center' }}>Qty</th>
-                <th style={{ textAlign: 'right' }}>Price</th>
-                <th style={{ textAlign: 'right' }}>Amount</th>
+                <th style={{ textAlign: 'left', paddingBottom: 4 }}>Item</th>
+                <th style={{ textAlign: 'center', paddingBottom: 4 }}>Qty</th>
+                <th style={{ textAlign: 'right', paddingBottom: 4 }}>Price</th>
+                <th style={{ textAlign: 'right', paddingBottom: 4 }}>Amount</th>
               </tr>
             </thead>
             <tbody>
               {cart.map(line => (
                 <tr key={line.item.id}>
-                  <td style={{ textAlign: 'left', padding: '4px 0' }}>{line.item.title}</td>
-                  <td style={{ textAlign: 'center', padding: '4px 0' }}>{line.qty}</td>
-                  <td style={{ textAlign: 'right', padding: '4px 0' }}>{line.rate}</td>
-                  <td style={{ textAlign: 'right', padding: '4px 0' }}>{(line.qty * line.rate).toFixed(2)}</td>
+                  <td style={{ textAlign: 'left', padding: '6px 0' }}>{line.item.title}</td>
+                  <td style={{ textAlign: 'center', padding: '6px 0' }}>{line.qty}</td>
+                  <td style={{ textAlign: 'right', padding: '6px 0' }}>{line.rate}</td>
+                  <td style={{ textAlign: 'right', padding: '6px 0' }}>{(line.qty * line.rate).toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          <div style={{ borderTop: '1px dashed #000', paddingTop: 6, fontSize: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+          <div style={{ borderTop: '1px dashed #000', paddingTop: 8, fontSize: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <span>Gross Total:</span>
               <strong>Rs. {grossTotal.toFixed(2)}</strong>
             </div>
             {totalDiscount > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span>Discount:</span>
                 <strong>-Rs. {totalDiscount.toFixed(2)}</strong>
               </div>
             )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px double #000', paddingTop: 4, marginBottom: 4, fontSize: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px double #000', paddingTop: 6, marginBottom: 6, fontSize: 14 }}>
               <strong>Net Amount:</strong>
               <strong>Rs. {netAmount.toFixed(2)}</strong>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <span>Cash Received:</span>
               <strong>Rs. {cashReceived.toFixed(2)}</strong>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <span>Cash Back / Change:</span>
               <strong>Rs. {cashBack.toFixed(2)}</strong>
             </div>
           </div>
 
-          <div style={{ borderTop: '1px dashed #000', paddingTop: 10, marginTop: 10, textAlign: 'center', fontSize: 9 }}>
+          <div style={{ borderTop: '1px dashed #000', paddingTop: 10, marginTop: 10, textAlign: 'center', fontSize: 11 }}>
             Thank you for shopping with us!<br />
             Software Powered by Bizgrip Solutions
           </div>
         </div>
 
         {/* Dialog Actions */}
-        <Space direction="vertical" style={{ width: '100%' }} size={10}>
-
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
           <Button
             type="primary"
-            icon={<PrinterOutlined />}
+            icon={<PrinterOutlined style={{ fontSize: 16 }} />}
             size="large"
             block
             loading={printerLoading}
             onClick={handlePrintReceipt}
-            style={{ height: 48, borderRadius: 8, fontWeight: 700, backgroundColor: '#0284c7', borderColor: '#0284c7' }}
+            style={{ 
+              height: 52, 
+              borderRadius: 10, 
+              fontWeight: 800, 
+              fontSize: 16,
+              backgroundColor: '#0284c7', 
+              borderColor: '#0284c7',
+              boxShadow: '0 4px 12px rgba(2, 132, 199, 0.2)'
+            }}
           >
             Print Receipt
           </Button>
@@ -1079,7 +1266,7 @@ export const POSSaleForm: React.FC = () => {
             size="large"
             block
             onClick={handleNewTransaction}
-            style={{ height: 48, borderRadius: 8, fontWeight: 700 }}
+            style={{ height: 52, borderRadius: 10, fontWeight: 800, fontSize: 16 }}
           >
             Start New Transaction
           </Button>
@@ -1088,94 +1275,89 @@ export const POSSaleForm: React.FC = () => {
 
       {/* Visual Cash Payment Modal */}
       <Modal
-        title={<div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>💸 POS Touch Payment</div>}
+        title={<div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '1px solid #f1f5f9', paddingBottom: 10 }}>💸 POS Touch Payment</div>}
         open={isPaymentModalVisible}
         onCancel={() => setIsPaymentModalVisible(false)}
         footer={null}
-        width={550}
-        bodyStyle={{ padding: '16px 24px 24px' }}
+        width={580}
+        bodyStyle={{ padding: '16px 20px 20px' }}
         style={{ top: 40 }}
       >
-        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <Space direction="vertical" size={14} style={{ width: '100%' }}>
           
-          {/* Header Summary display */}
+          {/* Combined 3-Column Dashboard */}
           <div style={{ 
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'center', 
             padding: '12px 16px', 
             backgroundColor: '#f8fafc', 
-            borderRadius: 12,
-            border: '1px solid #e2e8f0'
+            borderRadius: 14,
+            border: '1px solid #cbd5e1',
+            textAlign: 'center',
+            gap: 8
           }}>
-            <div>
-              <span style={{ fontSize: 11, display: 'block', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Net Payable</span>
-              <span style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>Rs. {netAmount.toLocaleString()}</span>
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: 11, display: 'block', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, marginBottom: 2 }}>Net Payable</span>
+              <span style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>Rs. {netAmount.toLocaleString()}</span>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <span style={{ fontSize: 11, display: 'block', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Cash Received</span>
-              <span style={{ fontSize: 22, fontWeight: 900, color: '#16a34a' }}>Rs. {cashReceived.toLocaleString()}</span>
+            <div style={{ height: 32, width: 1, backgroundColor: '#cbd5e1' }} />
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: 11, display: 'block', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, marginBottom: 2 }}>Cash Received</span>
+              <span style={{ fontSize: 18, fontWeight: 900, color: '#0284c7' }}>Rs. {cashReceived.toLocaleString()}</span>
             </div>
-          </div>
-
-          {/* Change Display */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            padding: '12px 16px', 
-            backgroundColor: cashBack > 0 ? '#f0fdf4' : '#eff6ff', 
-            borderRadius: 12,
-            border: cashBack > 0 ? '1px solid #bbf7d0' : '1px solid #bfdbfe'
-          }}>
-            <div>
-              <span style={{ fontSize: 11, display: 'block', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
-                {cashReceived >= netAmount ? 'Change to Return' : 'Remaining Due'}
+            <div style={{ height: 32, width: 1, backgroundColor: '#cbd5e1' }} />
+            <div style={{ flex: 1.2 }}>
+              <span style={{ fontSize: 11, display: 'block', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, marginBottom: 2 }}>
+                {cashReceived >= netAmount ? 'Return Change' : 'Due Balance'}
               </span>
-              <span style={{ fontSize: 24, fontWeight: 950, color: cashBack > 0 ? '#16a34a' : '#2563eb' }}>
+              <span style={{ fontSize: 18, fontWeight: 950, color: cashBack > 0 ? '#16a34a' : '#ef4444' }}>
                 Rs. {Math.abs(cashReceived - netAmount).toLocaleString()}
               </span>
             </div>
-            <Tag color={cashReceived >= netAmount ? 'green' : 'blue'} style={{ padding: '6px 12px', borderRadius: 8, fontWeight: 800, fontSize: 12, border: 'none' }}>
-              {cashReceived >= netAmount ? 'PAID / SETTLED' : 'PARTIAL DUE'}
-            </Tag>
           </div>
 
-          {/* Coins Grid */}
+          {/* Cash Denominations Section (Coins & Notes combined) */}
           <div>
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 8, letterSpacing: '0.5px' }}>Coins</span>
-            <div style={{ display: 'flex', gap: 16, justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cash Denominations</span>
+              <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>(Tap to Add)</span>
+            </div>
+            
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start' }}>
+              {/* Coins: 1, 2, 5 */}
               {[1, 2, 5].map(coin => {
                 const style = noteStyles[coin];
                 const count = noteCounts[coin] || 0;
                 return (
                   <Button
                     key={coin}
+                    className="pos-cash-coin-btn"
                     onClick={() => handleNoteTap(coin)}
                     style={{
-                      width: 56,
-                      height: 56,
+                      width: 50,
+                      height: 50,
                       background: style.bg,
                       borderColor: style.border,
                       color: style.text,
                       fontWeight: 900,
-                      fontSize: 12,
+                      fontSize: 15,
                       padding: 0,
                       borderRadius: '50%',
-                      display: 'flex',
+                      display: 'inline-flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
                       position: 'relative',
-                      boxShadow: '0 4px 6px rgba(0,0,0,0.15), inset 0 2px 2px rgba(255,255,255,0.4), inset 0 -2px 2px rgba(0,0,0,0.2)',
+                      boxShadow: '0 3px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.4)',
                       border: `2px solid ${style.border}`
                     }}
                   >
                     {count > 0 && (
                       <div style={{
                         position: 'absolute',
-                        top: -2,
-                        right: -2,
+                        top: -4,
+                        right: -4,
                         backgroundColor: '#ef4444',
                         color: '#ffffff',
                         borderRadius: '50%',
@@ -1192,52 +1374,50 @@ export const POSSaleForm: React.FC = () => {
                         {count}
                       </div>
                     )}
-                    <span style={{ fontSize: 24, fontWeight: 900, lineHeight: 1 }}>{coin}</span>
+                    <span style={{ fontSize: 20, fontWeight: 900, lineHeight: 1 }}>{coin}</span>
                   </Button>
                 );
               })}
-            </div>
-          </div>
 
-          {/* Notes Grid */}
-          <div>
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 8, letterSpacing: '0.5px' }}>Notes</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+              {/* Notes: 10, 20, 50, 100, 500, 1000, 5000 */}
               {[10, 20, 50, 100, 500, 1000, 5000].map(note => {
                 const style = noteStyles[note];
                 const count = noteCounts[note] || 0;
                 return (
                   <Button
                     key={note}
+                    className="pos-cash-note-btn"
                     onClick={() => handleNoteTap(note)}
                     style={{
+                      width: 72,
                       height: 44,
                       background: style.bg,
                       borderColor: style.border,
                       color: style.text,
-                      fontWeight: 800,
-                      fontSize: 12,
+                      fontWeight: 900,
+                      fontSize: 14,
                       padding: 0,
                       borderRadius: 8,
-                      display: 'flex',
+                      display: 'inline-flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
                       position: 'relative',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.08)'
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
+                      border: 'none'
                     }}
                   >
                     {count > 0 && (
                       <div style={{
                         position: 'absolute',
                         top: -6,
-                        right: -4,
+                        right: -6,
                         backgroundColor: '#ef4444',
                         color: '#ffffff',
                         borderRadius: '50%',
-                        width: 16,
-                        height: 16,
-                        fontSize: 9,
+                        width: 18,
+                        height: 18,
+                        fontSize: 10,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -1247,7 +1427,7 @@ export const POSSaleForm: React.FC = () => {
                         {count}
                       </div>
                     )}
-                    <span style={{ fontSize: 20, fontWeight: 900 }}>{note}</span>
+                    <span style={{ fontSize: 20, fontWeight: 900, lineHeight: 1 }}>{note}</span>
                   </Button>
                 );
               })}
@@ -1256,8 +1436,8 @@ export const POSSaleForm: React.FC = () => {
 
           {/* Note Selection Details readout */}
           {Object.entries(noteCounts).some(([_, count]) => count > 0) && (
-            <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              <strong>Tapped Notes:</strong> {Object.entries(noteCounts)
+            <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, marginTop: 2 }}>
+              <strong>Selected:</strong> {Object.entries(noteCounts)
                 .filter(([_, count]) => count > 0)
                 .map(([note, count]) => `${count} x Rs.${note}`)
                 .join(', ')}
@@ -1265,18 +1445,18 @@ export const POSSaleForm: React.FC = () => {
           )}
 
           {/* Helper Action Buttons */}
-          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+          <div style={{ display: 'flex', gap: 12, marginTop: 2 }}>
             <Button 
               type="dashed" 
               onClick={handleExactCash} 
               style={{ 
                 flex: 1, 
-                height: 44, 
-                fontWeight: 800, 
+                height: 42, 
+                fontWeight: 700, 
                 color: '#16a34a', 
                 borderColor: '#22c55e',
                 backgroundColor: '#f0fdf4',
-                borderRadius: 8,
+                borderRadius: 10,
                 fontSize: 13
               }}
             >
@@ -1288,9 +1468,9 @@ export const POSSaleForm: React.FC = () => {
               onClick={handleResetCash} 
               style={{ 
                 flex: 1, 
-                height: 44, 
-                fontWeight: 800, 
-                borderRadius: 8,
+                height: 42, 
+                fontWeight: 700, 
+                borderRadius: 10,
                 fontSize: 13
               }}
             >
@@ -1299,18 +1479,18 @@ export const POSSaleForm: React.FC = () => {
           </div>
 
           {/* Checkout Save Button */}
-          <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
             <Button
               size="large"
               onClick={() => setIsPaymentModalVisible(false)}
-              style={{ flex: 1, height: 48, borderRadius: 10, fontWeight: 700 }}
+              style={{ flex: 1, height: 48, borderRadius: 10, fontWeight: 700, fontSize: 14 }}
             >
               Cancel
             </Button>
             <Button
               type="primary"
               size="large"
-              icon={<DollarOutlined />}
+              icon={<DollarOutlined style={{ fontSize: 16 }} />}
               loading={loading}
               onClick={handleSaveSale}
               style={{
@@ -1321,7 +1501,11 @@ export const POSSaleForm: React.FC = () => {
                 fontSize: 15,
                 backgroundColor: '#16a34a',
                 borderColor: '#16a34a',
-                boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)'
+                boxShadow: '0 4px 10px rgba(22, 163, 74, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6
               }}
             >
               CONFIRM & SAVE TRANSACTION
