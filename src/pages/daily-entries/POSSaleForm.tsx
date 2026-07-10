@@ -7,11 +7,11 @@ import { useAppStore } from '../../stores/useAppStore';
 import {
   PlusOutlined, MinusOutlined, DeleteOutlined, ShoppingCartOutlined,
   PrinterOutlined, RedoOutlined, CheckCircleOutlined, UserOutlined,
-  FileTextOutlined, ArrowLeftOutlined, SearchOutlined, DollarOutlined,
+  FileTextOutlined, SearchOutlined, DollarOutlined,
   DisconnectOutlined, CloudServerOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useNavigate } from 'react-router-dom';
+
 import { saleService } from '../../services/saleService';
 import { offlineCacheService, OfflineCacheMissError } from '../../services/offlineCacheService';
 import type { ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
@@ -31,7 +31,7 @@ interface CartItem {
 }
 
 export const POSSaleForm: React.FC = () => {
-  const navigate = useNavigate();
+
   const [loading, setLoading] = useState(false);
   const { currentTenantIdentifier, licenses } = useAppStore();
   const currentOrgName = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier)?.name || 'Retail Store';
