@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Row, Col, Typography, Button, Input, Space, message, Tag, Modal, List, Badge, Alert
+  Row, Col, Typography, Button, Input, Space, message, Tag, Modal, List, Badge, Alert, Dropdown
 } from 'antd';
 import { useThermalPrinter, centerLine, padLine, divider, type ConnectionMethod } from '../../hooks/useThermalPrinter';
 import { useAppStore } from '../../stores/useAppStore';
@@ -8,7 +8,7 @@ import {
   PlusOutlined, MinusOutlined, DeleteOutlined, ShoppingCartOutlined,
   PrinterOutlined, RedoOutlined, CheckCircleOutlined, UserOutlined,
   FileTextOutlined, SearchOutlined, DollarOutlined,
-  DisconnectOutlined, CloudServerOutlined
+  DisconnectOutlined, CloudServerOutlined, DownOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
@@ -187,6 +187,80 @@ export const POSSaleForm: React.FC = () => {
   const handleRemoveFromCart = (itemId: string) => {
     setCart(prev => prev.filter(i => i.item.id !== itemId));
     message.info('Item removed from cart');
+  };
+
+  interface PresetOption {
+    label: string;
+    value: number;
+    type: 'rs' | 'secondary' | 'primary';
+    unit?: string;
+  }
+
+  const parsePresets = (presetsStr?: string): PresetOption[] => {
+    if (!presetsStr) return [];
+    try {
+      if (presetsStr.trim().startsWith('[')) {
+        return JSON.parse(presetsStr);
+      }
+      return presetsStr.split(',').map(p => p.trim()).filter(Boolean).map(p => {
+        const match = p.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/);
+        if (!match) return null;
+        const value = parseFloat(match[1]);
+        const unit = match[2].toLowerCase();
+        
+        let type: 'rs' | 'secondary' | 'primary' = 'primary';
+        if (unit === 'rs') {
+          type = 'rs';
+        } else if (unit === 'g' || unit === 'ml' || unit === 'gram' || unit === 'grams') {
+          type = 'secondary';
+        }
+        
+        return {
+          label: p,
+          value,
+          type,
+          unit
+        } as PresetOption;
+      }).filter((x): x is PresetOption => x !== null);
+    } catch (e) {
+      console.error('Failed to parse quick quantity presets:', e);
+      return [];
+    }
+  };
+
+  const handleAddWithPreset = (item: Item, preset: PresetOption) => {
+    let targetQty = 1;
+    let targetUnit = item.defaultUnit || item.primaryUnit || '';
+    let targetRate = item.priRate || 0;
+
+    if (preset.type === 'rs') {
+      if (item.priRate > 0) {
+        targetQty = parseFloat((preset.value / item.priRate).toFixed(3));
+      }
+    } else if (preset.type === 'secondary') {
+      const packQty = item.qtyInPack || 1000;
+      targetQty = parseFloat((preset.value / packQty).toFixed(3));
+      targetUnit = item.primaryUnit || '';
+    } else {
+      targetQty = preset.value;
+      targetUnit = item.primaryUnit || '';
+    }
+
+    setCart(prev => {
+      const existing = prev.find(i => i.item.id === item.id);
+      if (existing) {
+        return prev.map(i => i.item.id === item.id ? { ...i, qty: parseFloat((i.qty + targetQty).toFixed(3)), unit: targetUnit, rate: targetRate } : i);
+      } else {
+        return [...prev, {
+          item,
+          qty: targetQty,
+          rate: targetRate,
+          discount: 0,
+          unit: targetUnit
+        }];
+      }
+    });
+    message.success(`Added ${item.title} (${preset.label}) to cart`);
   };
 
   // Computations
@@ -776,19 +850,19 @@ export const POSSaleForm: React.FC = () => {
 
                     {/* Info strip at bottom */}
                     <div style={{
-                      padding: '12px 14px',
+                      padding: '10px 12px',
                       backgroundColor: '#ffffff',
                       borderTop: '1px solid #f1f5f9',
                       flexShrink: 0,
                     }}>
                       <div style={{
                         fontWeight: 700,
-                        fontSize: 18,
+                        fontSize: 16,
                         color: '#0f172a',
                         overflow: 'hidden',
                         whiteSpace: 'nowrap',
                         textOverflow: 'ellipsis',
-                        marginBottom: 4,
+                        marginBottom: 2,
                       }}>
                         {item.title}
                       </div>
@@ -797,15 +871,60 @@ export const POSSaleForm: React.FC = () => {
                         alignItems: 'center',
                         justifyContent: 'space-between',
                       }}>
-                        <span style={{
-                          fontWeight: 800,
-                          fontSize: 16,
-                          color: '#16a34a',
-                        }}>
-                          Rs. {item.priRate}
-                        </span>
-                        {item.barcode && (
-                          <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{item.barcode}</span>
+                        <div>
+                          <span style={{
+                            fontWeight: 800,
+                            fontSize: 15,
+                            color: '#16a34a',
+                            display: 'block'
+                          }}>
+                            Rs. {item.priRate}
+                          </span>
+                          {item.barcode && (
+                            <span style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>{item.barcode}</span>
+                          )}
+                        </div>
+                        
+                        {item.quickQtyPresets && (
+                          <Dropdown
+                            trigger={['click']}
+                            placement="bottomRight"
+                            menu={{
+                              items: parsePresets(item.quickQtyPresets).map((preset, idx) => ({
+                                key: idx.toString(),
+                                label: (
+                                  <div style={{ fontSize: '15px', padding: '4px 10px', fontWeight: 600, color: '#1e293b' }}>
+                                    ⚡ {preset.label}
+                                  </div>
+                                )
+                              })),
+                              onClick: ({ key, domEvent }) => {
+                                domEvent.stopPropagation();
+                                const preset = parsePresets(item.quickQtyPresets)[parseInt(key)];
+                                handleAddWithPreset(item, preset);
+                              }
+                            }}
+                          >
+                            <Button
+                              type="text"
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                height: '36px',
+                                borderRadius: '18px',
+                                padding: '0 14px',
+                                backgroundColor: '#eff6ff',
+                                color: '#2563eb',
+                                border: '1px solid #bfdbfe',
+                                fontWeight: 700,
+                                fontSize: '13px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                            >
+                              Quick Qty <DownOutlined style={{ fontSize: '11px', fontWeight: 900 }} />
+                            </Button>
+                          </Dropdown>
                         )}
                       </div>
                     </div>

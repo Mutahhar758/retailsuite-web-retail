@@ -3,7 +3,7 @@ import {
   Card, Button, Space, Typography, Form, Input, Select, InputNumber, Row, Col, Checkbox, message, Popconfirm, Upload
 } from 'antd';
 import { 
-  SaveOutlined, ArrowLeftOutlined, ShoppingOutlined, DeleteOutlined, UploadOutlined, LoadingOutlined
+  SaveOutlined, ArrowLeftOutlined, ShoppingOutlined, DeleteOutlined, UploadOutlined, LoadingOutlined, PlusOutlined
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
@@ -39,7 +39,27 @@ export const InventoryItemForm: React.FC = () => {
       if (isEdit) {
         const item = await inventoryService.getById(id!);
         if (item) {
-          form.setFieldsValue(item);
+          let quickQtyPresetsArray = [];
+          if (item.quickQtyPresets) {
+            try {
+              quickQtyPresetsArray = JSON.parse(item.quickQtyPresets);
+            } catch (e) {
+              quickQtyPresetsArray = item.quickQtyPresets.split(',').map((p: string) => {
+                const match = p.trim().match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/);
+                if (match) {
+                  const value = parseFloat(match[1]);
+                  const unit = match[2];
+                  const type = unit.toLowerCase() === 'rs' ? 'rs' : (['g', 'ml'].includes(unit.toLowerCase()) ? 'secondary' : 'primary');
+                  return { label: p.trim(), value, type, unit };
+                }
+                return { label: p.trim(), value: 0, type: 'primary', unit: '' };
+              });
+            }
+          }
+          form.setFieldsValue({
+            ...item,
+            quickQtyPresets: quickQtyPresetsArray
+          });
           if (item.mediaUrl) {
             setImageUrl(item.mediaUrl);
           }
@@ -63,11 +83,17 @@ export const InventoryItemForm: React.FC = () => {
     try {
       const values = await form.validateFields();
       setLoading(true);
+      const apiValues = {
+        ...values,
+        quickQtyPresets: values.quickQtyPresets && values.quickQtyPresets.length > 0
+          ? JSON.stringify(values.quickQtyPresets)
+          : null
+      };
       if (isEdit) {
-        await inventoryService.update(id!, values);
+        await inventoryService.update(id!, apiValues);
         message.success('Item updated successfully');
       } else {
-        await inventoryService.create(values);
+        await inventoryService.create(apiValues);
         message.success('Item created successfully');
       }
       navigate('/setup/item-details');
@@ -327,6 +353,84 @@ export const InventoryItemForm: React.FC = () => {
                           <Checkbox>Low Stock Alert</Checkbox>
                         </Form.Item>
                       </Space>
+                    </div>
+                  </Col>
+                </Row>
+
+                <Row gutter={16}>
+                  <Col xs={24}>
+                    <div style={{
+                      border: '1px solid #f1f5f9',
+                      borderRadius: '12px',
+                      padding: '20px',
+                      backgroundColor: '#f8fafc',
+                      marginBottom: '24px'
+                    }}>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', marginBottom: '16px' }}>
+                        ⚡ Touch POS Quick Quantity & Price Presets
+                      </div>
+                      
+                      <Form.List name="quickQtyPresets">
+                        {(fields, { add, remove }) => (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {fields.map(({ key, name, ...restField }) => (
+                              <Row key={key} gutter={12}>
+                                <Col xs={8}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'type']}
+                                    rules={[{ required: true, message: 'Required' }]}
+                                  >
+                                    <Select placeholder="Type" style={{ width: '100%' }}>
+                                      <Option value="rs">Price Target (Rs.)</Option>
+                                      <Option value="secondary">Secondary Unit (e.g. ml, g)</Option>
+                                      <Option value="primary">Primary Unit (e.g. L, kg)</Option>
+                                    </Select>
+                                  </Form.Item>
+                                </Col>
+                                <Col xs={7}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'value']}
+                                    rules={[{ required: true, message: 'Required' }]}
+                                  >
+                                    <InputNumber placeholder="Value" min={0.001} style={{ width: '100%' }} />
+                                  </Form.Item>
+                                </Col>
+                                <Col xs={7}>
+                                  <Form.Item
+                                    {...restField}
+                                    name={[name, 'label']}
+                                    rules={[{ required: true, message: 'Required' }]}
+                                  >
+                                    <Input placeholder="Label (e.g. 250ml)" style={{ width: '100%' }} />
+                                  </Form.Item>
+                                </Col>
+                                <Col xs={2}>
+                                  <Form.Item>
+                                    <Button 
+                                      danger 
+                                      type="text" 
+                                      icon={<DeleteOutlined style={{ fontSize: 16 }} />} 
+                                      onClick={() => remove(name)} 
+                                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}
+                                    />
+                                  </Form.Item>
+                                </Col>
+                              </Row>
+                            ))}
+                            <Button 
+                              type="dashed" 
+                              onClick={() => add({ type: 'rs', value: 100, label: '100 Rs' })} 
+                              block 
+                              icon={<PlusOutlined />}
+                              style={{ height: 40, borderRadius: 8, borderColor: '#cbd5e1', color: '#475569', fontWeight: 600 }}
+                            >
+                              Add Preset Option
+                            </Button>
+                          </div>
+                        )}
+                      </Form.List>
                     </div>
                   </Col>
                 </Row>

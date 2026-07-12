@@ -19,6 +19,7 @@ export interface Item {
   itemType?: string;
   mediaId?: string;
   mediaUrl?: string;
+  quickQtyPresets?: string;
 }
 
 export interface InventoryItemUpsertRequest {
@@ -39,6 +40,7 @@ export interface InventoryItemUpsertRequest {
   opnRate?: number;
   itemType?: string;
   mediaId?: string;
+  quickQtyPresets?: string;
 }
 
 export interface Unit {
