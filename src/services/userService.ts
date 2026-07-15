@@ -11,6 +11,7 @@ export interface UserResponse {
   isActive: boolean;
   emailConfirmed: boolean;
   imageUrl: string | null;
+  isOwner?: boolean;
 }
 
 export interface UserListFilter {
