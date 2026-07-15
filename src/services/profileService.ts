@@ -8,12 +8,18 @@ export interface UserProfileDto {
   email: string;
   phoneNumber: string;
   imageUrl?: string;
+  isOwner?: boolean;
 }
 
 export const profileService = {
   async getProfile() {
     const response = await api.get('/api/personal/profile');
     return response.data.body as UserProfileDto;
+  },
+
+  async getPermissions() {
+    const response = await api.get('/api/personal/permissions');
+    return response.data.body as string[];
   },
 
   async changePassword(request: any) {

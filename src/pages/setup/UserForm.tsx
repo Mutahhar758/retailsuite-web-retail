@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card, Button, Space, Typography, Form, Input, Row, Col,
-  message, Divider, Avatar,
+  message, Divider, Avatar, Checkbox,
 } from 'antd';
 import {
   SaveOutlined, ArrowLeftOutlined, UserOutlined, MailOutlined,
   PhoneOutlined, LockOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
-import { userService } from '../../services/userService';
+import { userService, type UserRoleDto } from '../../services/userService';
+import { roleService } from '../../services/roleService';
 
 const { Title, Text } = Typography;
 
@@ -21,24 +22,43 @@ export const UserForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [userName, setUserName] = useState<string>('');
+  const [roles, setRoles] = useState<UserRoleDto[]>([]);
+  const [isUserOwner, setIsUserOwner] = useState(false);
 
   const fetchUser = useCallback(async () => {
-    if (!isEdit) return;
     try {
       setLoading(true);
-      const user = await userService.getUser(id!);
-      if (user) {
-        setUserName([user.firstName, user.lastName].filter(Boolean).join(' ') || user.userName || user.email || '');
-        form.setFieldsValue({
-          firstName: user.firstName || '',
-          lastName: user.lastName || '',
-          email: user.email || '',
-          phoneNumber: user.phoneNumber || '',
-          userName: user.userName || '',
-        });
+      if (isEdit) {
+        const [user, userRoles] = await Promise.all([
+          userService.getUser(id!),
+          userService.getUserRoles(id!)
+        ]);
+        if (user) {
+          setUserName([user.firstName, user.lastName].filter(Boolean).join(' ') || user.userName || user.email || '');
+          form.setFieldsValue({
+            firstName: user.firstName || '',
+            lastName: user.lastName || '',
+            email: user.email || '',
+            phoneNumber: user.phoneNumber || '',
+            userName: user.userName || '',
+          });
+          setRoles(userRoles || []);
+          setIsUserOwner(user.isOwner || false);
+        } else {
+          message.error('User not found');
+          navigate('/setup/users');
+        }
       } else {
-        message.error('User not found');
-        navigate('/setup/users');
+        const allRoles = await roleService.getRoles();
+        setRoles(
+          (allRoles || []).map(r => ({
+            roleId: r.id,
+            roleName: r.name,
+            description: r.description,
+            enabled: false,
+          }))
+        );
+        setIsUserOwner(false);
       }
     } catch (error) {
       message.error('Failed to load user data');
@@ -64,6 +84,9 @@ export const UserForm: React.FC = () => {
           phoneNumber: values.phoneNumber || undefined,
           userName: values.userName || undefined,
         });
+        if (!isUserOwner) {
+          await userService.assignRoles(id!, { userRoles: roles });
+        }
         message.success('User updated successfully');
       } else {
         await userService.create({
@@ -73,6 +96,7 @@ export const UserForm: React.FC = () => {
           password: values.password,
           phoneNumber: values.phoneNumber || undefined,
           userName: values.userName || undefined,
+          userRoles: roles,
         });
         message.success('User created successfully');
       }
@@ -234,13 +258,44 @@ export const UserForm: React.FC = () => {
           </>
         )}
 
+        {/* Roles assignment — hide if user is owner */}
+        {roles.length > 0 && !isUserOwner && (
+          <>
+            <Divider />
+            <Title level={5} style={{ color: '#1677ff', marginBottom: 16 }}>
+              <TeamOutlined style={{ marginRight: 8 }} />
+              Assigned Roles
+            </Title>
+            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+              {roles.map((role, idx) => (
+                <Col xs={24} sm={12} md={8} key={role.roleId || idx}>
+                  <Card size="small" hoverable={false} className="border border-gray-100 rounded-lg">
+                    <Checkbox
+                      checked={role.enabled}
+                      onChange={(e) => {
+                        const updated = [...roles];
+                        updated[idx].enabled = e.target.checked;
+                        setRoles(updated);
+                      }}
+                    >
+                      <span style={{ fontWeight: 600 }}>{role.roleName}</span>
+                      {role.description && (
+                        <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: 4 }}>
+                          {role.description}
+                        </div>
+                      )}
+                    </Checkbox>
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+          </>
+        )}
+
         <Divider />
 
         {/* Footer Actions */}
-        <div className="flex justify-end gap-3">
-          <Button onClick={() => navigate('/setup/users')} disabled={submitting}>
-            Cancel
-          </Button>
+        <Space size="middle" style={{ marginTop: 12 }}>
           <Button
             type="primary"
             htmlType="submit"
@@ -249,7 +304,10 @@ export const UserForm: React.FC = () => {
           >
             {isEdit ? 'Update User' : 'Create User'}
           </Button>
-        </div>
+          <Button onClick={() => navigate('/setup/users')} disabled={submitting}>
+            Cancel
+          </Button>
+        </Space>
       </Form>
     </Card>
   );

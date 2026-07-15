@@ -35,6 +35,7 @@ export interface UserCreateRequest {
   password: string;
   phoneNumber?: string;
   userName?: string;
+  userRoles?: UserRoleDto[];
 }
 
 export interface UserUpdateRequest {
@@ -44,6 +45,17 @@ export interface UserUpdateRequest {
   email?: string;
   phoneNumber?: string;
   userName?: string;
+}
+
+export interface UserRoleDto {
+  roleId: string | null;
+  roleName: string | null;
+  description: string | null;
+  enabled: boolean;
+}
+
+export interface UserRolesRequest {
+  userRoles: UserRoleDto[];
 }
 
 export const userService = {
@@ -77,5 +89,15 @@ export const userService = {
       userId,
       activateUser,
     });
+  },
+
+  async getUserRoles(id: string) {
+    const response = await api.get(`/api/users/${id}/roles`);
+    return response.data.body as UserRoleDto[];
+  },
+
+  async assignRoles(id: string, data: UserRolesRequest) {
+    const response = await api.post(`/api/users/${id}/roles`, data);
+    return response.data.body as string;
   },
 };

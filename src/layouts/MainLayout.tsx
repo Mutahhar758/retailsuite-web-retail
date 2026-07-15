@@ -28,33 +28,80 @@ import { profileService, logoutService } from '../services/profileService';
 
 const { Header, Sider, Content } = Layout;
 
+const permissionMap: Record<string, string> = {
+  '/': 'Permissions.Dashboard.View',
+  '/setup/chart-of-accounts': 'Permissions.ChartOfAccounts.View',
+  '/setup/detail-accounts': 'Permissions.DetailAccounts.View',
+  '/setup/customers': 'Permissions.Customers.View',
+  '/setup/vendors': 'Permissions.Vendors.View',
+  '/setup/item-details': 'Permissions.InventoryItems.View',
+  '/setup/item-categories': 'Permissions.ItemCategories.View',
+  '/setup/units': 'Permissions.Units.View',
+  '/setup/narrations': 'Permissions.Narrations.View',
+  '/setup/hr-info': 'Permissions.HRInfo.View',
+  '/setup/users': 'Permissions.Users.View',
+  '/setup/roles': 'Permissions.Roles.View',
+  '/setup/supply-order': 'Permissions.SupplyOrders.View',
+  '/setup/printer-settings': 'Permissions.PrinterSettings.View',
+  '/setup/opening-balance': 'Permissions.OpeningBalances.View',
+
+  '/daily-entries/payment-voucher': 'Permissions.PaymentVouchers.View',
+  '/daily-entries/receipt-voucher': 'Permissions.ReceiptVouchers.View',
+  '/daily-entries/journal-voucher': 'Permissions.JournalVouchers.View',
+  '/daily-entries/purchase': 'Permissions.Purchases.View',
+  '/daily-entries/sale': 'Permissions.Sales.View',
+  '/daily-entries/pos-sale': 'Permissions.POSSales.View',
+  '/daily-entries/sale-supply': 'Permissions.SaleSupplies.View',
+  '/daily-entries/purchase-return': 'Permissions.PurchaseReturns.View',
+  '/daily-entries/sale-return': 'Permissions.SaleReturns.View',
+  '/daily-entries/stock-adjustment': 'Permissions.StockAdjustments.View',
+  '/daily-entries/bank-reconciliation': 'Permissions.BankReconciliations.View',
+  '/daily-entries/payroll': 'Permissions.Payrolls.View',
+
+  '/reports': 'Permissions.Reports.View',
+  '/reports/account-statement': 'Permissions.Reports.View',
+  '/reports/account-statement-with-due': 'Permissions.Reports.View',
+  '/reports/account-balance': 'Permissions.Reports.View',
+  '/reports/trial-balance': 'Permissions.Reports.View',
+  '/reports/stock-balance': 'Permissions.Reports.View',
+  '/reports/item-ledger': 'Permissions.Reports.View',
+  '/reports/income-summary': 'Permissions.Reports.View',
+  '/reports/balance-sheet': 'Permissions.Reports.View',
+  '/reports/customer-bill': 'Permissions.Reports.View',
+};
+
 export const MainLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, user, setUser } = useAuthStore();
+  const { logout, user, setUser, permissions, setPermissions } = useAuthStore();
   const { theme: appTheme, setTheme, layout, setLayout, currentTenantIdentifier, licenses } = useAppStore();
   const { token } = theme.useToken();
   const { isOnline } = useNetworkStatus();
   const { pendingCount } = useOfflineStore();
 
   React.useEffect(() => {
-    const fetchProfile = async () => {
+    const fetchProfileAndPermissions = async () => {
       try {
-        const profile = await profileService.getProfile();
+        const [profile, perms] = await Promise.all([
+          profileService.getProfile(),
+          profileService.getPermissions()
+        ]);
         setUser({
           ...user,
           userName: profile.userName,
           email: profile.email,
           firstName: profile.firstName,
           lastName: profile.lastName,
-          imageUrl: profile.imageUrl
+          imageUrl: profile.imageUrl,
+          isOwner: profile.isOwner
         });
+        setPermissions(perms || []);
       } catch (error) {
-        console.error('Failed to fetch profile', error);
+        console.error('Failed to fetch profile and permissions', error);
       }
     };
-    fetchProfile();
+    fetchProfileAndPermissions();
   }, []);
 
   React.useEffect(() => {
@@ -267,6 +314,28 @@ export const MainLayout: React.FC = () => {
     });
   };
 
+  const filterMenuItemsByPermissions = (items: any[]): any[] => {
+    return items
+      .map(item => {
+        if (!item) return null;
+        if (item.children) {
+          const filteredChildren = filterMenuItemsByPermissions(item.children);
+          if (filteredChildren.length === 0) {
+            return null;
+          }
+          return { ...item, children: filteredChildren };
+        }
+
+        const requiredPermission = permissionMap[item.key];
+        if (requiredPermission && !user?.isOwner && (!permissions || !permissions.includes(requiredPermission))) {
+          return null;
+        }
+
+        return item;
+      })
+      .filter(Boolean);
+  };
+
   const baseMenuItemsWithShortcuts = [
     { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
     ...(pinnedShortcuts.filter(s => s.key !== '/' && s.label !== 'Dashboard').length > 0 ? [{
@@ -281,7 +350,7 @@ export const MainLayout: React.FC = () => {
     ...baseMenuItems
   ];
 
-  const menuItems = transformMenuItems(baseMenuItemsWithShortcuts);
+  const menuItems = transformMenuItems(filterMenuItemsByPermissions(baseMenuItemsWithShortcuts));
 
   // ── Offline mode: only show Sale and POS Sale ──────────────────────────────
   const offlineMenuItems = [
@@ -297,7 +366,7 @@ export const MainLayout: React.FC = () => {
     },
   ];
 
-  const activeMenuItems = isOnline ? menuItems : offlineMenuItems;
+  const activeMenuItems = isOnline ? menuItems : filterMenuItemsByPermissions(offlineMenuItems);
 
   const userMenu = {
     items: [
