@@ -65,7 +65,7 @@ async function fetchOrCache<T>(
 
 export const offlineCacheService = {
   async getItems(): Promise<Item[]> {
-    return fetchOrCache<Item>('cachedItems', 'Items', () => inventoryService.getItems());
+    return fetchOrCache<Item>('cachedItems', 'Items', () => inventoryService.getItemsLookup());
   },
 
   async getCustomers(): Promise<ChartOfAccountHeadDto[]> {
@@ -80,7 +80,7 @@ export const offlineCacheService = {
     return fetchOrCache<NarrationDto>(
       'cachedNarrations',
       'Narrations',
-      () => narrationService.getActiveNarrations()
+      () => narrationService.getActiveNarrationsLookup()
     );
   },
 
@@ -88,7 +88,7 @@ export const offlineCacheService = {
     return fetchOrCache<{ code: string; title: string }>(
       'cachedUnits',
       'Units',
-      () => inventoryService.getUnits()
+      () => inventoryService.getUnitsLookup()
     );
   },
 

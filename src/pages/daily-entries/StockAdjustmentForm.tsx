@@ -36,9 +36,9 @@ export const StockAdjustmentForm: React.FC = () => {
     const fetchLookups = async () => {
       try {
         const [itemsRes, unitsRes, narrsRes] = await Promise.all([
-          inventoryService.getItems(),
-          inventoryService.getUnits(),
-          narrationService.getActiveNarrations()
+          inventoryService.getItemsLookup(),
+          inventoryService.getUnitsLookup(),
+          narrationService.getActiveNarrationsLookup()
         ]);
         setItems(itemsRes);
         setUnits(unitsRes);

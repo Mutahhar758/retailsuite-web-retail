@@ -122,7 +122,7 @@ export const POSSaleForm: React.FC = () => {
         }
       });
 
-    itemCategoryService.getActiveItemCategories().then(setCategories);
+    itemCategoryService.getActiveItemCategoriesLookup().then(setCategories);
 
     offlineCacheService.getItems()
       .then(setItems)

@@ -26,6 +26,11 @@ export const itemCategoryService = {
     return response.data.body as ItemCategoryDto[];
   },
 
+  async getActiveItemCategoriesLookup() {
+    const response = await api.get('/api/itemcategories/lookup');
+    return response.data.body as ItemCategoryDto[];
+  },
+
   async create(data: CreateItemCategoryRequest) {
     const response = await api.post('/api/itemcategories', data);
     return response.data.body;

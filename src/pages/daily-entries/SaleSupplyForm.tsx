@@ -39,9 +39,9 @@ export const SaleSupplyForm: React.FC = () => {
 
   useEffect(() => {
     chartOfAccountService.getCustomerAccounts().then(setCustomers);
-    narrationService.getActiveNarrations().then(setNarrations);
-    inventoryService.getItems().then(setItems);
-    inventoryService.getUnits().then(setUnits);
+    narrationService.getActiveNarrationsLookup().then(setNarrations);
+    inventoryService.getItemsLookup().then(setItems);
+    inventoryService.getUnitsLookup().then(setUnits);
     supplyOrderService.getList().then(setSupplyOrders);
 
     if (isEdit) {

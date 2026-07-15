@@ -21,6 +21,11 @@ export const unitService = {
     return response.data.body as UnitDto[];
   },
 
+  async getActiveUnitsLookup() {
+    const response = await api.get('/api/units/lookup');
+    return response.data.body as UnitDto[];
+  },
+
   async create(data: CreateUnitRequest) {
     const response = await api.post('/api/units', data);
     return response.data.body;

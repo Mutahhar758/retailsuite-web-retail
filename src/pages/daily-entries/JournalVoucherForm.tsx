@@ -32,7 +32,7 @@ export const JournalVoucherForm: React.FC = () => {
       try {
         const [detailAccs, narrs] = await Promise.all([
           chartOfAccountService.getDetailAccounts(),
-          narrationService.getActiveNarrations()
+          narrationService.getActiveNarrationsLookup()
         ]);
         setDetailAccounts(detailAccs);
         setNarrations(narrs);

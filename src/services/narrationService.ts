@@ -20,6 +20,11 @@ export const narrationService = {
     return response.data.body as NarrationDto[];
   },
 
+  async getActiveNarrationsLookup() {
+    const response = await api.get('/api/narrations/lookup');
+    return response.data.body as NarrationDto[];
+  },
+
   async create(data: CreateNarrationRequest) {
     const response = await api.post('/api/narrations', data);
     return response.data.body;

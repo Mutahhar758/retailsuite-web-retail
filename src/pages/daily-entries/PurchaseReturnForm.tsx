@@ -39,10 +39,10 @@ export const PurchaseReturnForm: React.FC = () => {
     const fetchLookups = async () => {
       try {
         const [itemsRes, unitsRes, vendorsRes, narrsRes] = await Promise.all([
-          inventoryService.getItems(),
-          inventoryService.getUnits(),
+          inventoryService.getItemsLookup(),
+          inventoryService.getUnitsLookup(),
           chartOfAccountService.getDetailAccounts(),
-          narrationService.getActiveNarrations()
+          narrationService.getActiveNarrationsLookup()
         ]);
         setItems(itemsRes);
         setUnits(unitsRes);

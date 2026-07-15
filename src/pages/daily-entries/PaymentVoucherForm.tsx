@@ -34,7 +34,7 @@ export const PaymentVoucherForm: React.FC = () => {
         const [detailAccs, cbAccs, narrs] = await Promise.all([
           chartOfAccountService.getDetailAccounts(),
           chartOfAccountService.getCashBankAccounts(),
-          narrationService.getActiveNarrations()
+          narrationService.getActiveNarrationsLookup()
         ]);
         setDetailAccounts(detailAccs);
         setCashBankAccounts(cbAccs);
