@@ -30,6 +30,19 @@ interface CartItem {
   unit: string;
 }
 
+interface InvoiceTab {
+  id: string;
+  name: string;
+  selectedCustomer: ChartOfAccountHeadDto | null;
+  selectedNarration: NarrationDto | null;
+  cart: CartItem[];
+  discountPercent: number;
+  discountFlat: number;
+  noteCounts: Record<number, number>;
+  searchItemQuery: string;
+  activeCategory: string;
+}
+
 export const POSSaleForm: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
@@ -45,21 +58,78 @@ export const POSSaleForm: React.FC = () => {
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [units, setUnits] = useState<{ code: string; title: string }[]>([]);
 
-  // Selection states
-  const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [searchItemQuery, setSearchItemQuery] = useState<string>('');
-  const [selectedCustomer, setSelectedCustomer] = useState<ChartOfAccountHeadDto | null>(null);
-  const [selectedNarration, setSelectedNarration] = useState<NarrationDto | null>(null);
-
-  // Cart & Checkout states
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [discountPercent, setDiscountPercent] = useState<number>(0);
-  const [discountFlat, setDiscountFlat] = useState<number>(0);
-
-  // Currency Note counters (1, 2, 5, 10, 20, 50, 100, 500, 1000, 5000)
-  const [noteCounts, setNoteCounts] = useState<Record<number, number>>({
-    1: 0, 2: 0, 5: 0, 10: 0, 20: 0, 50: 0, 100: 0, 500: 0, 1000: 0, 5000: 0
+  // Multi-tab states
+  const [tabs, setTabs] = useState<InvoiceTab[]>(() => {
+    const initialId = Date.now().toString();
+    return [{
+      id: initialId,
+      name: 'Tab 1',
+      selectedCustomer: null,
+      selectedNarration: null,
+      cart: [],
+      discountPercent: 0,
+      discountFlat: 0,
+      noteCounts: { 1: 0, 2: 0, 5: 0, 10: 0, 20: 0, 50: 0, 100: 0, 500: 0, 1000: 0, 5000: 0 },
+      searchItemQuery: '',
+      activeCategory: 'all'
+    }];
   });
+  const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
+
+  // Derived active tab state
+  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
+
+  const cart = activeTab?.cart || [];
+  const discountPercent = activeTab?.discountPercent || 0;
+  const discountFlat = activeTab?.discountFlat || 0;
+  const noteCounts = activeTab?.noteCounts || { 1: 0, 2: 0, 5: 0, 10: 0, 20: 0, 50: 0, 100: 0, 500: 0, 1000: 0, 5000: 0 };
+  const selectedCustomer = activeTab?.selectedCustomer || null;
+  const selectedNarration = activeTab?.selectedNarration || null;
+  const searchItemQuery = activeTab?.searchItemQuery || '';
+  const activeCategory = activeTab?.activeCategory || 'all';
+
+  // Helper to update active tab's properties
+  const updateActiveTab = (updater: Partial<InvoiceTab> | ((tab: InvoiceTab) => InvoiceTab)) => {
+    setTabs(prev => prev.map(t => {
+      if (t.id === activeTabId) {
+        return typeof updater === 'function' ? updater(t) : { ...t, ...updater };
+      }
+      return t;
+    }));
+  };
+
+  // Helper state setters for active tab properties to match existing state logic
+  const setCart = (val: CartItem[] | ((prev: CartItem[]) => CartItem[])) => {
+    updateActiveTab(t => ({ ...t, cart: typeof val === 'function' ? val(t.cart) : val }));
+  };
+
+  const setDiscountPercent = (val: number | ((prev: number) => number)) => {
+    updateActiveTab(t => ({ ...t, discountPercent: typeof val === 'function' ? val(t.discountPercent) : val }));
+  };
+
+  const setDiscountFlat = (val: number | ((prev: number) => number)) => {
+    updateActiveTab(t => ({ ...t, discountFlat: typeof val === 'function' ? val(t.discountFlat) : val }));
+  };
+
+  const setNoteCounts = (val: Record<number, number> | ((prev: Record<number, number>) => Record<number, number>)) => {
+    updateActiveTab(t => ({ ...t, noteCounts: typeof val === 'function' ? val(t.noteCounts) : val }));
+  };
+
+  const setSelectedCustomer = (val: ChartOfAccountHeadDto | null | ((prev: ChartOfAccountHeadDto | null) => ChartOfAccountHeadDto | null)) => {
+    updateActiveTab(t => ({ ...t, selectedCustomer: typeof val === 'function' ? val(t.selectedCustomer) : val }));
+  };
+
+  const setSelectedNarration = (val: NarrationDto | null | ((prev: NarrationDto | null) => NarrationDto | null)) => {
+    updateActiveTab(t => ({ ...t, selectedNarration: typeof val === 'function' ? val(t.selectedNarration) : val }));
+  };
+
+  const setSearchItemQuery = (val: string | ((prev: string) => string)) => {
+    updateActiveTab(t => ({ ...t, searchItemQuery: typeof val === 'function' ? val(t.searchItemQuery) : val }));
+  };
+
+  const setActiveCategory = (val: string | ((prev: string) => string)) => {
+    updateActiveTab(t => ({ ...t, activeCategory: typeof val === 'function' ? val(t.activeCategory) : val }));
+  };
 
   // Dialogs
   const [isCustomerModalVisible, setIsCustomerModalVisible] = useState(false);
@@ -73,12 +143,11 @@ export const POSSaleForm: React.FC = () => {
   const [connectionMethod] = useState<ConnectionMethod>(() => {
     const saved = localStorage.getItem('pos_printer_method');
     if (saved) return saved as ConnectionMethod;
-    // Auto-detect connection method based on Operating System if not configured
     const userAgent = window.navigator.userAgent;
     if (userAgent.includes('CrOS')) {
-      return 'WEB_USB'; // ChromeOS uses WebUSB
+      return 'WEB_USB';
     }
-    return 'LOCAL_RELAY'; // Windows / Linux / macOS default to Local Relay
+    return 'LOCAL_RELAY';
   });
   const [printerName] = useState<string>(() => {
     return localStorage.getItem('pos_printer_name') || 'XP-80';
@@ -89,32 +158,28 @@ export const POSSaleForm: React.FC = () => {
     return saved !== null ? saved === 'true' : true;
   });
 
-
-
-
-
-  // Currency Notes Setup
   const currencyNotes = [1, 2, 5, 10, 20, 50, 100, 500, 1000, 5000];
 
   const noteStyles: Record<number, { bg: string; border: string; text: string }> = {
-    1: { bg: 'linear-gradient(135deg, #b45309, #d97706)', border: '#b45309', text: '#ffffff' }, // 1 Rs Bronze/Gold coin
-    2: { bg: 'linear-gradient(135deg, #94a3b8, #cbd5e1)', border: '#94a3b8', text: '#1e293b' }, // 2 Rs Silver coin
-    5: { bg: 'linear-gradient(135deg, #ca8a04, #eab308)', border: '#ca8a04', text: '#ffffff' }, // 5 Rs Gold coin
-    10: { bg: 'linear-gradient(135deg, #15803d, #22c55e)', border: '#15803d', text: '#ffffff' }, // 10 Rs Green Note
-    20: { bg: 'linear-gradient(135deg, #c2410c, #f97316)', border: '#c2410c', text: '#ffffff' }, // 20 Rs Orange Note
-    50: { bg: 'linear-gradient(135deg, #6b21a8, #a855f7)', border: '#6b21a8', text: '#ffffff' }, // 50 Rs Purple Note
-    100: { bg: 'linear-gradient(135deg, #b91c1c, #ef4444)', border: '#b91c1c', text: '#ffffff' }, // 100 Rs Red Note
-    500: { bg: 'linear-gradient(135deg, #047857, #10b981)', border: '#047857', text: '#ffffff' }, // 500 Rs Deep Emerald Green Note
-    1000: { bg: 'linear-gradient(135deg, #1d4ed8, #3b82f6)', border: '#1d4ed8', text: '#ffffff' }, // 1000 Rs Dark Blue Note
-    5000: { bg: 'linear-gradient(135deg, #a16207, #eab308)', border: '#a16207', text: '#ffffff' } // 5000 Rs Mustard Yellow Note
+    1: { bg: 'linear-gradient(135deg, #b45309, #d97706)', border: '#b45309', text: '#ffffff' },
+    2: { bg: 'linear-gradient(135deg, #94a3b8, #cbd5e1)', border: '#94a3b8', text: '#1e293b' },
+    5: { bg: 'linear-gradient(135deg, #ca8a04, #eab308)', border: '#ca8a04', text: '#ffffff' },
+    10: { bg: 'linear-gradient(135deg, #15803d, #22c55e)', border: '#15803d', text: '#ffffff' },
+    20: { bg: 'linear-gradient(135deg, #c2410c, #f97316)', border: '#c2410c', text: '#ffffff' },
+    50: { bg: 'linear-gradient(135deg, #6b21a8, #a855f7)', border: '#6b21a8', text: '#ffffff' },
+    100: { bg: 'linear-gradient(135deg, #b91c1c, #ef4444)', border: '#b91c1c', text: '#ffffff' },
+    500: { bg: 'linear-gradient(135deg, #047857, #10b981)', border: '#047857', text: '#ffffff' },
+    1000: { bg: 'linear-gradient(135deg, #1d4ed8, #3b82f6)', border: '#1d4ed8', text: '#ffffff' },
+    5000: { bg: 'linear-gradient(135deg, #a16207, #eab308)', border: '#a16207', text: '#ffffff' }
   };
 
   useEffect(() => {
-    // Load initial configurations (via cache service — works online AND offline)
     offlineCacheService.getCustomers()
       .then(data => {
         setCustomers(data);
-        if (data.length > 0) setSelectedCustomer(data[0]);
+        if (data.length > 0) {
+            setTabs(prev => prev.map(t => ({...t, selectedCustomer: data[0]})));
+        }
       })
       .catch(err => {
         if (err instanceof OfflineCacheMissError) {
@@ -141,7 +206,6 @@ export const POSSaleForm: React.FC = () => {
       .catch(() => { /* Non-critical */ });
   }, []);
 
-  // Filter Items
   const filteredItems = items.filter(item => {
     const matchesCategory = activeCategory === 'all' || item.itemCategoryCode === activeCategory;
     const matchesSearch = item.title.toLowerCase().includes(searchItemQuery.toLowerCase()) || 
@@ -149,13 +213,11 @@ export const POSSaleForm: React.FC = () => {
     return matchesCategory && matchesSearch;
   });
 
-  // Filter Customers for touch selection modal
   const filteredCustomers = customers.filter(c => 
     c.title.toLowerCase().includes(searchCustomerQuery.toLowerCase()) ||
     c.account.includes(searchCustomerQuery)
   );
 
-  // Cart operations
   const handleAddToCart = (item: Item) => {
     setCart(prev => {
       const existing = prev.find(i => i.item.id === item.id);
@@ -263,23 +325,19 @@ export const POSSaleForm: React.FC = () => {
     message.success(`Added ${item.title} (${preset.label}) to cart`);
   };
 
-  // Computations
   const grossTotal = cart.reduce((sum, line) => sum + (line.qty * line.rate), 0);
   const totalItemDiscount = cart.reduce((sum, line) => sum + (line.qty * line.discount), 0);
   const percentDiscountAmount = (grossTotal - totalItemDiscount) * (discountPercent / 100);
   const totalDiscount = totalItemDiscount + percentDiscountAmount + discountFlat;
   const netAmount = Math.max(0, grossTotal - totalDiscount);
 
-  // Cash computations from note counts
   const cashReceived = Object.entries(noteCounts).reduce((sum, [note, count]) => sum + (Number(note) * count), 0);
   const cashBack = Math.max(0, cashReceived - netAmount);
 
-  // Formatter for thermal receipt text
   const generateReceiptTextLines = (voucherNo: string): string[] => {
-    const width = 48; // Updated to 3-inch thermal printer width (48 characters)
+    const width = 48;
     const lines: string[] = [];
 
-    // Helper to format 4 columns for 3-inch slip (Item: 20, Qty: 5, Price: 10, Amount: 13)
     const format4Columns = (col1: string, col2: string, col3: string, col4: string): string => {
       const w1 = 20;
       const w2 = 5;
@@ -307,7 +365,6 @@ export const POSSaleForm: React.FC = () => {
       return c1 + c2 + c3 + c4;
     };
 
-    // Header
     const escBoldOn = '\x1b!\x08\x1bE\x01\x1bE1';
     const escBoldOff = '\x1b!\x00\x1bE\x00\x1bE0';
     lines.push(escBoldOn + centerLine(currentOrgName.toUpperCase(), width) + escBoldOff);
@@ -316,7 +373,6 @@ export const POSSaleForm: React.FC = () => {
     lines.push(centerLine(`Date: ${dayjs().format('DD-MMM-YYYY HH:mm')}`, width));
     lines.push(divider('-', width));
 
-    // Customer
     lines.push(`Customer: ${selectedCustomer?.title || 'Walk-in Customer'}`);
     lines.push('Type: POS CASH SALE');
     if (selectedNarration) {
@@ -324,21 +380,18 @@ export const POSSaleForm: React.FC = () => {
     }
     lines.push(divider('-', width));
 
-    // Table Header
     lines.push(format4Columns('Item', 'Qty', 'Price', 'Amount'));
     lines.push(divider('-', width));
 
     cart.forEach(line => {
       const itemTitle = line.item.title;
       const qtyStr = line.qty.toString();
-      // Match UI: Price displays as integer (no decimal) if it's round, or format it
       const priceStr = line.rate.toString(); 
       const amountStr = (line.qty * line.rate).toFixed(2);
       lines.push(format4Columns(itemTitle, qtyStr, priceStr, amountStr));
     });
     lines.push(divider('-', width));
 
-    // Totals
     lines.push(padLine('Gross Total:', `Rs. ${grossTotal.toFixed(2)}`, width));
     if (totalDiscount > 0) {
       lines.push(padLine('Discount:', `-Rs. ${totalDiscount.toFixed(2)}`, width));
@@ -349,7 +402,6 @@ export const POSSaleForm: React.FC = () => {
     lines.push(padLine('Cash Back / Change:', `Rs. ${cashBack.toFixed(2)}`, width));
     lines.push(divider('-', width));
 
-    // Footer
     lines.push(centerLine('Thank you for shopping with us!', width));
     lines.push(centerLine('Software Powered by Bizgrip Solutions', width));
     lines.push('');
@@ -371,7 +423,6 @@ export const POSSaleForm: React.FC = () => {
     }
   );
 
-  // Quick Currency Operations
   const handleNoteTap = (note: number) => {
     setNoteCounts(prev => ({
       ...prev,
@@ -385,11 +436,10 @@ export const POSSaleForm: React.FC = () => {
   };
 
   const handleExactCash = () => {
-    // Distribute netAmount into notes greedily
     let remaining = Math.ceil(netAmount);
     const newCounts: Record<number, number> = { 1: 0, 2: 0, 5: 0, 10: 0, 20: 0, 50: 0, 100: 0, 500: 0, 1000: 0, 5000: 0 };
     
-    const sortedNotes = [...currencyNotes].reverse(); // large to small
+    const sortedNotes = [...currencyNotes].reverse();
     for (const note of sortedNotes) {
       if (remaining >= note) {
         const count = Math.floor(remaining / note);
@@ -416,7 +466,6 @@ export const POSSaleForm: React.FC = () => {
     message.success(`Applied Rs. ${flat} Discount`);
   };
 
-  // Full transaction reset
   const handleResetAll = () => {
     setCart([]);
     setDiscountPercent(0);
@@ -487,10 +536,83 @@ export const POSSaleForm: React.FC = () => {
     }
   };
 
-  const handleNewTransaction = () => {
+  const handleCloseActiveTabAfterSave = () => {
     setSuccessModalVisible(false);
     setIsOfflineSaved(false);
-    handleResetAll();
+    
+    const tabToCloseId = activeTabId;
+    if (tabs.length === 1) {
+      handleResetAll();
+    } else {
+      const tabToCloseIndex = tabs.findIndex(t => t.id === tabToCloseId);
+      const newTabs = tabs.filter(t => t.id !== tabToCloseId);
+      setTabs(newTabs);
+      const nextActiveIndex = Math.min(tabToCloseIndex, newTabs.length - 1);
+      setActiveTabId(newTabs[nextActiveIndex].id);
+      message.info("Transaction closed");
+    }
+  };
+
+  const handleAddTab = () => {
+    const nextNum = tabs.length > 0 ? Math.max(...tabs.map(t => {
+      const match = t.name.match(/Tab\s+(\d+)/);
+      return match ? parseInt(match[1]) : 0;
+    })) + 1 : 1;
+
+    const newTabId = Date.now().toString();
+    const newTab: InvoiceTab = {
+      id: newTabId,
+      name: `Tab ${nextNum}`,
+      selectedCustomer: customers.length > 0 ? customers[0] : null,
+      selectedNarration: null,
+      cart: [],
+      discountPercent: 0,
+      discountFlat: 0,
+      noteCounts: { 1: 0, 2: 0, 5: 0, 10: 0, 20: 0, 50: 0, 100: 0, 500: 0, 1000: 0, 5000: 0 },
+      searchItemQuery: '',
+      activeCategory: 'all'
+    };
+
+    setTabs(prev => [...prev, newTab]);
+    setActiveTabId(newTabId);
+    message.success(`Created Tab ${nextNum}`);
+  };
+
+  const handleCloseTab = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const targetTab = tabs.find(t => t.id === id);
+    if (!targetTab) return;
+
+    if (tabs.length === 1) {
+      message.warning("At least one tab must remain open");
+      return;
+    }
+
+    const performClose = () => {
+      const tabToCloseIndex = tabs.findIndex(t => t.id === id);
+      const newTabs = tabs.filter(t => t.id !== id);
+      setTabs(newTabs);
+      if (activeTabId === id) {
+        const nextActiveIndex = Math.min(tabToCloseIndex, newTabs.length - 1);
+        setActiveTabId(newTabs[nextActiveIndex].id);
+      }
+      message.info(`Closed ${targetTab.name}`);
+    };
+
+    if (targetTab.cart.length > 0) {
+      Modal.confirm({
+        title: 'Discard Invoice?',
+        content: `"${targetTab.name}" has items in the cart. Are you sure you want to discard this draft?`,
+        okText: 'Yes, Discard',
+        okType: 'danger',
+        cancelText: 'Cancel',
+        onOk() {
+          performClose();
+        }
+      });
+    } else {
+      performClose();
+    }
   };
 
   return (
@@ -603,6 +725,91 @@ export const POSSaleForm: React.FC = () => {
         .pos-modal-list-item:hover {
           background-color: #f8fafc !important;
         }
+
+        /* Multi-tab POS styling */
+        .pos-tab-container {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 12px;
+          padding-bottom: 6px;
+          overflow-x: auto;
+          flex-shrink: 0;
+        }
+        .pos-tab-item {
+          display: inline-flex;
+          align-items: center;
+          gap: 12px;
+          padding: 8px 16px;
+          height: 52px;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          border-radius: 10px;
+          cursor: pointer;
+          font-weight: 700;
+          font-size: 14px;
+          color: #475569;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+          user-select: none;
+        }
+        .pos-tab-item:hover {
+          border-color: #94a3b8;
+          background: #f8fafc;
+          color: #0f172a;
+          transform: translateY(-1px);
+        }
+        .pos-tab-item.active {
+          background: #2563eb;
+          border-color: #2563eb;
+          color: #ffffff;
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+        }
+        .pos-tab-item.active:hover {
+          background: #1d4ed8;
+          border-color: #1d4ed8;
+          color: #ffffff;
+        }
+        .pos-tab-close-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          font-size: 10px;
+          color: inherit;
+          opacity: 0.6;
+          transition: all 0.2s;
+          margin-left: 4px;
+        }
+        .pos-tab-close-btn:hover {
+          background: rgba(15, 23, 42, 0.1);
+          opacity: 1;
+        }
+        .pos-tab-item.active .pos-tab-close-btn:hover {
+          background: rgba(255, 255, 255, 0.2);
+        }
+        .pos-tab-add-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          height: 52px;
+          padding: 0 16px;
+          background: #eff6ff;
+          border: 1px dashed #3b82f6 !important;
+          color: #2563eb;
+          border-radius: 10px;
+          font-weight: 700;
+          font-size: 14px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .pos-tab-add-btn:hover {
+          background: #dbeafe;
+          transform: translateY(-1px);
+        }
       `}</style>
 
       {/* ── Offline mode banner ── */}
@@ -619,6 +826,57 @@ export const POSSaleForm: React.FC = () => {
           }
         />
       )}
+
+      {/* ── POS Multi-Tab Bar ── */}
+      <div className="pos-tab-container pos-scrollbar">
+        {tabs.map(tab => {
+          const isActive = tab.id === activeTabId;
+          
+          // Calculate totals for each tab
+          const gross = tab.cart.reduce((sum, line) => sum + (line.qty * line.rate), 0);
+          const itemDisc = tab.cart.reduce((sum, line) => sum + (line.qty * line.discount), 0);
+          const pctDisc = (gross - itemDisc) * (tab.discountPercent / 100);
+          const totalDisc = itemDisc + pctDisc + tab.discountFlat;
+          const net = Math.max(0, gross - totalDisc);
+          const qtyCount = tab.cart.reduce((sum, line) => sum + line.qty, 0);
+          
+          const customerTitle = tab.selectedCustomer?.title || 'Walk-in Customer';
+          
+          return (
+            <div
+              key={tab.id}
+              className={`pos-tab-item ${isActive ? 'active' : ''}`}
+              onClick={() => setActiveTabId(tab.id)}
+            >
+              <FileTextOutlined style={{ fontSize: 16 }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, textAlign: 'left' }}>
+                <span style={{ fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 160 }}>
+                  {customerTitle}
+                </span>
+                <span style={{ fontSize: 11, opacity: isActive ? 0.95 : 0.65, fontWeight: 600 }}>
+                  {qtyCount} {qtyCount === 1 ? 'item' : 'items'} • Rs. {net.toLocaleString()}
+                </span>
+              </div>
+
+              {tabs.length > 1 && (
+                <span
+                  className="pos-tab-close-btn"
+                  onClick={(e) => handleCloseTab(tab.id, e)}
+                >
+                  ✕
+                </span>
+              )}
+            </div>
+          );
+        })}
+        
+        <button
+          className="pos-tab-add-btn"
+          onClick={handleAddTab}
+        >
+          <PlusOutlined /> New Customer Tab
+        </button>
+      </div>
 
       {/* Main Terminal Area */}
       <div style={{ display: 'flex', flex: 1, gap: 24, overflow: 'hidden' }}>
@@ -1384,10 +1642,10 @@ export const POSSaleForm: React.FC = () => {
             type="default"
             size="large"
             block
-            onClick={handleNewTransaction}
+            onClick={handleCloseActiveTabAfterSave}
             style={{ height: 52, borderRadius: 10, fontWeight: 800, fontSize: 16 }}
           >
-            Start New Transaction
+            Close Tab
           </Button>
         </Space>
       </Modal>
