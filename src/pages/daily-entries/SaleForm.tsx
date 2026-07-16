@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
-  Table, Space, message, InputNumber, Popconfirm, Tag, Alert
+  Table, Space, message, InputNumber, Popconfirm, Tag, Alert, Modal
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
@@ -18,6 +18,18 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useAppStore } from '../../stores/useAppStore';
 
 const { Title, Text } = Typography;
+
+interface SaleTab {
+  id: string;
+  name: string;
+  account: string | null;
+  narration: string | null;
+  description: string;
+  cashReceipt: number;
+  cashBack: number;
+  date: any;
+  saleLines: any[];
+}
 
 export const SaleForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
@@ -37,6 +49,215 @@ export const SaleForm: React.FC = () => {
   const [units, setUnits] = useState<{ code: string; title: string }[]>([]);
   const [saleLines, setSaleLines] = useState<any[]>([]);
   const [cacheMissError, setCacheMissError] = useState<string | null>(null);
+
+  // Multi-tab state management for rapid checkout drafts
+  const [tabs, setTabs] = useState<SaleTab[]>(() => {
+    const initialId = Date.now().toString();
+    return [{
+      id: initialId,
+      name: 'Tab 1',
+      account: null,
+      narration: null,
+      description: '',
+      cashReceipt: 0,
+      cashBack: 0,
+      date: dayjs(),
+      saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }]
+    }];
+  });
+  const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
+
+  // Sync saleLines to current active tab state whenever saleLines updates
+  useEffect(() => {
+    if (activeTabId && !isEdit) {
+      setTabs(prev => prev.map(t => {
+        if (t.id === activeTabId) {
+          return { ...t, saleLines };
+        }
+        return t;
+      }));
+    }
+  }, [saleLines, activeTabId, isEdit]);
+
+  const handleFormValuesChange = (_: any, allValues: any) => {
+    if (isEdit) return;
+    setTabs(prev => prev.map(t => {
+      if (t.id === activeTabId) {
+        return {
+          ...t,
+          account: allValues.account || null,
+          narration: allValues.narration || null,
+          description: allValues.description || '',
+          cashReceipt: allValues.cashReceipt || 0,
+          cashBack: allValues.cashBack || 0,
+          date: allValues.date || dayjs()
+        };
+      }
+      return t;
+    }));
+  };
+
+  const handleSwitchTab = (targetId: string) => {
+    if (targetId === activeTabId) return;
+
+    // 1. Capture current form values and save to active tab
+    const currentValues = form.getFieldsValue();
+    setTabs(prev => prev.map(t => {
+      if (t.id === activeTabId) {
+        return {
+          ...t,
+          account: currentValues.account || null,
+          narration: currentValues.narration || null,
+          description: currentValues.description || '',
+          cashReceipt: currentValues.cashReceipt || 0,
+          cashBack: currentValues.cashBack || 0,
+          date: currentValues.date || dayjs(),
+          saleLines: saleLines
+        };
+      }
+      return t;
+    }));
+
+    // 2. Set new active tab
+    setActiveTabId(targetId);
+
+    // 3. Load target tab values into form and saleLines
+    const targetTab = tabs.find(t => t.id === targetId);
+    if (targetTab) {
+      form.setFieldsValue({
+        date: targetTab.date,
+        account: targetTab.account,
+        narration: targetTab.narration,
+        description: targetTab.description,
+        cashReceipt: targetTab.cashReceipt,
+        cashBack: targetTab.cashBack
+      });
+      setSaleLines(targetTab.saleLines);
+    }
+  };
+
+  const handleAddTab = () => {
+    const currentValues = form.getFieldsValue();
+    setTabs(prev => prev.map(t => {
+      if (t.id === activeTabId) {
+        return {
+          ...t,
+          account: currentValues.account || null,
+          narration: currentValues.narration || null,
+          description: currentValues.description || '',
+          cashReceipt: currentValues.cashReceipt || 0,
+          cashBack: currentValues.cashBack || 0,
+          date: currentValues.date || dayjs(),
+          saleLines: saleLines
+        };
+      }
+      return t;
+    }));
+
+    const nextNum = tabs.length > 0 ? Math.max(...tabs.map(t => {
+      const match = t.name.match(/Tab\s+(\d+)/);
+      return match ? parseInt(match[1]) : 0;
+    })) + 1 : 1;
+
+    const newTabId = Date.now().toString();
+    const newTab: SaleTab = {
+      id: newTabId,
+      name: `Tab ${nextNum}`,
+      account: null,
+      narration: null,
+      description: '',
+      cashReceipt: 0,
+      cashBack: 0,
+      date: dayjs(),
+      saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }]
+    };
+
+    setTabs(prev => [...prev, newTab]);
+    setActiveTabId(newTabId);
+
+    form.resetFields();
+    form.setFieldsValue({ date: dayjs() });
+    setSaleLines(newTab.saleLines);
+    message.success(`Created Tab ${nextNum}`);
+  };
+
+  const handleCloseTab = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const targetTab = tabs.find(t => t.id === id);
+    if (!targetTab) return;
+
+    if (tabs.length === 1) {
+      message.warning("At least one tab must remain open");
+      return;
+    }
+
+    const performClose = () => {
+      const tabToCloseIndex = tabs.findIndex(t => t.id === id);
+      const newTabs = tabs.filter(t => t.id !== id);
+      setTabs(newTabs);
+
+      if (activeTabId === id) {
+        const nextActiveIndex = Math.min(tabToCloseIndex, newTabs.length - 1);
+        const nextTab = newTabs[nextActiveIndex];
+        setActiveTabId(nextTab.id);
+
+        form.setFieldsValue({
+          date: nextTab.date,
+          account: nextTab.account,
+          narration: nextTab.narration,
+          description: nextTab.description,
+          cashReceipt: nextTab.cashReceipt,
+          cashBack: nextTab.cashBack
+        });
+        setSaleLines(nextTab.saleLines);
+      }
+      message.info(`Closed ${targetTab.name}`);
+    };
+
+    const hasItems = targetTab.saleLines.some(l => l.itemId && (l.qty > 0 || l.rate > 0));
+    if (hasItems) {
+      Modal.confirm({
+        title: 'Discard Draft Sale?',
+        content: `"${targetTab.name}" has details filled. Are you sure you want to discard this draft?`,
+        okText: 'Yes, Discard',
+        okType: 'danger',
+        cancelText: 'Cancel',
+        onOk() {
+          performClose();
+        }
+      });
+    } else {
+      performClose();
+    }
+  };
+
+  const handleCloseActiveTabAfterSave = () => {
+    const tabToCloseId = activeTabId;
+    if (tabs.length === 1) {
+      form.resetFields();
+      form.setFieldsValue({ date: dayjs() });
+      setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }]);
+    } else {
+      const tabToCloseIndex = tabs.findIndex(t => t.id === tabToCloseId);
+      const newTabs = tabs.filter(t => t.id !== tabToCloseId);
+      setTabs(newTabs);
+
+      const nextActiveIndex = Math.min(tabToCloseIndex, newTabs.length - 1);
+      const nextTab = newTabs[nextActiveIndex];
+      setActiveTabId(nextTab.id);
+
+      form.setFieldsValue({
+        date: nextTab.date,
+        account: nextTab.account,
+        narration: nextTab.narration,
+        description: nextTab.description,
+        cashReceipt: nextTab.cashReceipt,
+        cashBack: nextTab.cashBack
+      });
+      setSaleLines(nextTab.saleLines);
+      message.info("Closed completed sale tab");
+    }
+  };
 
   useEffect(() => {
     loadReferenceData();
@@ -220,16 +441,14 @@ export const SaleForm: React.FC = () => {
         const newVno = await saleService.create(request, { offlineFallback: true });
 
         if (newVno.includes('-') && newVno.length <= 10) {
-          // Offline temp voucher number (e.g. A3F1-0007)
           message.warning({
             content: `Sale saved offline as ${newVno}. It will sync automatically when you reconnect.`,
             duration: 8,
           });
-          navigate('/daily-entries/sale');
         } else {
-          message.success('Sale created successfully');
-          navigate(`/daily-entries/sale/${newVno}`);
+          message.success(`Sale created successfully. Voucher: SL-${newVno}`);
         }
+        handleCloseActiveTabAfterSave();
       }
     } catch (error) {
       console.error(error);
@@ -406,6 +625,140 @@ export const SaleForm: React.FC = () => {
 
   return (
     <Card className="shadow-sm border-gray-100 rounded-xl">
+      <style>{`
+        /* Multi-tab POS styling */
+        .pos-tab-container {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-bottom: 16px;
+          padding-bottom: 6px;
+          overflow-x: auto;
+          flex-shrink: 0;
+          border-bottom: 1px solid #f1f5f9;
+        }
+        .pos-tab-item {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 0 12px;
+          height: 36px;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+          cursor: pointer;
+          font-weight: 700;
+          font-size: 13px;
+          color: #475569;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+          user-select: none;
+          white-space: nowrap;
+        }
+        .pos-tab-item:hover {
+          border-color: #94a3b8;
+          background: #f8fafc;
+          color: #0f172a;
+        }
+        .pos-tab-item.active {
+          background: #0ea5e9;
+          border-color: #0ea5e9;
+          color: #ffffff;
+          box-shadow: 0 2px 6px rgba(14, 165, 233, 0.15);
+        }
+        .pos-tab-item.active:hover {
+          background: #0284c7;
+          border-color: #0284c7;
+          color: #ffffff;
+        }
+        .pos-tab-close-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          font-size: 8px;
+          color: inherit;
+          opacity: 0.6;
+          transition: all 0.2s;
+          margin-left: 6px;
+        }
+        .pos-tab-close-btn:hover {
+          background: rgba(15, 23, 42, 0.1);
+          opacity: 1;
+        }
+        .pos-tab-item.active .pos-tab-close-btn:hover {
+          background: rgba(255, 255, 255, 0.2);
+        }
+        .pos-tab-add-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          height: 36px;
+          padding: 0 12px;
+          background: #f0f9ff;
+          border: 1px dashed #0ea5e9 !important;
+          color: #0ea5e9;
+          border-radius: 6px;
+          font-weight: 700;
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .pos-tab-add-btn:hover {
+          background: #e0f2fe;
+        }
+      `}</style>
+
+      {/* ── POS Multi-Tab Bar ── */}
+      {!isEdit && (
+        <div className="pos-tab-container">
+          {tabs.map(tab => {
+            const isActive = tab.id === activeTabId;
+            
+            // Calculate totals for each tab
+            const amount = tab.saleLines.reduce((sum, l) => sum + (l.amount || 0), 0);
+            const qtyCount = tab.saleLines.filter(l => l.itemId).reduce((sum, l) => sum + (l.qty || 0), 0);
+            
+            const customerObj = customers.find(c => c.account === tab.account);
+            const customerTitle = customerObj?.title || 'Walk-in Customer';
+            
+            return (
+              <div
+                key={tab.id}
+                className={`pos-tab-item ${isActive ? 'active' : ''}`}
+                onClick={() => handleSwitchTab(tab.id)}
+              >
+                <FileTextOutlined style={{ fontSize: 13 }} />
+                <span>
+                  <strong style={{ fontWeight: 700 }}>{customerTitle}</strong>
+                  <span style={{ fontSize: 11, opacity: isActive ? 0.9 : 0.65, marginLeft: 6, fontWeight: 500 }}>
+                    ({qtyCount} {qtyCount === 1 ? 'item' : 'items'} • Rs. {amount.toLocaleString(undefined, { minimumFractionDigits: 2 })})
+                  </span>
+                </span>
+
+                {tabs.length > 1 && (
+                  <span
+                    className="pos-tab-close-btn"
+                    onClick={(e) => handleCloseTab(tab.id, e)}
+                  >
+                    ✕
+                  </span>
+                )}
+              </div>
+            );
+          })}
+          
+          <button
+            className="pos-tab-add-btn"
+            onClick={handleAddTab}
+          >
+            <PlusOutlined /> New Sale Tab
+          </button>
+        </div>
+      )}
       {/* ── Offline / Online status banner ── */}
       {!isOnline && (
         <Alert
@@ -476,7 +829,7 @@ export const SaleForm: React.FC = () => {
         </Space>
       </div>
 
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" onValuesChange={handleFormValuesChange}>
         <Row gutter={16}>
           <Col xs={24} sm={8} lg={4}>
             <Form.Item label="Voucher #">
