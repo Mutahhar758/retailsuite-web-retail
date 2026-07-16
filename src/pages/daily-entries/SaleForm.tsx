@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
   Table, Space, message, InputNumber, Popconfirm, Tag, Alert, Modal
@@ -49,6 +49,7 @@ export const SaleForm: React.FC = () => {
   const [units, setUnits] = useState<{ code: string; title: string }[]>([]);
   const [saleLines, setSaleLines] = useState<any[]>([]);
   const [cacheMissError, setCacheMissError] = useState<string | null>(null);
+  const prevTotalAmountRef = useRef(0);
 
   // Multi-tab state management for rapid checkout drafts
   const [tabs, setTabs] = useState<SaleTab[]>(() => {
@@ -133,6 +134,7 @@ export const SaleForm: React.FC = () => {
         cashBack: targetTab.cashBack
       });
       setSaleLines(targetTab.saleLines);
+      focusCustomerSelect();
     }
   };
 
@@ -179,6 +181,7 @@ export const SaleForm: React.FC = () => {
     form.setFieldsValue({ date: dayjs() });
     setSaleLines(newTab.saleLines);
     message.success(`Created Tab ${nextNum}`);
+    focusCustomerSelect();
   };
 
   const handleCloseTab = (id: string, e: React.MouseEvent) => {
@@ -237,6 +240,7 @@ export const SaleForm: React.FC = () => {
       form.resetFields();
       form.setFieldsValue({ date: dayjs() });
       setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }]);
+      focusCustomerSelect();
     } else {
       const tabToCloseIndex = tabs.findIndex(t => t.id === tabToCloseId);
       const newTabs = tabs.filter(t => t.id !== tabToCloseId);
@@ -256,7 +260,18 @@ export const SaleForm: React.FC = () => {
       });
       setSaleLines(nextTab.saleLines);
       message.info("Closed completed sale tab");
+      focusCustomerSelect();
     }
+  };
+
+  const focusCustomerSelect = () => {
+    setTimeout(() => {
+      const customerInput = document.querySelector('.pos-customer-select .ant-select-selection-search-input') as HTMLInputElement;
+      if (customerInput) {
+        customerInput.focus();
+        customerInput.select();
+      }
+    }, 20);
   };
 
   useEffect(() => {
@@ -268,6 +283,7 @@ export const SaleForm: React.FC = () => {
       setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }]);
       form.setFieldsValue({ date: dayjs() });
     }
+    focusCustomerSelect();
   }, [isEdit, voucherNo]);
 
   const loadReferenceData = async () => {
@@ -283,6 +299,7 @@ export const SaleForm: React.FC = () => {
       setItems(items);
       setUnits(units);
       setCacheMissError(null);
+      focusCustomerSelect();
     } catch (err) {
       if (err instanceof OfflineCacheMissError) {
         setCacheMissError(err.message);
@@ -325,11 +342,67 @@ export const SaleForm: React.FC = () => {
     }
   };
 
+  const focusLastRowSelect = () => {
+    setTimeout(() => {
+      const selectInputs = document.querySelectorAll('.ant-select-selection-search-input');
+      if (selectInputs.length > 0) {
+        const lastInput = selectInputs[selectInputs.length - 1] as HTMLInputElement;
+        if (lastInput) {
+          lastInput.focus();
+          lastInput.click();
+        }
+      }
+    }, 100);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.key >= '1' && e.key <= '9') {
+        e.preventDefault();
+        const tabIndex = parseInt(e.key) - 1;
+        if (tabIndex < tabs.length) {
+          handleSwitchTab(tabs[tabIndex].id);
+        }
+        return;
+      }
+
+      if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleAddTab();
+        return;
+      }
+
+      if (e.altKey && (e.key.toLowerCase() === 'c' || e.key.toLowerCase() === 'q')) {
+        e.preventDefault();
+        handleCloseTab(activeTabId, e as any);
+        return;
+      }
+
+      if ((e.altKey && e.key.toLowerCase() === 's') || e.key === 'F8') {
+        e.preventDefault();
+        handleSave();
+        return;
+      }
+
+      if (e.altKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        handleAddRow();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [tabs, activeTabId, saleLines, items, form]);
+
   const handleAddRow = () => {
     setSaleLines(prev => {
       const newSeq = prev.length > 0 ? Math.max(...prev.map(l => l.seq)) + 1 : 1;
       return [...prev, { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }];
     });
+    focusLastRowSelect();
   };
 
   const handleRemoveRow = async (key: number, seq: number) => {
@@ -388,13 +461,23 @@ export const SaleForm: React.FC = () => {
   const balance = totalAmount - cashReceipt + cashBack;
 
   useEffect(() => {
-    if (!isEdit || (isEdit && loading === false)) {
-      const suggestedCashBack = Math.max(0, cashReceipt - totalAmount);
-      if (suggestedCashBack !== cashBack && !form.isFieldTouched('cashBack')) {
-        form.setFieldValue('cashBack', suggestedCashBack);
+    if (!isEdit) {
+      const currentReceipt = form.getFieldValue('cashReceipt');
+      const isAutoSynced = currentReceipt === undefined || currentReceipt === null || currentReceipt === 0 || currentReceipt === prevTotalAmountRef.current;
+      
+      if (isAutoSynced) {
+        form.setFieldsValue({
+          cashReceipt: totalAmount,
+          cashBack: 0
+        });
+      } else {
+        form.setFieldValue('cashBack', Math.max(0, (currentReceipt || 0) - totalAmount));
       }
+      prevTotalAmountRef.current = totalAmount;
+    } else if (isEdit && loading === false) {
+      form.setFieldValue('cashBack', Math.max(0, cashReceipt - totalAmount));
     }
-  }, [totalAmount, cashReceipt]);
+  }, [totalAmount, cashReceipt, isEdit, loading]);
 
   const handleSave = async () => {
     // Guard: cannot edit existing vouchers offline
@@ -488,6 +571,16 @@ export const SaleForm: React.FC = () => {
           optionFilterProp="children"
           value={text}
           onChange={(val) => updateLine(record.key, 'itemId', val)}
+          onInputKeyDown={(e) => {
+            if (e.key === 'Tab' && !record.itemId) {
+              e.preventDefault();
+              const cashReceiptInput = document.querySelector('.pos-cash-receipt input') as HTMLInputElement;
+              if (cashReceiptInput) {
+                cashReceiptInput.focus();
+                cashReceiptInput.select();
+              }
+            }
+          }}
         >
           {items.map(i => (
             <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
@@ -548,6 +641,7 @@ export const SaleForm: React.FC = () => {
           min={0}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           onChange={(v) => updateLine(record.key, 'rate', v)}
+          tabIndex={-1}
         />
       )
     },
@@ -578,6 +672,7 @@ export const SaleForm: React.FC = () => {
             min={0}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             onChange={(v) => updateLine(record.key, 'secRate', v)}
+            tabIndex={-1}
           />
         )
       }
@@ -593,6 +688,7 @@ export const SaleForm: React.FC = () => {
           value={val}
           min={0}
           onChange={(v) => updateLine(record.key, 'discount', v)}
+          tabIndex={-1}
         />
       )
     },
@@ -615,6 +711,7 @@ export const SaleForm: React.FC = () => {
           icon={<DeleteOutlined />}
           onClick={() => handleRemoveRow(record.key, record.seq)}
           disabled={saleLines.length === 1}
+          tabIndex={-1}
         />
       )
     }
@@ -793,7 +890,7 @@ export const SaleForm: React.FC = () => {
 
       <div className="flex justify-between items-center mb-6">
         <Space align="center">
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/daily-entries/sale')} type="text" />
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/daily-entries/sale')} type="text" tabIndex={-1} />
           <RocketOutlined style={{ fontSize: 24, color: '#0ea5e9' }} />
           <div>
             <Title level={4} style={{ margin: 0 }}>
@@ -813,10 +910,11 @@ export const SaleForm: React.FC = () => {
               okButtonProps={{ danger: true, loading }}
               disabled={!isOnline}
             >
-              <Button danger icon={<DeleteOutlined />} disabled={!isOnline}>Delete</Button>
+              <Button danger icon={<DeleteOutlined />} disabled={!isOnline} tabIndex={-1}>Delete</Button>
             </Popconfirm>
           )}
           <Button
+            className="pos-save-btn"
             type="primary"
             icon={<SaveOutlined />}
             onClick={handleSave}
@@ -833,18 +931,20 @@ export const SaleForm: React.FC = () => {
         <Row gutter={16}>
           <Col xs={24} sm={8} lg={4}>
             <Form.Item label="Voucher #">
-              <Input value={isEdit ? `SL-${voucherNo}` : ''} readOnly style={{ backgroundColor: '#f5f5f5' }} />
+              <Input value={isEdit ? `SL-${voucherNo}` : ''} readOnly style={{ backgroundColor: '#f5f5f5' }} tabIndex={-1} />
             </Form.Item>
           </Col>
           <Col xs={24} sm={8} lg={4}>
             <Form.Item label="Date" name="date" rules={[{ required: true }]}>
-              <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" />
+              <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" tabIndex={-1} />
             </Form.Item>
           </Col>
           <Col xs={24} sm={8} lg={8}>
             <Form.Item label="Customer" name="account" rules={[{ required: true }]}>
               <Select
+                className="pos-customer-select"
                 showSearch
+                autoFocus
                 placeholder="Select Customer"
                 prefix={<UserOutlined />}
                 optionFilterProp="children"
@@ -857,7 +957,7 @@ export const SaleForm: React.FC = () => {
           </Col>
           <Col xs={24} sm={24} lg={8}>
             <Form.Item label="Narration" name="narration">
-              <Select showSearch placeholder="Select narration" prefix={<FileTextOutlined />} allowClear>
+              <Select showSearch placeholder="Select narration" prefix={<FileTextOutlined />} allowClear tabIndex={-1}>
                 {narrations.map(n => (
                   <Select.Option key={n.code} value={n.code}>{n.title}</Select.Option>
                 ))}
@@ -869,14 +969,14 @@ export const SaleForm: React.FC = () => {
         <Row gutter={16}>
           <Col xs={24} lg={24}>
             <Form.Item label="Description" name="description">
-              <Input placeholder="Additional sale details..." />
+              <Input placeholder="Additional sale details..." tabIndex={-1} />
             </Form.Item>
           </Col>
         </Row>
 
         <div className="flex justify-between items-center mb-4 mt-2">
           <Title level={5} style={{ margin: 0 }}>Item Details</Title>
-          <Button type="dashed" onClick={handleAddRow} icon={<PlusOutlined />}>Add Row</Button>
+          <Button type="dashed" onClick={handleAddRow} icon={<PlusOutlined />} tabIndex={-1}>Add Row</Button>
         </div>
 
         <Table
@@ -909,6 +1009,7 @@ export const SaleForm: React.FC = () => {
             <Col xs={24} sm={8} lg={6}>
               <Form.Item label="Cash Receipt" name="cashReceipt">
                 <InputNumber
+                  className="pos-cash-receipt"
                   style={{ width: '100%' }}
                   size="large"
                   min={0}
@@ -920,11 +1021,21 @@ export const SaleForm: React.FC = () => {
             <Col xs={24} sm={8} lg={6}>
               <Form.Item label="Cash Back" name="cashBack">
                 <InputNumber
+                  className="pos-cash-back"
                   style={{ width: '100%' }}
                   size="large"
                   min={0}
                   placeholder="0.00"
                   formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && !e.shiftKey) {
+                      e.preventDefault();
+                      const saveBtn = document.querySelector('.pos-save-btn') as HTMLButtonElement;
+                      if (saveBtn) {
+                        saveBtn.focus();
+                      }
+                    }
+                  }}
                 />
               </Form.Item>
             </Col>
@@ -943,6 +1054,16 @@ export const SaleForm: React.FC = () => {
               </div>
             </Col>
           </Row>
+        </div>
+
+        {/* Keyboard Shortcuts Helper Bar */}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 24, paddingTop: 16, borderTop: '1px solid #f1f5f9', fontSize: 12, color: '#64748b' }}>
+          <span style={{ fontWeight: 600 }}>⌨️ Keyboard Shortcuts:</span>
+          <span><Tag color="blue" style={{ borderRadius: 4, fontWeight: 700 }}>Alt + N</Tag> New Tab</span>
+          <span><Tag color="blue" style={{ borderRadius: 4, fontWeight: 700 }}>Alt + C</Tag> Close Tab</span>
+          <span><Tag color="blue" style={{ borderRadius: 4, fontWeight: 700 }}>Alt + [1-9]</Tag> Switch Tab</span>
+          <span><Tag color="blue" style={{ borderRadius: 4, fontWeight: 700 }}>Alt + R</Tag> Add Row</span>
+          <span><Tag color="green" style={{ borderRadius: 4, fontWeight: 700 }}>Alt + S</Tag> / <Tag color="green" style={{ borderRadius: 4, fontWeight: 700 }}>F8</Tag> Save Sale</span>
         </div>
       </Form>
     </Card>
