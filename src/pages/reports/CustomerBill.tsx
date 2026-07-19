@@ -12,7 +12,6 @@ import api from '../../services/api';
 import { rangePresets } from '../../utils/datePresets';
 import {
   printDirect,
-  centerLine,
   padLine,
   divider,
   type ConnectionMethod,

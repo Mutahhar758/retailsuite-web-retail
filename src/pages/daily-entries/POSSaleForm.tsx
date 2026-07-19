@@ -4,7 +4,6 @@ import {
 } from 'antd';
 import {
   useThermalPrinter,
-  centerLine,
   padLine,
   divider,
   type ConnectionMethod,
