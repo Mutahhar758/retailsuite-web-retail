@@ -2,7 +2,19 @@ import React, { useState, useEffect } from 'react';
 import {
   Row, Col, Typography, Button, Input, Space, message, Tag, Modal, List, Badge, Alert, Dropdown, Segmented, Select
 } from 'antd';
-import { useThermalPrinter, centerLine, padLine, divider, type ConnectionMethod } from '../../hooks/useThermalPrinter';
+import {
+  useThermalPrinter,
+  centerLine,
+  padLine,
+  divider,
+  type ConnectionMethod,
+  ESC_ALIGN_LEFT,
+  ESC_ALIGN_CENTER,
+  ESC_BOLD_ON,
+  ESC_BOLD_OFF,
+  ESC_DOUBLE_ON,
+  ESC_DOUBLE_OFF
+} from '../../hooks/useThermalPrinter';
 import { useAppStore } from '../../stores/useAppStore';
 import {
   PlusOutlined, MinusOutlined, DeleteOutlined, ShoppingCartOutlined,
@@ -409,16 +421,14 @@ export const POSSaleForm: React.FC = () => {
       return c1 + c2 + c3 + c4;
     };
 
-    const escBoldOn = '\x1b!\x08\x1bE\x01\x1bE1';
-    const escBoldOff = '\x1b!\x00\x1bE\x00\x1bE0';
-    lines.push(escBoldOn + centerLine(currentOrgName.toUpperCase(), width) + escBoldOff);
-    lines.push(centerLine('POS Transaction Receipt', width));
-    lines.push(centerLine(`Voucher: ${voucherNo}`, width));
-    lines.push(centerLine(`Date: ${dayjs().format('DD-MMM-YYYY HH:mm')}`, width));
-    lines.push(divider('-', width));
+    // Header styling using ESC/POS native alignment and sizing (double-size only, without extra bold to avoid over-weight strokes)
+    lines.push(ESC_ALIGN_CENTER + ESC_DOUBLE_ON + currentOrgName.toUpperCase());
+    lines.push(ESC_DOUBLE_OFF + 'Sale Receipt');
+    lines.push(`Voucher: ${voucherNo}`);
+    lines.push(`Date: ${dayjs().format('DD-MMM-YYYY HH:mm')}`);
+    lines.push(ESC_ALIGN_LEFT + divider('-', width));
 
     lines.push(`Customer: ${selectedCustomer?.title || 'Walk-in Customer'}`);
-    lines.push('Type: POS CASH SALE');
     if (selectedNarration) {
       lines.push(`Narration: ${selectedNarration.title}`);
     }
@@ -441,13 +451,16 @@ export const POSSaleForm: React.FC = () => {
       lines.push(padLine('Discount:', `-Rs. ${totalDiscount.toFixed(2)}`, width));
     }
     lines.push(divider('=', width));
-    lines.push(padLine('Net Amount:', `Rs. ${netAmount.toFixed(2)}`, width));
-    lines.push(padLine('Cash Received:', `Rs. ${cashReceived.toFixed(2)}`, width));
+    
+    // Bold Net Amount
+    lines.push(ESC_BOLD_ON + padLine('Net Amount:', `Rs. ${netAmount.toFixed(2)}`, width));
+    lines.push(ESC_BOLD_OFF + padLine('Cash Received:', `Rs. ${cashReceived.toFixed(2)}`, width));
     lines.push(padLine('Cash Back / Change:', `Rs. ${cashBack.toFixed(2)}`, width));
     lines.push(divider('-', width));
 
-    lines.push(centerLine('Thank you for shopping with us!', width));
-    lines.push(centerLine('Software Powered by Bizgrip Solutions', width));
+    lines.push(ESC_ALIGN_CENTER + 'Thank you for shopping with us!');
+    lines.push('Software Powered by Bizgrip Solutions');
+    lines.push(ESC_ALIGN_LEFT); // Reset alignment to default
     lines.push('');
     lines.push('');
     lines.push('');
@@ -589,12 +602,10 @@ export const POSSaleForm: React.FC = () => {
   const printKotSlip = async (kotOrder: KotOrderResponse) => {
     const width = 48;
     const lines: string[] = [];
-    const escBoldOn = '\x1b!\x08\x1bE\x01\x1bE1';
-    const escBoldOff = '\x1b!\x00\x1bE\x00\x1bE0';
-
-    lines.push(escBoldOn + centerLine('KITCHEN ORDER TICKET (KOT)', width) + escBoldOff);
-    lines.push(centerLine(`Token No: ${kotOrder.tokenNo}`, width));
-    lines.push(divider('-', width));
+    // Header styling using ESC/POS native alignment and sizing (double-size only, without extra bold to avoid over-weight strokes)
+    lines.push(ESC_ALIGN_CENTER + ESC_DOUBLE_ON + 'KITCHEN ORDER TICKET (KOT)');
+    lines.push(ESC_DOUBLE_OFF + `Token No: ${kotOrder.tokenNo}`);
+    lines.push(ESC_ALIGN_LEFT + divider('-', width));
     lines.push(`Order ID: ${kotOrder.id}`);
     lines.push(`Date: ${dayjs(`${kotOrder.orderDate}T${kotOrder.orderTime}`).format('DD-MMM-YYYY HH:mm')}`);
     lines.push(`Type: ${kotOrder.orderType === 'DineIn' ? `Dine-In (${kotOrder.tableName || 'N/A'})` : 'Takeaway'}`);
@@ -621,13 +632,14 @@ export const POSSaleForm: React.FC = () => {
     lines.push(divider('-', width));
     
     kotOrder.lines.forEach(line => {
-      lines.push(formatKotLine(line.itemTitle, line.qty.toString()));
+      // Bold items and quantities in KOT
+      lines.push(ESC_BOLD_ON + formatKotLine(line.itemTitle, line.qty.toString()));
       if (line.notes) {
-        lines.push(`  * Note: ${line.notes}`);
+        lines.push(ESC_BOLD_OFF + `  * Note: ${line.notes}`);
       }
     });
     
-    lines.push(divider('=', width));
+    lines.push(ESC_BOLD_OFF + divider('=', width));
     lines.push('');
     lines.push('');
     lines.push('');
@@ -1907,14 +1919,13 @@ export const POSSaleForm: React.FC = () => {
         >
           <div style={{ textAlign: 'center', marginBottom: 12 }}>
             <h3 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 15 }}>{currentOrgName.toUpperCase()}</h3>
-            <p style={{ margin: 0, fontSize: 11 }}>POS Transaction Receipt</p>
+            <p style={{ margin: 0, fontSize: 11 }}>Sale Receipt</p>
             <p style={{ margin: 0, fontSize: 11 }}>Voucher: {savedVoucherNo}</p>
             <p style={{ margin: 0, fontSize: 11 }}>Date: {dayjs().format('DD-MMM-YYYY HH:mm')}</p>
           </div>
 
           <div style={{ borderBottom: '1px dashed #000', paddingBottom: 8, marginBottom: 8 }}>
             <strong>Customer:</strong> {selectedCustomer?.title}<br />
-            <strong>Type:</strong> POS CASH SALE<br />
             {selectedNarration && <><strong>Narration:</strong> {selectedNarration.title}<br /></>}
           </div>
 
@@ -2242,202 +2253,6 @@ export const POSSaleForm: React.FC = () => {
               CONFIRM & SAVE TRANSACTION
             </Button>
           </div>
-
-          {/* Cash Denominations Section (Coins & Notes combined) */}
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cash Denominations</span>
-              <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>(Tap to Add)</span>
-            </div>
-            
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start' }}>
-              {/* Coins: 1, 2, 5 */}
-              {[1, 2, 5].map(coin => {
-                const style = noteStyles[coin];
-                const count = noteCounts[coin] || 0;
-                return (
-                  <Button
-                    key={coin}
-                    className="pos-cash-coin-btn"
-                    onClick={() => handleNoteTap(coin)}
-                    style={{
-                      width: 50,
-                      height: 50,
-                      background: style.bg,
-                      borderColor: style.border,
-                      color: style.text,
-                      fontWeight: 900,
-                      fontSize: 15,
-                      padding: 0,
-                      borderRadius: '50%',
-                      display: 'inline-flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      position: 'relative',
-                      boxShadow: '0 3px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.4)',
-                      border: `2px solid ${style.border}`
-                    }}
-                  >
-                    {count > 0 && (
-                      <div style={{
-                        position: 'absolute',
-                        top: -4,
-                        right: -4,
-                        backgroundColor: '#ef4444',
-                        color: '#ffffff',
-                        borderRadius: '50%',
-                        width: 18,
-                        height: 18,
-                        fontSize: 10,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 900,
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                        border: 'none'
-                      }}>
-                        {count}
-                      </div>
-                    )}
-                    <span style={{ fontSize: 20, fontWeight: 900, lineHeight: 1 }}>{coin}</span>
-                  </Button>
-                );
-              })}
-
-              {/* Notes: 10, 20, 50, 100, 500, 1000, 5000 */}
-              {[10, 20, 50, 100, 500, 1000, 5000].map(note => {
-                const style = noteStyles[note];
-                const count = noteCounts[note] || 0;
-                return (
-                  <Button
-                    key={note}
-                    className="pos-cash-note-btn"
-                    onClick={() => handleNoteTap(note)}
-                    style={{
-                      width: 72,
-                      height: 44,
-                      background: style.bg,
-                      borderColor: style.border,
-                      color: style.text,
-                      fontWeight: 900,
-                      fontSize: 14,
-                      padding: 0,
-                      borderRadius: 8,
-                      display: 'inline-flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      position: 'relative',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
-                      border: 'none'
-                    }}
-                  >
-                    {count > 0 && (
-                      <div style={{
-                        position: 'absolute',
-                        top: -6,
-                        right: -6,
-                        backgroundColor: '#ef4444',
-                        color: '#ffffff',
-                        borderRadius: '50%',
-                        width: 18,
-                        height: 18,
-                        fontSize: 10,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 900,
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                      }}>
-                        {count}
-                      </div>
-                    )}
-                    <span style={{ fontSize: 20, fontWeight: 900, lineHeight: 1 }}>{note}</span>
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Note Selection Details readout */}
-          {Object.entries(noteCounts).some(([_, count]) => count > 0) && (
-            <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, marginTop: 2 }}>
-              <strong>Selected:</strong> {Object.entries(noteCounts)
-                .filter(([_, count]) => count > 0)
-                .map(([note, count]) => `${count} x Rs.${note}`)
-                .join(', ')}
-            </div>
-          )}
-
-          {/* Helper Action Buttons */}
-          <div style={{ display: 'flex', gap: 12, marginTop: 2 }}>
-            <Button 
-              type="dashed" 
-              onClick={handleExactCash} 
-              style={{ 
-                flex: 1, 
-                height: 42, 
-                fontWeight: 700, 
-                color: '#16a34a', 
-                borderColor: '#22c55e',
-                backgroundColor: '#f0fdf4',
-                borderRadius: 10,
-                fontSize: 13
-              }}
-            >
-              💵 Same / Exact Amount
-            </Button>
-            <Button 
-              type="dashed" 
-              danger
-              onClick={handleResetCash} 
-              style={{ 
-                flex: 1, 
-                height: 42, 
-                fontWeight: 700, 
-                borderRadius: 10,
-                fontSize: 13
-              }}
-            >
-              🧹 Clear Cash
-            </Button>
-          </div>
-
-          {/* Checkout Save Button */}
-          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-            <Button
-              size="large"
-              onClick={() => setIsPaymentModalVisible(false)}
-              style={{ flex: 1, height: 48, borderRadius: 10, fontWeight: 700, fontSize: 14 }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="primary"
-              size="large"
-              icon={<DollarOutlined style={{ fontSize: 16 }} />}
-              loading={loading}
-              onClick={handleSaveSale}
-              style={{
-                flex: 2,
-                height: 48,
-                borderRadius: 10,
-                fontWeight: 800,
-                fontSize: 15,
-                backgroundColor: '#16a34a',
-                borderColor: '#16a34a',
-                boxShadow: '0 4px 10px rgba(22, 163, 74, 0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6
-              }}
-            >
-              CONFIRM & SAVE TRANSACTION
-            </Button>
-          </div>
-
         </Space>
       </Modal>
 

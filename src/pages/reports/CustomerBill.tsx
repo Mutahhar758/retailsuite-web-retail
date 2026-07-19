@@ -10,7 +10,19 @@ import dayjs from 'dayjs';
 import { reportService, type CustomerBillResponse } from '../../services/reportService';
 import api from '../../services/api';
 import { rangePresets } from '../../utils/datePresets';
-import { printDirect, centerLine, padLine, divider, type ConnectionMethod } from '../../hooks/useThermalPrinter';
+import {
+  printDirect,
+  centerLine,
+  padLine,
+  divider,
+  type ConnectionMethod,
+  ESC_ALIGN_LEFT,
+  ESC_ALIGN_CENTER,
+  ESC_BOLD_ON,
+  ESC_BOLD_OFF,
+  ESC_DOUBLE_ON,
+  ESC_DOUBLE_OFF
+} from '../../hooks/useThermalPrinter';
 import { useAppStore } from '../../stores/useAppStore';
 import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
 
@@ -103,18 +115,16 @@ export const CustomerBill: React.FC = () => {
       return `${val1} ${val2} ${val3} ${val4} ${val5} ${val6}`;
     };
 
-    // Header
-    const escBoldOn = '\x1b!\x08\x1bE\x01\x1bE1';
-    const escBoldOff = '\x1b!\x00\x1bE\x00\x1bE0';
-    lines.push(escBoldOn + centerLine(currentOrgName.toUpperCase(), width) + escBoldOff);
-    lines.push(centerLine('CUSTOMER STATEMENT / BILL', width));
+    // Header styling using ESC/POS native alignment and sizing (double-size only, without extra bold to avoid over-weight strokes)
+    lines.push(ESC_ALIGN_CENTER + ESC_DOUBLE_ON + currentOrgName.toUpperCase());
+    lines.push(ESC_DOUBLE_OFF + 'CUSTOMER STATEMENT / BILL');
     
     const dateRange = form.getFieldValue('dateRange');
     const fromStr = dateRange ? dateRange[0].format('DD-MMM-YYYY') : '';
     const toStr = dateRange ? dateRange[1].format('DD-MMM-YYYY') : '';
-    lines.push(centerLine(`Period: ${fromStr} to ${toStr}`, width));
-    lines.push(centerLine(`Print Date: ${dayjs().format('DD-MMM-YYYY HH:mm')}`, width));
-    lines.push(divider('-', width));
+    lines.push(`Period: ${fromStr} to ${toStr}`);
+    lines.push(`Print Date: ${dayjs().format('DD-MMM-YYYY HH:mm')}`);
+    lines.push(ESC_ALIGN_LEFT + divider('-', width));
 
     // Customer
     lines.push(`Customer: ${customerTitle}`);
@@ -142,8 +152,10 @@ export const CustomerBill: React.FC = () => {
     lines.push(padLine('Previous Balance:', `Rs. ${Math.abs(data.summary.previousBalance).toFixed(2)} ${data.summary.previousBalance >= 0 ? 'Dr' : 'Cr'}`, width));
     lines.push(padLine('Payments Received:', `Rs. ${data.summary.payment.toFixed(2)}`, width));
     lines.push(divider('=', width));
-    lines.push(padLine('Net Balance Due:', `Rs. ${Math.abs(data.summary.balance).toFixed(2)} ${data.summary.balance >= 0 ? 'Dr' : 'Cr'}`, width));
-    lines.push(divider('-', width));
+    
+    // Bold Net Balance Due
+    lines.push(ESC_BOLD_ON + padLine('Net Balance Due:', `Rs. ${Math.abs(data.summary.balance).toFixed(2)} ${data.summary.balance >= 0 ? 'Dr' : 'Cr'}`, width));
+    lines.push(ESC_BOLD_OFF + divider('-', width));
 
     // Signatures
     lines.push('');
@@ -151,7 +163,8 @@ export const CustomerBill: React.FC = () => {
     lines.push('');
 
     // Footer
-    lines.push(centerLine('Software Powered by Bizgrip Solutions', width));
+    lines.push(ESC_ALIGN_CENTER + 'Software Powered by Bizgrip Solutions');
+    lines.push(ESC_ALIGN_LEFT); // Reset alignment to default
     lines.push('');
     lines.push('');
     lines.push('');

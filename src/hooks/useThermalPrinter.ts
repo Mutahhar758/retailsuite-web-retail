@@ -8,6 +8,16 @@ export interface PrinterOptions {
   cutPaper?: boolean;   // Append paper cut command
 }
 
+// ESC/POS Commands
+export const ESC_INIT = '\x1b@';
+export const ESC_ALIGN_LEFT = '\x1ba\x00';
+export const ESC_ALIGN_CENTER = '\x1ba\x01';
+export const ESC_ALIGN_RIGHT = '\x1ba\x02';
+export const ESC_BOLD_ON = '\x1bE\x01';
+export const ESC_BOLD_OFF = '\x1bE\x00';
+export const ESC_DOUBLE_ON = '\x1d!\x11'; // Double-height + Double-width
+export const ESC_DOUBLE_OFF = '\x1d!\x00'; // Normal text size
+
 /**
  * Align text to the center within the specified width.
  */
