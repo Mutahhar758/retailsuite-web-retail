@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Form, Select, Typography, Space, message, Badge, Alert, Row, Col } from 'antd';
-import { PrinterOutlined, ReloadOutlined, CheckCircleOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { PrinterOutlined, ReloadOutlined, CheckCircleOutlined, InfoCircleOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useThermalPrinter, type ConnectionMethod } from '../../hooks/useThermalPrinter';
 
 const { Title, Text } = Typography;
@@ -139,7 +139,28 @@ export const PrinterSettings: React.FC = () => {
                       showIcon
                       icon={<InfoCircleOutlined />}
                       message="Printer Bridge Offline"
-                      description="Please make sure your PrinterBridge service is running at http://localhost:5000 on this system."
+                      description={
+                        <span>
+                          Please make sure your PrinterBridge service is running at <code>http://localhost:5000</code> on this system.
+                          <br />
+                          If you haven't installed or started it yet, you can{' '}
+                          <a 
+                            href="/downloads/printer-bridge.exe" 
+                            download 
+                            style={{ 
+                              color: '#1677ff', 
+                              fontWeight: 600, 
+                              textDecoration: 'underline',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              marginTop: 4
+                            }}
+                          >
+                            <DownloadOutlined style={{ marginRight: 4 }} />
+                            Download Printer Bridge Helper (Windows)
+                          </a>
+                        </span>
+                      }
                       style={{ fontSize: 12 }}
                     />
                   </Col>
