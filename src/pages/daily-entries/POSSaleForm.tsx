@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Row, Col, Typography, Button, Input, Space, message, Tag, Modal, List, Badge, Alert, Dropdown
+  Row, Col, Typography, Button, Input, Space, message, Tag, Modal, List, Badge, Alert, Dropdown, Segmented, Select
 } from 'antd';
 import { useThermalPrinter, centerLine, padLine, divider, type ConnectionMethod } from '../../hooks/useThermalPrinter';
 import { useAppStore } from '../../stores/useAppStore';
@@ -8,7 +8,8 @@ import {
   PlusOutlined, MinusOutlined, DeleteOutlined, ShoppingCartOutlined,
   PrinterOutlined, RedoOutlined, CheckCircleOutlined, UserOutlined,
   FileTextOutlined, SearchOutlined, DollarOutlined,
-  DisconnectOutlined, CloudServerOutlined, DownOutlined
+  DisconnectOutlined, CloudServerOutlined, DownOutlined,
+  FireOutlined, ReloadOutlined, InboxOutlined, BookOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
@@ -19,6 +20,7 @@ import type { Item } from '../../services/inventoryService';
 import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCategoryService';
 import type { NarrationDto } from '../../services/narrationService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { kotService, type DiningTableDto, type KotOrderResponse } from '../../services/kotService';
 
 const { Title, Text } = Typography;
 
@@ -41,13 +43,19 @@ interface InvoiceTab {
   noteCounts: Record<number, number>;
   searchItemQuery: string;
   activeCategory: string;
+  orderType: string;
+  selectedTableId: number | null;
+  activeKotId: number | null;
+  remarks: string;
 }
 
 export const POSSaleForm: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const { currentTenantIdentifier, licenses } = useAppStore();
-  const currentOrgName = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier)?.name || 'Retail Store';
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
+  const currentOrgName = currentOrg?.name || 'Retail Store';
+  const hasKotFeature = currentOrg?.hasKotFeature ?? false;
   const { isOnline } = useNetworkStatus();
   const [isOfflineSaved, setIsOfflineSaved] = useState(false);
 
@@ -57,6 +65,12 @@ export const POSSaleForm: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [units, setUnits] = useState<{ code: string; title: string }[]>([]);
+  const [diningTables, setDiningTables] = useState<DiningTableDto[]>([]);
+
+  // KOT states
+  const [isKotModalVisible, setIsKotModalVisible] = useState(false);
+  const [activeKots, setActiveKots] = useState<KotOrderResponse[]>([]);
+  const [kotLoading, setKotLoading] = useState(false);
 
   // Multi-tab states
   const [tabs, setTabs] = useState<InvoiceTab[]>(() => {
@@ -71,7 +85,11 @@ export const POSSaleForm: React.FC = () => {
       discountFlat: 0,
       noteCounts: { 1: 0, 2: 0, 5: 0, 10: 0, 20: 0, 50: 0, 100: 0, 500: 0, 1000: 0, 5000: 0 },
       searchItemQuery: '',
-      activeCategory: 'all'
+      activeCategory: 'all',
+      orderType: 'Takeaway',
+      selectedTableId: null,
+      activeKotId: null,
+      remarks: ''
     }];
   });
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
@@ -87,6 +105,10 @@ export const POSSaleForm: React.FC = () => {
   const selectedNarration = activeTab?.selectedNarration || null;
   const searchItemQuery = activeTab?.searchItemQuery || '';
   const activeCategory = activeTab?.activeCategory || 'all';
+  const orderType = activeTab?.orderType || 'Takeaway';
+  const selectedTableId = activeTab?.selectedTableId || null;
+  const activeKotId = activeTab?.activeKotId || null;
+  const remarks = activeTab?.remarks || '';
 
   // Helper to update active tab's properties
   const updateActiveTab = (updater: Partial<InvoiceTab> | ((tab: InvoiceTab) => InvoiceTab)) => {
@@ -129,6 +151,22 @@ export const POSSaleForm: React.FC = () => {
 
   const setActiveCategory = (val: string | ((prev: string) => string)) => {
     updateActiveTab(t => ({ ...t, activeCategory: typeof val === 'function' ? val(t.activeCategory) : val }));
+  };
+
+  const setOrderType = (val: string | ((prev: string) => string)) => {
+    updateActiveTab(t => ({ ...t, orderType: typeof val === 'function' ? val(t.orderType) : val }));
+  };
+
+  const setSelectedTableId = (val: number | null | ((prev: number | null) => number | null)) => {
+    updateActiveTab(t => ({ ...t, selectedTableId: typeof val === 'function' ? val(t.selectedTableId) : val }));
+  };
+
+  const setActiveKotId = (val: number | null | ((prev: number | null) => number | null)) => {
+    updateActiveTab(t => ({ ...t, activeKotId: typeof val === 'function' ? val(t.activeKotId) : val }));
+  };
+
+  const setRemarks = (val: string | ((prev: string) => string)) => {
+    updateActiveTab(t => ({ ...t, remarks: typeof val === 'function' ? val(t.remarks) : val }));
   };
 
   // Dialogs
@@ -204,6 +242,12 @@ export const POSSaleForm: React.FC = () => {
     offlineCacheService.getUnits()
       .then(setUnits)
       .catch(() => { /* Non-critical */ });
+
+    if (hasKotFeature) {
+      kotService.getDiningTables()
+        .then(setDiningTables)
+        .catch(console.error);
+    }
   }, []);
 
   const filteredItems = items.filter(item => {
@@ -477,6 +521,10 @@ export const POSSaleForm: React.FC = () => {
     }
     setSearchItemQuery('');
     setActiveCategory('all');
+    setRemarks('');
+    setSelectedTableId(null);
+    setActiveKotId(null);
+    setOrderType('Takeaway');
   };
 
   const handleSaveSale = async () => {
@@ -495,7 +543,7 @@ export const POSSaleForm: React.FC = () => {
         date: dayjs().format('YYYY-MM-DD'),
         account: selectedCustomer.account,
         narration: selectedNarration?.code || undefined,
-        description: 'Touch Screen POS Sale',
+        description: activeKotId ? `KOT Order Finalized (Token #${activeKots.find(k => k.id === activeKotId)?.tokenNo || ''})` : 'Touch Screen POS Sale',
         cashReceipt: cashReceived,
         cashBack: cashBack,
         lines: cart.map((line, idx) => ({
@@ -509,11 +557,22 @@ export const POSSaleForm: React.FC = () => {
       };
 
       const newVno = await saleService.create(request, { offlineFallback: true });
+      
+      // Finalize KOT payment if loaded from an active KOT
+      if (activeKotId && !newVno.includes('-')) {
+        try {
+          await kotService.finalizePayment(activeKotId, newVno);
+        } catch (kotErr) {
+          console.error('Failed to finalize KOT payment', kotErr);
+        }
+      }
+
       const isOfflineResult = newVno.includes('-') && newVno.length <= 10;
       setIsOfflineSaved(isOfflineResult);
       setSavedVoucherNo(newVno);
       setIsPaymentModalVisible(false);
       setSuccessModalVisible(true);
+      
       if (isOfflineResult) {
         message.warning(`Saved offline as ${newVno} — will sync when you reconnect`, 6);
       } else {
@@ -524,6 +583,167 @@ export const POSSaleForm: React.FC = () => {
       message.error('Failed to save POS sale');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const printKotSlip = async (kotOrder: KotOrderResponse) => {
+    const width = 48;
+    const lines: string[] = [];
+    const escBoldOn = '\x1b!\x08\x1bE\x01\x1bE1';
+    const escBoldOff = '\x1b!\x00\x1bE\x00\x1bE0';
+
+    lines.push(escBoldOn + centerLine('KITCHEN ORDER TICKET (KOT)', width) + escBoldOff);
+    lines.push(centerLine(`Token No: ${kotOrder.tokenNo}`, width));
+    lines.push(divider('-', width));
+    lines.push(`Order ID: ${kotOrder.id}`);
+    lines.push(`Date: ${dayjs(`${kotOrder.orderDate}T${kotOrder.orderTime}`).format('DD-MMM-YYYY HH:mm')}`);
+    lines.push(`Type: ${kotOrder.orderType === 'DineIn' ? `Dine-In (${kotOrder.tableName || 'N/A'})` : 'Takeaway'}`);
+    if (kotOrder.customerName) {
+      lines.push(`Customer: ${kotOrder.customerName}`);
+    }
+    if (kotOrder.remarks) {
+      lines.push(`Remarks: ${kotOrder.remarks}`);
+    }
+    lines.push(divider('-', width));
+    
+    const formatKotLine = (item: string, qty: string) => {
+      const itemWidth = 38;
+      const qtyWidth = 10;
+      let left = item.trim();
+      if (left.length > itemWidth - 1) left = left.substring(0, itemWidth - 1);
+      left = left.padEnd(itemWidth, ' ');
+      
+      let right = qty.trim().padStart(qtyWidth, ' ');
+      return left + right;
+    };
+    
+    lines.push(formatKotLine('Item Description', 'Qty'));
+    lines.push(divider('-', width));
+    
+    kotOrder.lines.forEach(line => {
+      lines.push(formatKotLine(line.itemTitle, line.qty.toString()));
+      if (line.notes) {
+        lines.push(`  * Note: ${line.notes}`);
+      }
+    });
+    
+    lines.push(divider('=', width));
+    lines.push('');
+    lines.push('');
+    lines.push('');
+
+    try {
+      const { printDirect } = await import('../../hooks/useThermalPrinter');
+      await printDirect(lines, connectionMethod, { printerName, cutPaper });
+    } catch (err) {
+      console.warn('Could not print thermal KOT', err);
+    }
+  };
+
+  const handleSaveKot = async () => {
+    if (cart.length === 0) {
+      message.error('Cart is empty. Please add items to order');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const request = {
+        orderType: orderType,
+        tableId: orderType === 'DineIn' ? (selectedTableId || undefined) : undefined,
+        customerId: selectedCustomer?.account || undefined,
+        remarks: remarks || undefined,
+        lines: cart.map(line => ({
+          itemId: line.item.id,
+          qty: line.qty,
+          rate: line.rate,
+          notes: undefined
+        }))
+      };
+
+      const kotOrder = await kotService.create(request);
+      message.success(`KOT Created successfully! Token #${kotOrder.tokenNo}`);
+      
+      try {
+        await printKotSlip(kotOrder);
+      } catch (printErr) {
+        console.warn('Failed to print KOT slip', printErr);
+      }
+
+      handleResetAll();
+    } catch (err) {
+      console.error(err);
+      message.error('Failed to send order to kitchen');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchActiveKots = async () => {
+    try {
+      setKotLoading(true);
+      const data = await kotService.getActive();
+      setActiveKots(data.filter(k => k.status !== 'Paid' && k.status !== 'Cancelled'));
+    } catch (err) {
+      message.error('Failed to load active KOT orders');
+    } finally {
+      setKotLoading(false);
+    }
+  };
+
+  const handleLoadKot = async (kotOrder: KotOrderResponse) => {
+    try {
+      const detail = await kotService.getByTokenOrId(kotOrder.id.toString());
+      if (!detail) {
+        message.error('Order details not found');
+        return;
+      }
+      
+      const cartItems: CartItem[] = detail.lines.map(line => {
+        const matchedItem = items.find(i => i.id === line.itemId);
+        return {
+          item: matchedItem || {
+            id: line.itemId,
+            title: line.itemTitle,
+            itemKey: '',
+            priRate: line.rate,
+            secRate: 0,
+            primaryUnit: 'Pcs',
+            secondaryUnit: 'Pcs',
+            defaultUnit: 'Pcs',
+            qtyInPack: 1,
+            alert: false,
+            itemCategoryCode: line.itemCategoryCode || '',
+            itemType: 'Standard'
+          },
+          qty: line.qty,
+          rate: line.rate,
+          discount: 0,
+          unit: matchedItem?.defaultUnit || 'Pcs'
+        };
+      });
+      
+      const tabUpdates: Partial<InvoiceTab> = {
+        selectedTableId: detail.tableId || null,
+        orderType: detail.orderType,
+        remarks: detail.remarks || '',
+        activeKotId: detail.id,
+        cart: cartItems
+      };
+
+      if (detail.customerId) {
+        const foundCust = customers.find(c => c.account === detail.customerId);
+        if (foundCust) {
+          tabUpdates.selectedCustomer = foundCust;
+        }
+      }
+      
+      updateActiveTab(tabUpdates);
+      setIsKotModalVisible(false);
+      message.success(`KOT order loaded for Token #${detail.tokenNo}`);
+    } catch (err) {
+      console.error(err);
+      message.error('Failed to load KOT details');
     }
   };
 
@@ -570,7 +790,11 @@ export const POSSaleForm: React.FC = () => {
       discountFlat: 0,
       noteCounts: { 1: 0, 2: 0, 5: 0, 10: 0, 20: 0, 50: 0, 100: 0, 500: 0, 1000: 0, 5000: 0 },
       searchItemQuery: '',
-      activeCategory: 'all'
+      activeCategory: 'all',
+      orderType: 'Takeaway',
+      selectedTableId: null,
+      activeKotId: null,
+      remarks: ''
     };
 
     setTabs(prev => [...prev, newTab]);
@@ -915,6 +1139,36 @@ export const POSSaleForm: React.FC = () => {
               }
             />
 
+            {/* Recall KOT Button */}
+            {hasKotFeature && (
+              <Badge count={activeKots.length} size="small" style={{ backgroundColor: '#f97316' }}>
+                <Button 
+                  type="default" 
+                  icon={<InboxOutlined style={{ fontSize: 16 }} />} 
+                  onClick={() => {
+                    fetchActiveKots();
+                    setIsKotModalVisible(true);
+                  }}
+                  style={{ 
+                    height: 50, 
+                    borderRadius: 12, 
+                    fontWeight: 700, 
+                    fontSize: 14,
+                    color: '#ea580c',
+                    borderColor: '#ffedd5',
+                    backgroundColor: '#fff7ed',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    width: '100%'
+                  }}
+                >
+                  Recall KOT
+                </Button>
+              </Badge>
+            )}
+
             {/* Customer select button */}
             <Button 
               type="primary" 
@@ -1226,6 +1480,79 @@ export const POSSaleForm: React.FC = () => {
             />
           </div>
 
+          {/* Active KOT loaded Alert */}
+          {hasKotFeature && activeKotId && (
+            <Alert
+              message={`Loaded from KOT Order (Token #${activeKots.find(k => k.id === activeKotId)?.tokenNo || activeKotId})`}
+              type="info"
+              showIcon
+              closable
+              onClose={() => {
+                handleResetAll();
+                message.info('Cleared active KOT Order');
+              }}
+              style={{ marginBottom: 12, borderRadius: 8 }}
+            />
+          )}
+
+          {/* Order Type & Dine-in Table Selection */}
+          {hasKotFeature && (
+            <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0, padding: 12, backgroundColor: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text strong style={{ fontSize: 13, color: '#475569' }}>Order Type</Text>
+                <Segmented
+                  value={orderType}
+                  onChange={(val) => {
+                    setOrderType(val as string);
+                    if (val !== 'DineIn') setSelectedTableId(null);
+                  }}
+                  options={[
+                    { label: '🏃 Takeaway', value: 'Takeaway' },
+                    { label: '🍽️ Dine-In', value: 'DineIn' }
+                  ]}
+                  style={{ borderRadius: 8 }}
+                />
+              </div>
+
+              {orderType === 'DineIn' && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <Select
+                    placeholder="Select Dining Table"
+                    value={selectedTableId}
+                    onChange={setSelectedTableId}
+                    style={{ flex: 1 }}
+                    dropdownStyle={{ borderRadius: 8 }}
+                  >
+                    {diningTables.map(table => (
+                      <Select.Option key={table.id} value={table.id}>
+                        {table.name} (Cap: {table.capacity} | {table.status})
+                      </Select.Option>
+                    ))}
+                  </Select>
+                  <Button 
+                    icon={<ReloadOutlined />} 
+                    onClick={() => {
+                      kotService.getDiningTables().then(setDiningTables).catch(console.error);
+                      message.success('Tables refreshed');
+                    }}
+                    title="Refresh tables"
+                    style={{ borderRadius: 8 }}
+                  />
+                </div>
+              )}
+
+              <div>
+                <Input
+                  placeholder="Kitchen remarks/notes..."
+                  value={remarks}
+                  onChange={e => setRemarks(e.target.value)}
+                  style={{ borderRadius: 8 }}
+                  prefix={<BookOutlined style={{ color: '#94a3b8' }} />}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Cart List */}
           <div className="pos-scrollbar" style={{ flex: 1, overflowY: 'auto', marginBottom: 16, borderBottom: '1px dashed #e2e8f0', paddingRight: 4 }}>
             {cart.map(line => (
@@ -1351,36 +1678,63 @@ export const POSSaleForm: React.FC = () => {
                 </div>
               </div>
 
-              {/* Payment Button */}
-              <Button
-                className="pos-pay-btn"
-                type="primary"
-                size="large"
-                icon={<DollarOutlined style={{ fontSize: 18 }} />}
-                onClick={() => {
-                  if (cart.length === 0) {
-                    message.error('Cart is empty. Please add items');
-                    return;
-                  }
-                  setIsPaymentModalVisible(true);
-                }}
-                disabled={cart.length === 0}
-                style={{
-                  height: 48,
-                  borderRadius: 10,
-                  fontWeight: 800,
-                  backgroundColor: '#16a34a',
-                  borderColor: '#16a34a',
-                  boxShadow: '0 4px 10px rgba(22, 163, 74, 0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  width: '100%'
-                }}
-              >
-                <span style={{ fontSize: 14, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Pay Now</span>
-              </Button>
+              {/* Payment Button Row */}
+              <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+                {hasKotFeature && (
+                  <Button
+                    type="default"
+                    size="large"
+                    icon={<FireOutlined style={{ fontSize: 16, color: '#ea580c' }} />}
+                    onClick={handleSaveKot}
+                    disabled={cart.length === 0}
+                    style={{
+                      flex: 1,
+                      height: 48,
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      color: '#ea580c',
+                      borderColor: '#f97316',
+                      backgroundColor: '#fff7ed',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 4
+                    }}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 900, textTransform: 'uppercase' }}>KOT</span>
+                  </Button>
+                )}
+
+                <Button
+                  className="pos-pay-btn"
+                  type="primary"
+                  size="large"
+                  icon={<DollarOutlined style={{ fontSize: 18 }} />}
+                  onClick={() => {
+                    if (cart.length === 0) {
+                      message.error('Cart is empty. Please add items');
+                      return;
+                    }
+                    setIsPaymentModalVisible(true);
+                  }}
+                  disabled={cart.length === 0}
+                  style={{
+                    flex: 1.3,
+                    height: 48,
+                    borderRadius: 10,
+                    fontWeight: 800,
+                    backgroundColor: '#16a34a',
+                    borderColor: '#16a34a',
+                    boxShadow: '0 4px 10px rgba(22, 163, 74, 0.15)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 4
+                  }}
+                >
+                  <span style={{ fontSize: 13, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Pay Now</span>
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -1889,8 +2243,275 @@ export const POSSaleForm: React.FC = () => {
             </Button>
           </div>
 
+          {/* Cash Denominations Section (Coins & Notes combined) */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cash Denominations</span>
+              <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>(Tap to Add)</span>
+            </div>
+            
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start' }}>
+              {/* Coins: 1, 2, 5 */}
+              {[1, 2, 5].map(coin => {
+                const style = noteStyles[coin];
+                const count = noteCounts[coin] || 0;
+                return (
+                  <Button
+                    key={coin}
+                    className="pos-cash-coin-btn"
+                    onClick={() => handleNoteTap(coin)}
+                    style={{
+                      width: 50,
+                      height: 50,
+                      background: style.bg,
+                      borderColor: style.border,
+                      color: style.text,
+                      fontWeight: 900,
+                      fontSize: 15,
+                      padding: 0,
+                      borderRadius: '50%',
+                      display: 'inline-flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      position: 'relative',
+                      boxShadow: '0 3px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.4)',
+                      border: `2px solid ${style.border}`
+                    }}
+                  >
+                    {count > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -4,
+                        backgroundColor: '#ef4444',
+                        color: '#ffffff',
+                        borderRadius: '50%',
+                        width: 18,
+                        height: 18,
+                        fontSize: 10,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 900,
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        border: 'none'
+                      }}>
+                        {count}
+                      </div>
+                    )}
+                    <span style={{ fontSize: 20, fontWeight: 900, lineHeight: 1 }}>{coin}</span>
+                  </Button>
+                );
+              })}
+
+              {/* Notes: 10, 20, 50, 100, 500, 1000, 5000 */}
+              {[10, 20, 50, 100, 500, 1000, 5000].map(note => {
+                const style = noteStyles[note];
+                const count = noteCounts[note] || 0;
+                return (
+                  <Button
+                    key={note}
+                    className="pos-cash-note-btn"
+                    onClick={() => handleNoteTap(note)}
+                    style={{
+                      width: 72,
+                      height: 44,
+                      background: style.bg,
+                      borderColor: style.border,
+                      color: style.text,
+                      fontWeight: 900,
+                      fontSize: 14,
+                      padding: 0,
+                      borderRadius: 8,
+                      display: 'inline-flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      position: 'relative',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
+                      border: 'none'
+                    }}
+                  >
+                    {count > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        top: -6,
+                        right: -6,
+                        backgroundColor: '#ef4444',
+                        color: '#ffffff',
+                        borderRadius: '50%',
+                        width: 18,
+                        height: 18,
+                        fontSize: 10,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 900,
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                      }}>
+                        {count}
+                      </div>
+                    )}
+                    <span style={{ fontSize: 20, fontWeight: 900, lineHeight: 1 }}>{note}</span>
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Note Selection Details readout */}
+          {Object.entries(noteCounts).some(([_, count]) => count > 0) && (
+            <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, marginTop: 2 }}>
+              <strong>Selected:</strong> {Object.entries(noteCounts)
+                .filter(([_, count]) => count > 0)
+                .map(([note, count]) => `${count} x Rs.${note}`)
+                .join(', ')}
+            </div>
+          )}
+
+          {/* Helper Action Buttons */}
+          <div style={{ display: 'flex', gap: 12, marginTop: 2 }}>
+            <Button 
+              type="dashed" 
+              onClick={handleExactCash} 
+              style={{ 
+                flex: 1, 
+                height: 42, 
+                fontWeight: 700, 
+                color: '#16a34a', 
+                borderColor: '#22c55e',
+                backgroundColor: '#f0fdf4',
+                borderRadius: 10,
+                fontSize: 13
+              }}
+            >
+              💵 Same / Exact Amount
+            </Button>
+            <Button 
+              type="dashed" 
+              danger
+              onClick={handleResetCash} 
+              style={{ 
+                flex: 1, 
+                height: 42, 
+                fontWeight: 700, 
+                borderRadius: 10,
+                fontSize: 13
+              }}
+            >
+              🧹 Clear Cash
+            </Button>
+          </div>
+
+          {/* Checkout Save Button */}
+          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+            <Button
+              size="large"
+              onClick={() => setIsPaymentModalVisible(false)}
+              style={{ flex: 1, height: 48, borderRadius: 10, fontWeight: 700, fontSize: 14 }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="primary"
+              size="large"
+              icon={<DollarOutlined style={{ fontSize: 16 }} />}
+              loading={loading}
+              onClick={handleSaveSale}
+              style={{
+                flex: 2,
+                height: 48,
+                borderRadius: 10,
+                fontWeight: 800,
+                fontSize: 15,
+                backgroundColor: '#16a34a',
+                borderColor: '#16a34a',
+                boxShadow: '0 4px 10px rgba(22, 163, 74, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6
+              }}
+            >
+              CONFIRM & SAVE TRANSACTION
+            </Button>
+          </div>
+
         </Space>
       </Modal>
+
+      {/* Recall KOT Modal */}
+      {hasKotFeature && (
+        <Modal
+          title={<div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '1px solid #f1f5f9', paddingBottom: 12 }}>📥 Active Kitchen Orders (KOT)</div>}
+          open={isKotModalVisible}
+          onCancel={() => setIsKotModalVisible(false)}
+          footer={null}
+          width={750}
+          style={{ top: 30 }}
+          bodyStyle={{ padding: '16px 24px' }}
+        >
+          <List
+            loading={kotLoading}
+            dataSource={activeKots}
+            renderItem={kot => (
+              <List.Item
+                className="pos-modal-list-item"
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: 12,
+                  border: '1px solid #e2e8f0',
+                  marginBottom: 8,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  backgroundColor: '#ffffff'
+                }}
+              >
+                <div>
+                  <Space size="middle">
+                    <Badge count={`Token #${kot.tokenNo}`} style={{ backgroundColor: '#f97316', fontSize: 13, fontWeight: 800, padding: '2px 8px', borderRadius: 6, height: 'auto', lineHeight: 'normal' }} />
+                    <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                      {kot.orderType === 'DineIn' ? `🍽️ Table: ${kot.tableName || 'N/A'}` : '🏃 Takeaway'}
+                    </span>
+                    <span style={{ fontSize: 13, color: '#64748b' }}>
+                      {dayjs(`${kot.orderDate}T${kot.orderTime}`).format('hh:mm A')}
+                    </span>
+                  </Space>
+                  <div style={{ marginTop: 6, fontSize: 13, color: '#475569' }}>
+                    <strong>Items:</strong> {kot.lines.map(l => `${l.itemTitle} (x${l.qty})`).join(', ')}
+                  </div>
+                  {kot.remarks && (
+                    <div style={{ marginTop: 2, fontSize: 12, color: '#ea580c', fontStyle: 'italic' }}>
+                      * Remarks: {kot.remarks}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ textAlign: 'right', marginRight: 12 }}>
+                    <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Total Due</div>
+                    <div style={{ fontSize: 16, fontWeight: 900, color: '#2563eb' }}>Rs. {kot.totalAmount.toLocaleString()}</div>
+                  </div>
+                  <Button
+                    type="primary"
+                    onClick={() => handleLoadKot(kot)}
+                    style={{
+                      borderRadius: 8,
+                      fontWeight: 700,
+                      backgroundColor: '#2563eb',
+                      borderColor: '#2563eb'
+                    }}
+                  >
+                    Load Order
+                  </Button>
+                </div>
+              </List.Item>
+            )}
+            locale={{ emptyText: <div style={{ padding: '24px 0', textAlign: 'center', color: '#64748b', fontWeight: 600 }}>No active Kitchen Orders found</div> }}
+          />
+        </Modal>
+      )}
     </div>
   );
 };

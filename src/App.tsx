@@ -28,6 +28,7 @@ import { PurchaseReturnForm } from './pages/daily-entries/PurchaseReturnForm';
 import { StockAdjustmentList } from './pages/daily-entries/StockAdjustmentList';
 import { StockAdjustmentForm } from './pages/daily-entries/StockAdjustmentForm';
 import { BankReconciliation } from './pages/daily-entries/BankReconciliation';
+import { KitchenDisplay } from './pages/daily-entries/KitchenDisplay';
 import { AccountStatement } from './pages/reports/AccountStatement';
 import { AccountStatementWithDue } from './pages/reports/AccountStatementWithDue';
 import { TrialBalanceReport } from './pages/reports/TrialBalanceReport';
@@ -56,6 +57,7 @@ import { UserForm } from './pages/setup/UserForm';
 import { RoleList } from './pages/setup/RoleList';
 import { RoleForm } from './pages/setup/RoleForm';
 import { OpeningBalance } from './pages/setup/OpeningBalance';
+import { DiningTableList } from './pages/setup/DiningTableList';
 import { Profile } from './pages/auth/Profile';
 import { useAppStore } from './stores/useAppStore';
 import { useAuthStore } from './stores/useAuthStore';
@@ -159,6 +161,7 @@ function App() {
             <Route path="daily-entries/stock-adjustment/:voucherNo" element={<StockAdjustmentForm />} />
             
             <Route path="daily-entries/bank-reconciliation" element={<BankReconciliation />} />
+            <Route path="daily-entries/kitchen-display" element={<KitchenDisplay />} />
             
             {/* Reports */}
             <Route path="reports/account-statement" element={<AccountStatement />} />
@@ -207,6 +210,7 @@ function App() {
             <Route path="setup/supply-order/:id" element={<SupplyOrderForm />} />
             <Route path="setup/printer-settings" element={<PrinterSettings />} />
             <Route path="setup/opening-balance" element={<OpeningBalance />} />
+            <Route path="setup/dining-tables" element={<DiningTableList />} />
             
             {/* Other routes */}
             <Route path="setup/*" element={<PlaceholderPage />} />

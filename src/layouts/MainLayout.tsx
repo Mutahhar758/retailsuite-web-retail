@@ -54,9 +54,11 @@ const permissionMap: Record<string, string> = {
   '/daily-entries/sale-supply': 'Permissions.SaleSupplies.View',
   '/daily-entries/purchase-return': 'Permissions.PurchaseReturns.View',
   '/daily-entries/sale-return': 'Permissions.SaleReturns.View',
-  '/daily-entries/stock-adjustment': 'Permissions.StockAdjustments.View',
+   '/daily-entries/stock-adjustment': 'Permissions.StockAdjustments.View',
   '/daily-entries/bank-reconciliation': 'Permissions.BankReconciliations.View',
   '/daily-entries/payroll': 'Permissions.Payrolls.View',
+  '/setup/dining-tables': 'Permissions.DiningTables.View',
+  '/daily-entries/kitchen-display': 'Permissions.KotOrders.View',
 
   '/reports': 'Permissions.Reports.View',
   '/reports/account-statement': 'Permissions.Reports.View',
@@ -182,6 +184,7 @@ export const MainLayout: React.FC = () => {
 
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const hasSupplyFeature = currentOrg?.hasSupplyFeature ?? false;
+  const hasKotFeature = currentOrg?.hasKotFeature ?? false;
 
   const baseMenuItems = [
     { 
@@ -203,6 +206,7 @@ export const MainLayout: React.FC = () => {
         hasSupplyFeature ? { key: '/setup/supply-order', label: 'Supply Order' } : null,
         { key: '/setup/printer-settings', label: 'Printer Settings' },
         { key: '/setup/opening-balance', label: 'Opening Balance' },
+        hasKotFeature ? { key: '/setup/dining-tables', label: 'Dining Tables' } : null,
       ].filter(Boolean) as any[]
     },
     { 
@@ -222,6 +226,7 @@ export const MainLayout: React.FC = () => {
         { key: '/daily-entries/stock-adjustment', label: 'Stock Adjustment' },
         { key: '/daily-entries/bank-reconciliation', label: 'Bank Reconciliation' },
         { key: '/daily-entries/payroll', label: 'Payroll' },
+        hasKotFeature ? { key: '/daily-entries/kitchen-display', label: 'Kitchen Display (KDS)' } : null,
       ].filter(Boolean) as any[]
     },
     { 

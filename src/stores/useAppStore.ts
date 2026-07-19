@@ -7,6 +7,7 @@ export interface OrganizationLicense {
   name: string;
   hasSupplyFeature?: boolean;
   hasSecondaryQty?: boolean;
+  hasKotFeature?: boolean;
 }
 
 interface AppState {
