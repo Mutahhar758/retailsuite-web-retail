@@ -11,6 +11,7 @@ import dayjs from 'dayjs';
 import { reportService, type StockLedgerLine } from '../../services/reportService';
 import api from '../../services/api';
 import { rangePresets } from '../../utils/datePresets';
+import { useAppStore } from '../../stores/useAppStore';
 
 const { Title, Text } = Typography;
 
@@ -18,8 +19,12 @@ export const ItemLedger: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<{ id: string; title: string }[]>([]);
-  const [data, setData] = useState<(StockLedgerLine & { balance: number })[]>([]);
+  const [data, setData] = useState<(StockLedgerLine & { balance: number; secBalance: number })[]>([]);
   const [itemTitle, setItemTitle] = useState('');
+
+  const { licenses, currentTenantIdentifier } = useAppStore();
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
+  const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
 
   useEffect(() => {
     api.get('/api/inventory/items').then(res => {
@@ -40,9 +45,11 @@ export const ItemLedger: React.FC = () => {
       const res = await reportService.getStockLedger(filter);
       
       let currentQty = 0;
+      let currentSecQty = 0;
       const dataWithBalance = res.map(row => {
         currentQty += (row.qtyIn - row.qtyOut);
-        return { ...row, balance: currentQty };
+        currentSecQty += ((row.secQtyIn || 0) - (row.secQtyOut || 0));
+        return { ...row, balance: currentQty, secBalance: currentSecQty };
       });
       
       setData(dataWithBalance);
@@ -92,15 +99,29 @@ export const ItemLedger: React.FC = () => {
       render: (val: number) => val > 0 ? <Text type="danger">{val.toLocaleString()}</Text> : '-'
     },
     {
-      title: 'Balance',
+      title: 'Balance (Kg)',
       dataIndex: 'balance',
       key: 'balance',
       align: 'right' as const,
       width: 120,
       render: (val: number) => <Text strong>{val.toLocaleString()}</Text>
     },
+    ...(hasSecondaryQty ? [
+      {
+        title: 'Bag Balance',
+        dataIndex: 'secBalance',
+        key: 'secBalance',
+        align: 'right' as const,
+        width: 120,
+        render: (val: number, record: StockLedgerLine) => (
+          <Text strong style={{ color: '#0284c7' }}>
+            {val.toLocaleString()} {record.secUnit || 'Bags'}
+          </Text>
+        )
+      }
+    ] : []),
     {
-      title: 'Rate',
+      title: 'Rate (/Kg)',
       dataIndex: 'rate',
       key: 'rate',
       align: 'right' as const,

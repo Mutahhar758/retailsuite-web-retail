@@ -20,6 +20,7 @@ export const StockAdjustmentForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+  const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
@@ -113,7 +114,7 @@ export const StockAdjustmentForm: React.FC = () => {
         if (l.key === key) {
           const updated = { ...l, [field]: value };
           if (field === 'itemId') {
-            const item = items.find(i => i.id === value);
+            const item = items.find(i => String(i.id) === String(value));
             if (item) {
               updated.unit = item.defaultUnit || item.primaryUnit;
               updated.rate = item.priRate;
@@ -124,13 +125,35 @@ export const StockAdjustmentForm: React.FC = () => {
               updated.secQtyOut = 0;
             }
           }
+
+          const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
+          const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
+
+          if (hasVariablePackFeature) {
+            // For adjustment: use qtyIn as primary, secQtyIn as bag qty
+            const kgQty = field === 'qtyIn' ? numVal : (updated.qtyIn || 0);
+            const bagQty = field === 'secQtyIn' ? numVal : (updated.secQtyIn || 0);
+            const dynamicPackSize = (kgQty > 0 && bagQty > 0) ? kgQty / bagQty : 0;
+            if (dynamicPackSize > 0) {
+              if (field === 'rate') {
+                updated.secRate = Math.round(numVal * dynamicPackSize * 100) / 100;
+              } else if (field === 'secRate') {
+                updated.rate = Math.round((numVal / dynamicPackSize) * 100) / 100;
+              } else if (field === 'qtyIn' || field === 'secQtyIn') {
+                updated.secRate = Math.round((updated.rate || 0) * dynamicPackSize * 100) / 100;
+              }
+            }
+          }
+
           const qtyIn = updated.qtyIn || 0;
           const qtyOut = updated.qtyOut || 0;
           const rate = updated.rate || 0;
           const secQtyIn = updated.secQtyIn || 0;
           const secQtyOut = updated.secQtyOut || 0;
           const secRate = updated.secRate || 0;
-          updated.amount = ((qtyIn - qtyOut) * rate) + ((secQtyIn - secQtyOut) * secRate);
+          updated.amount = hasVariablePackFeature
+            ? (qtyIn - qtyOut) * rate
+            : ((qtyIn - qtyOut) * rate) + ((secQtyIn - secQtyOut) * secRate);
           return updated;
         }
         return l;

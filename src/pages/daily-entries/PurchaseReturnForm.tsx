@@ -22,6 +22,7 @@ export const PurchaseReturnForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+  const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const navigate = useNavigate();
@@ -143,7 +144,7 @@ export const PurchaseReturnForm: React.FC = () => {
         if (row.key === key) {
           const updatedRow = { ...row, [field]: value };
           if (field === 'itemId') {
-            const item = items.find(i => i.id === value);
+            const item = items.find(i => String(i.id) === String(value));
             if (item) {
               updatedRow.unit = item.defaultUnit || item.primaryUnit;
               updatedRow.rate = item.priRate;
@@ -152,12 +153,33 @@ export const PurchaseReturnForm: React.FC = () => {
               updatedRow.secQty = 0;
             }
           }
+
+          const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
+          const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
+
+          if (hasVariablePackFeature) {
+            const kgQty = field === 'qty' ? numVal : (updatedRow.qty || 0);
+            const bagQty = field === 'secQty' ? numVal : (updatedRow.secQty || 0);
+            const dynamicPackSize = (kgQty > 0 && bagQty > 0) ? kgQty / bagQty : 0;
+            if (dynamicPackSize > 0) {
+              if (field === 'rate') {
+                updatedRow.secRate = Math.round(numVal * dynamicPackSize * 100) / 100;
+              } else if (field === 'secRate') {
+                updatedRow.rate = Math.round((numVal / dynamicPackSize) * 100) / 100;
+              } else if (field === 'qty' || field === 'secQty') {
+                updatedRow.secRate = Math.round((updatedRow.rate || 0) * dynamicPackSize * 100) / 100;
+              }
+            }
+          }
+
           const qty = updatedRow.qty || 0;
           const rate = updatedRow.rate || 0;
           const addLess = updatedRow.addLess || 0;
           const secQty = updatedRow.secQty || 0;
           const secRate = updatedRow.secRate || 0;
-          updatedRow.amount = (qty * rate) + addLess + (secQty * secRate);
+          updatedRow.amount = hasVariablePackFeature
+            ? (qty * rate) + addLess
+            : (qty * rate) + addLess + (secQty * secRate);
           return updatedRow;
         }
         return row;

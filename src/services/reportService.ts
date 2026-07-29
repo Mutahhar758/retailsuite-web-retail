@@ -39,6 +39,11 @@ export interface StockBalanceLine {
   qtyOut: number;
   qtyBal: number;
   rate: number;
+  secUnit?: string;
+  secPriQty?: number;
+  secQtyIn?: number;
+  secQtyOut?: number;
+  secQtyBal?: number;
 }
 
 export interface StockLedgerLine {
@@ -48,6 +53,10 @@ export interface StockLedgerLine {
   qtyIn: number;
   qtyOut: number;
   rate: number | null;
+  secUnit?: string;
+  secQtyIn?: number;
+  secQtyOut?: number;
+  secQtyBal?: number;
 }
 
 export interface BalanceSheetLine {

@@ -11,6 +11,7 @@ import dayjs from 'dayjs';
 import { reportService, type StockBalanceLine } from '../../services/reportService';
 import api from '../../services/api';
 import { rangePresets } from '../../utils/datePresets';
+import { useAppStore } from '../../stores/useAppStore';
 
 const { Title, Text } = Typography;
 
@@ -19,6 +20,10 @@ export const StockBalance: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<{ code: string; title: string }[]>([]);
   const [data, setData] = useState<StockBalanceLine[]>([]);
+
+  const { licenses, currentTenantIdentifier } = useAppStore();
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
+  const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
 
   useEffect(() => {
     api.get('/api/itemcategories').then(res => {
@@ -81,13 +86,27 @@ export const StockBalance: React.FC = () => {
       render: (val: number) => val !== 0 ? <Text type="danger">{val.toLocaleString()}</Text> : '-'
     },
     {
-      title: 'Balance',
+      title: 'Weight Balance (Kg)',
       dataIndex: 'qtyBal',
       key: 'qtyBal',
       align: 'right' as const,
-      width: 120,
+      width: 140,
       render: (val: number) => <Text strong>{val.toLocaleString()}</Text>
     },
+    ...(hasSecondaryQty ? [
+      {
+        title: 'Bag Balance',
+        dataIndex: 'secQtyBal',
+        key: 'secQtyBal',
+        align: 'right' as const,
+        width: 130,
+        render: (val: number | undefined, record: StockBalanceLine) => (
+          <Text strong style={{ color: '#0284c7' }}>
+            {(val || 0).toLocaleString()} {record.secUnit || 'Bags'}
+          </Text>
+        )
+      }
+    ] : []),
     {
       title: 'Rate',
       dataIndex: 'rate',

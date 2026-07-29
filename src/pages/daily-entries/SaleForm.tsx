@@ -35,6 +35,7 @@ export const SaleForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+  const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
@@ -329,7 +330,9 @@ export const SaleForm: React.FC = () => {
           key: d.seq,
           rate: d.rate,
           discount: d.discount,
-          amount: d.amount,
+          amount: hasVariablePackFeature
+            ? d.qty * (d.rate - (d.discount || 0))
+            : d.amount,
           secUnit: d.secUnit,
           secQty: d.secQty,
           secRate: d.secRate
@@ -422,24 +425,48 @@ export const SaleForm: React.FC = () => {
       const newLines = prev.map(l => {
         if (l.key === key) {
           const updated = { ...l, [field]: value };
+          const targetItemId = field === 'itemId' ? value : updated.itemId;
+          const item = items.find(i => String(i.id) === String(targetItemId));
 
           if (field === 'itemId') {
-            const item = items.find(i => i.id === value);
             if (item) {
-              updated.unit = item.defaultUnit;
-              updated.rate = item.priRate;
+              updated.unit = item.defaultUnit || item.primaryUnit;
+              updated.rate = item.priRate || 0;
               updated.secUnit = item.secondaryUnit;
-              updated.secRate = item.secRate || 0;
+              const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 1);
+              updated.secRate = item.secRate || ((item.priRate || 0) * (pSize > 0 ? pSize : 1));
               updated.secQty = 0;
             }
           }
 
+          const packSize = Number(item?.qtyInPack || (item as any)?.QtyInPack || (item as any)?.qty_in_pack || 0);
+          const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
+          const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
+
+          if (hasVariablePackFeature) {
+            const kgQty = field === 'qty' ? numVal : (updated.qty || 0);
+            const bagQty = field === 'secQty' ? numVal : (updated.secQty || 0);
+            const dynamicPackSize = (kgQty > 0 && bagQty > 0) ? kgQty / bagQty : 0;
+
+            if (dynamicPackSize > 0) {
+              if (field === 'rate') {
+                // kgRate changed → adjust bagRate
+                updated.secRate = Math.round(numVal * dynamicPackSize * 100) / 100;
+              } else if (field === 'secRate') {
+                // bagRate changed → adjust kgRate
+                updated.rate = Math.round((numVal / dynamicPackSize) * 100) / 100;
+              } else if (field === 'qty' || field === 'secQty') {
+                // qty ratio changed → keep kgRate, recalculate bagRate
+                updated.secRate = Math.round((updated.rate || 0) * dynamicPackSize * 100) / 100;
+              }
+            }
+          }
+          console.log('[SaleForm updateLine]', { field, value, numVal, packSize, item: item?.title, targetItemId, rate: updated.rate, secRate: updated.secRate });
+
           const qty = updated.qty || 0;
           const rate = updated.rate || 0;
           const disc = updated.discount || 0;
-          const secQty = updated.secQty || 0;
-          const secRate = updated.secRate || 0;
-          updated.amount = (qty * (rate - disc)) + (secQty * secRate);
+          updated.amount = qty * (rate - disc);
           return updated;
         }
         return l;
@@ -560,7 +587,13 @@ export const SaleForm: React.FC = () => {
 
   const columns = [
     {
-      title: 'Item',
+      title: 'Seq',
+      dataIndex: 'seq',
+      key: 'seq',
+      width: 50,
+    },
+    {
+      title: 'Item Description',
       dataIndex: 'itemId',
       key: 'itemId',
       render: (text: string, record: any) => (
@@ -595,7 +628,7 @@ export const SaleForm: React.FC = () => {
         key: 'unit',
         width: 100,
         render: (text: string, record: any) => {
-          const item = items.find(i => i.id === record.itemId);
+          const item = items.find(i => String(i.id) === String(record.itemId));
           const filteredUnits = item
             ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit)
             : units;
@@ -616,7 +649,7 @@ export const SaleForm: React.FC = () => {
       }
     ] : []),
     {
-      title: hasSecondaryQty ? 'Single Qty' : 'Qty',
+      title: hasVariablePackFeature ? 'Qty (Kg)' : (hasSecondaryQty ? 'Single Qty' : 'Qty'),
       dataIndex: 'qty',
       key: 'qty',
       width: 90,
@@ -630,7 +663,7 @@ export const SaleForm: React.FC = () => {
       )
     },
     {
-      title: hasSecondaryQty ? 'Single Rate' : 'Rate',
+      title: hasVariablePackFeature ? 'Rate (/Kg)' : (hasSecondaryQty ? 'Single Rate' : 'Rate'),
       dataIndex: 'rate',
       key: 'rate',
       width: 100,
@@ -640,6 +673,7 @@ export const SaleForm: React.FC = () => {
           value={val}
           min={0}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+          parser={value => value?.replace(/[^0-9.]/g, '') as any}
           onChange={(v) => updateLine(record.key, 'rate', v)}
           tabIndex={-1}
         />
@@ -647,7 +681,7 @@ export const SaleForm: React.FC = () => {
     },
     ...(hasSecondaryQty ? [
       {
-        title: 'Pack Qty',
+        title: hasVariablePackFeature ? 'Bag Qty' : 'Pack Qty',
         dataIndex: 'secQty',
         key: 'secQty',
         width: 90,
@@ -661,7 +695,7 @@ export const SaleForm: React.FC = () => {
         )
       },
       {
-        title: 'Pack Rate',
+        title: hasVariablePackFeature ? 'Bag Rate' : 'Pack Rate',
         dataIndex: 'secRate',
         key: 'secRate',
         width: 100,
@@ -671,6 +705,7 @@ export const SaleForm: React.FC = () => {
             value={val}
             min={0}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            parser={value => value?.replace(/[^0-9.]/g, '') as any}
             onChange={(v) => updateLine(record.key, 'secRate', v)}
             tabIndex={-1}
           />

@@ -22,6 +22,7 @@ export const PurchaseForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+  const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const navigate = useNavigate();
@@ -77,7 +78,9 @@ export const PurchaseForm: React.FC = () => {
               qty: d.qty,
               rate: d.rate,
               addLess: d.addLess,
-              amount: d.amount,
+              amount: hasVariablePackFeature
+                ? (d.qty * d.rate) + (d.addLess || 0)
+                : d.amount,
               secQty: d.secQty,
               secRate: d.secRate,
               secUnit: d.secUnit
@@ -142,22 +145,53 @@ export const PurchaseForm: React.FC = () => {
       const updatedLines = prev.map(row => {
         if (row.key === key) {
           const updatedRow = { ...row, [field]: value };
+          const targetItemId = field === 'itemId' ? value : updatedRow.itemId;
+          const item = items.find(i => String(i.id) === String(targetItemId));
+
           if (field === 'itemId') {
-            const item = items.find(i => i.id === value);
             if (item) {
               updatedRow.unit = item.defaultUnit || item.primaryUnit;
-              updatedRow.rate = item.priRate;
+              updatedRow.rate = item.priRate || 0;
               updatedRow.secUnit = item.secondaryUnit;
-              updatedRow.secRate = item.secRate || 0;
+              const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 1);
+              updatedRow.secRate = item.secRate || ((item.priRate || 0) * (pSize > 0 ? pSize : 1));
               updatedRow.secQty = 0;
             }
           }
+
+          const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
+          const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
+
+          if (hasVariablePackFeature) {
+            const kgQty = field === 'qty' ? numVal : (updatedRow.qty || 0);
+            const bagQty = field === 'secQty' ? numVal : (updatedRow.secQty || 0);
+            const dynamicPackSize = (kgQty > 0 && bagQty > 0) ? kgQty / bagQty : 0;
+
+            if (dynamicPackSize > 0) {
+              if (field === 'rate') {
+                // kgRate changed → adjust bagRate
+                updatedRow.secRate = Math.round(numVal * dynamicPackSize * 100) / 100;
+              } else if (field === 'secRate') {
+                // bagRate changed → adjust kgRate
+                updatedRow.rate = Math.round((numVal / dynamicPackSize) * 100) / 100;
+              } else if (field === 'qty' || field === 'secQty') {
+                // qty ratio changed → keep kgRate, recalculate bagRate
+                updatedRow.secRate = Math.round((updatedRow.rate || 0) * dynamicPackSize * 100) / 100;
+              }
+            }
+          }
+
           const qty = updatedRow.qty || 0;
           const rate = updatedRow.rate || 0;
           const addLess = updatedRow.addLess || 0;
           const secQty = updatedRow.secQty || 0;
           const secRate = updatedRow.secRate || 0;
-          updatedRow.amount = (qty * rate) + addLess + (secQty * secRate);
+
+          if (hasVariablePackFeature) {
+            updatedRow.amount = (qty * rate) + addLess;
+          } else {
+            updatedRow.amount = (qty * rate) + addLess + (secQty * secRate);
+          }
           return updatedRow;
         }
         return row;
@@ -241,31 +275,38 @@ export const PurchaseForm: React.FC = () => {
 
   const columns = [
     {
-      title: 'Item',
+      title: 'Seq',
+      dataIndex: 'seq',
+      width: 60,
+    },
+    {
+      title: 'Item Description',
       dataIndex: 'itemId',
       render: (text: string, record: any) => (
         <Select
           showSearch
-          placeholder="Select Item"
-          value={text}
           style={{ width: '100%' }}
-          onChange={(val) => updateRow(record.key, 'itemId', val)}
+          placeholder="Select Item"
           optionFilterProp="children"
-        >
-          {items.map(item => (
-            <Select.Option key={item.id} value={item.id}>{item.title}</Select.Option>
-          ))}
-        </Select>
+          value={text}
+          onChange={(val) => updateRow(record.key, 'itemId', val)}
+          filterOption={(input, option) =>
+            (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+          }
+          options={items.map(i => ({ value: i.id, label: `${i.title} (${i.id})` }))}
+        />
       )
     },
     ...(!hasSecondaryQty ? [
       {
         title: 'Unit',
         dataIndex: 'unit',
-        width: 120,
+        width: 100,
         render: (text: string, record: any) => {
           const item = items.find(i => i.id === record.itemId);
-          const filteredUnits = units.filter(u => u.code === item?.primaryUnit || u.code === item?.secondaryUnit);
+          const filteredUnits = item
+            ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit)
+            : units;
           return (
             <Select
               value={text}
@@ -282,7 +323,7 @@ export const PurchaseForm: React.FC = () => {
       }
     ] : []),
     {
-      title: hasSecondaryQty ? 'Single Qty' : 'Qty',
+      title: hasVariablePackFeature ? 'Qty (Kg)' : (hasSecondaryQty ? 'Single Qty' : 'Qty'),
       dataIndex: 'qty',
       width: 100,
       render: (text: number, record: any) => (
@@ -290,7 +331,7 @@ export const PurchaseForm: React.FC = () => {
       )
     },
     {
-      title: hasSecondaryQty ? 'Single Rate' : 'Rate',
+      title: hasVariablePackFeature ? 'Rate (/Kg)' : (hasSecondaryQty ? 'Single Rate' : 'Rate'),
       dataIndex: 'rate',
       width: 120,
       render: (text: number, record: any) => (
@@ -300,12 +341,13 @@ export const PurchaseForm: React.FC = () => {
           onChange={(val) => updateRow(record.key, 'rate', val)}
           min={0}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+          parser={value => value?.replace(/\$\s?|(,*)/g, '') as any}
         />
       )
     },
     ...(hasSecondaryQty ? [
       {
-        title: 'Pack Qty',
+        title: hasVariablePackFeature ? 'Bag Qty' : 'Pack Qty',
         dataIndex: 'secQty',
         width: 100,
         render: (text: number, record: any) => (
@@ -313,7 +355,7 @@ export const PurchaseForm: React.FC = () => {
         )
       },
       {
-        title: 'Pack Rate',
+        title: hasVariablePackFeature ? 'Bag Rate' : 'Pack Rate',
         dataIndex: 'secRate',
         width: 120,
         render: (text: number, record: any) => (
@@ -323,6 +365,7 @@ export const PurchaseForm: React.FC = () => {
             onChange={(val) => updateRow(record.key, 'secRate', val)}
             min={0}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            parser={value => value?.replace(/\$\s?|(,*)/g, '') as any}
           />
         )
       }

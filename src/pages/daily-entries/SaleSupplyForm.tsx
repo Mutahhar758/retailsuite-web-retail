@@ -22,6 +22,7 @@ export const SaleSupplyForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+  const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
@@ -153,13 +154,34 @@ export const SaleSupplyForm: React.FC = () => {
     const newLines = supplyLines.map(l => {
       if (l.key === key) {
         const updated = { ...l, [field]: value };
+
+        const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
+        const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
+
+        if (hasVariablePackFeature) {
+          const kgQty = field === 'qty' ? numVal : (updated.qty || 0);
+          const bagQty = field === 'secQty' ? numVal : (updated.secQty || 0);
+          const dynamicPackSize = (kgQty > 0 && bagQty > 0) ? kgQty / bagQty : 0;
+          if (dynamicPackSize > 0) {
+            if (field === 'rate') {
+              updated.secRate = Math.round(numVal * dynamicPackSize * 100) / 100;
+            } else if (field === 'secRate') {
+              updated.rate = Math.round((numVal / dynamicPackSize) * 100) / 100;
+            } else if (field === 'qty' || field === 'secQty') {
+              updated.secRate = Math.round((updated.rate || 0) * dynamicPackSize * 100) / 100;
+            }
+          }
+        }
+
         const qty = updated.qty || 0;
         const rate = updated.rate || 0;
         const disc = updated.discount || 0;
         const addLess = updated.addLess || 0;
         const secQty = updated.secQty || 0;
         const secRate = updated.secRate || 0;
-        updated.amount = (qty * (rate - disc)) + addLess + (secQty * secRate);
+        updated.amount = hasVariablePackFeature
+          ? (qty * (rate - disc)) + addLess
+          : (qty * (rate - disc)) + addLess + (secQty * secRate);
         return updated;
       }
       return l;
