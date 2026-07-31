@@ -34,6 +34,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Activate new SW immediately — don't wait for all tabs to close
+        skipWaiting: true,
+        clientsClaim: true,
         // Cache the app shell (HTML, JS, CSS, fonts)
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // Raise limit to 4 MiB — the main bundle is ~2.16 MB
@@ -42,13 +45,26 @@ export default defineConfig({
         navigateFallback: 'index.html',
         runtimeCaching: [
           {
-            // Static assets — serve from cache, update in background
-            urlPattern: /^(?!.*\/api\/).*/,
+            // JS/CSS: NetworkFirst so new deploys are picked up immediately
+            urlPattern: /\.(?:js|css)$/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'js-css-assets',
+              networkTimeoutSeconds: 5,
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 24 * 60 * 60, // 1 day fallback
+              },
+            },
+          },
+          {
+            // Images/fonts: CacheFirst — they don't change between deploys
+            urlPattern: /\.(?:png|ico|svg|woff2)$/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'static-assets',
               expiration: {
-                maxEntries: 200,
+                maxEntries: 100,
                 maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
               },
             },
