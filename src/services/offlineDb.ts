@@ -34,7 +34,7 @@ interface CacheMeta {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DB_NAME = 'retail-offline-v1';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const CACHE_TTL_MS = 72 * 60 * 60 * 1000; // 72 hours
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -46,7 +46,18 @@ let dbPromise: Promise<IDBPDatabase> | null = null;
 function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion) {
+        // v1 → v2: items API now returns qtyInPack; wipe stale item cache so
+        // fresh data is fetched on next load.
+        if (oldVersion < 2) {
+          if (db.objectStoreNames.contains('cachedItems')) {
+            db.deleteObjectStore('cachedItems');
+          }
+          if (db.objectStoreNames.contains('cacheMetadata')) {
+            db.deleteObjectStore('cacheMetadata');
+          }
+        }
+
         // Offline sale queue
         if (!db.objectStoreNames.contains('offlineSaleQueue')) {
           db.createObjectStore('offlineSaleQueue', {
@@ -57,7 +68,6 @@ function getDb(): Promise<IDBPDatabase> {
         // Reference data caches
         for (const store of ['cachedItems', 'cachedCustomers', 'cachedNarrations', 'cachedUnits']) {
           if (!db.objectStoreNames.contains(store)) {
-            // Key path is set per-record when writing — use out-of-line key
             db.createObjectStore(store);
           }
         }
