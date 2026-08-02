@@ -53,7 +53,7 @@ export const StockAdjustmentForm: React.FC = () => {
     if (isEdit) {
       fetchDetail();
     } else {
-      setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0 }]);
+      setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0, packQty: 0, packing: 0 }]);
       form.setFieldsValue({ date: dayjs() });
     }
   }, [isEdit, voucherNo]);
@@ -70,17 +70,25 @@ export const StockAdjustmentForm: React.FC = () => {
           description: first.description
         });
 
-        setAdjustmentLines(details.map(d => ({
-          ...d,
-          key: d.seq || Date.now() + Math.random(),
-          amount: d.amount || (((d.qtyIn - d.qtyOut) * d.rate) + (((d.secQtyIn ?? 0) - (d.secQtyOut ?? 0)) * (d.secRate ?? 0))),
-          secQtyIn: d.secQtyIn,
-          secQtyOut: d.secQtyOut,
-          secRate: d.secRate,
-          secUnit: d.secUnit
-        })));
+        setAdjustmentLines(details.map(d => {
+          const netKg = (d.qtyIn || 0) - (d.qtyOut || 0);
+          const netBag = ((d.secQtyIn ?? 0) - (d.secQtyOut ?? 0));
+          const pQty = (d as any).qtyInPack || ((netKg > 0 && netBag > 0) ? Math.round((netKg / netBag) * 100) / 100 : 0);
+          const pCking = (d.rate > 0 && d.secRate && d.secRate > 0) ? Math.round((d.secRate / d.rate) * 100) / 100 : ((d as any).qtyInPack || 0);
+          return {
+            ...d,
+            key: d.seq || Date.now() + Math.random(),
+            amount: d.amount || (((d.qtyIn - d.qtyOut) * d.rate) + (((d.secQtyIn ?? 0) - (d.secQtyOut ?? 0)) * (d.secRate ?? 0))),
+            secQtyIn: d.secQtyIn,
+            secQtyOut: d.secQtyOut,
+            secRate: d.secRate,
+            secUnit: d.secUnit,
+            packQty: pQty,
+            packing: pCking
+          };
+        }));
       } else {
-        setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0 }]);
+        setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0, packQty: 0, packing: 0 }]);
       }
     } catch (error) {
       message.error('Failed to fetch stock adjustment details');
@@ -92,7 +100,7 @@ export const StockAdjustmentForm: React.FC = () => {
   const handleAddRow = () => {
     setAdjustmentLines(prev => {
       const newSeq = prev.length > 0 ? Math.max(...prev.map(l => l.seq)) + 1 : 1;
-      return [...prev, { key: Date.now(), seq: newSeq, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0 }];
+      return [...prev, { key: Date.now(), seq: newSeq, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0, packQty: 0, packing: 0 }];
     });
   };
 
@@ -120,6 +128,9 @@ export const StockAdjustmentForm: React.FC = () => {
               updated.rate = item.priRate;
               updated.itemCategoryCode = item.itemCategoryCode;
               updated.secUnit = item.secondaryUnit;
+              const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 0);
+              updated.packQty = pSize;
+              updated.packing = pSize;
               updated.secRate = item.secRate || 0;
               updated.secQtyIn = 0;
               updated.secQtyOut = 0;
@@ -130,19 +141,55 @@ export const StockAdjustmentForm: React.FC = () => {
           const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
 
           if (hasVariablePackFeature) {
-            // For adjustment: use qtyIn as primary, secQtyIn as bag qty
-            const kgQty = field === 'qtyIn' ? numVal : (updated.qtyIn || 0);
-            const bagQty = field === 'secQtyIn' ? numVal : (updated.secQtyIn || 0);
-            const dynamicPackSize = (kgQty > 0 && bagQty > 0) ? kgQty / bagQty : 0;
-            if (dynamicPackSize > 0) {
-              if (field === 'rate') {
-                updated.secRate = Math.round(numVal * dynamicPackSize * 100) / 100;
-              } else if (field === 'secRate') {
-                updated.rate = Math.round((numVal / dynamicPackSize) * 100) / 100;
-              } else if (field === 'qtyIn' || field === 'secQtyIn') {
-                updated.secRate = Math.round((updated.rate || 0) * dynamicPackSize * 100) / 100;
+            let kgQty = (field === 'qtyIn' ? numVal : (updated.qtyIn || 0)) - (field === 'qtyOut' ? numVal : (updated.qtyOut || 0));
+            let bagQty = (field === 'secQtyIn' ? numVal : (updated.secQtyIn || 0)) - (field === 'secQtyOut' ? numVal : (updated.secQtyOut || 0));
+            let packQty = updated.packQty || 0;
+            let packing = updated.packing || 0;
+            let kgRate = updated.rate || 0;
+            let bagRate = updated.secRate || 0;
+
+            if (field === 'qtyIn' || field === 'qtyOut') {
+              kgQty = Math.max(0, kgQty);
+              if (bagQty > 0) {
+                packQty = Math.round((kgQty / bagQty) * 100) / 100;
+              } else if (packQty > 0) {
+                if (field === 'qtyIn') updated.secQtyIn = Math.round((numVal / packQty) * 100) / 100;
+              }
+            } else if (field === 'secQtyIn' || field === 'secQtyOut') {
+              bagQty = Math.max(0, bagQty);
+              if (packQty > 0) {
+                if (field === 'secQtyIn') updated.qtyIn = Math.round((numVal * packQty) * 100) / 100;
+              }
+            } else if (field === 'packQty') {
+              packQty = numVal;
+              if (updated.secQtyIn > 0) {
+                updated.qtyIn = Math.round((updated.secQtyIn * packQty) * 100) / 100;
+              }
+            } else if (field === 'packing') {
+              packing = numVal;
+              if (packing > 0) {
+                if (bagRate > 0) {
+                  kgRate = Math.round((bagRate / packing) * 100) / 100;
+                } else if (kgRate > 0) {
+                  bagRate = Math.round((kgRate * packing) * 100) / 100;
+                }
+              }
+            } else if (field === 'rate') {
+              kgRate = numVal;
+              if (packing > 0) {
+                bagRate = Math.round((kgRate * packing) * 100) / 100;
+              }
+            } else if (field === 'secRate') {
+              bagRate = numVal;
+              if (packing > 0) {
+                kgRate = Math.round((bagRate / packing) * 100) / 100;
               }
             }
+
+            updated.packQty = Math.round((packQty || 0) * 100) / 100;
+            updated.packing = Math.round((packing || 0) * 100) / 100;
+            updated.rate = Math.round((kgRate || 0) * 100) / 100;
+            updated.secRate = Math.round((bagRate || 0) * 100) / 100;
           }
 
           const qtyIn = updated.qtyIn || 0;
@@ -152,8 +199,8 @@ export const StockAdjustmentForm: React.FC = () => {
           const secQtyOut = updated.secQtyOut || 0;
           const secRate = updated.secRate || 0;
           updated.amount = hasVariablePackFeature
-            ? (qtyIn - qtyOut) * rate
-            : ((qtyIn - qtyOut) * rate) + ((secQtyIn - secQtyOut) * secRate);
+            ? Math.round(((qtyIn - qtyOut) * rate) * 100) / 100
+            : Math.round((((qtyIn - qtyOut) * rate) + ((secQtyIn - secQtyOut) * secRate)) * 100) / 100;
           return updated;
         }
         return l;
@@ -162,7 +209,7 @@ export const StockAdjustmentForm: React.FC = () => {
       const lastRow = newLines[newLines.length - 1];
       if (lastRow.key === key && lastRow.itemId && (lastRow.qtyIn !== 0 || lastRow.qtyOut !== 0 || (lastRow.secQtyIn || 0) !== 0 || (lastRow.secQtyOut || 0) !== 0)) {
         const newSeq = newLines.length > 0 ? Math.max(...newLines.map(l => l.seq)) + 1 : 1;
-        return [...newLines, { key: Date.now() + 1, seq: newSeq, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0 }];
+        return [...newLines, { key: Date.now() + 1, seq: newSeq, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0, packQty: 0, packing: 0 }];
       }
       return newLines;
     });
@@ -195,7 +242,8 @@ export const StockAdjustmentForm: React.FC = () => {
           secUnit: l.secUnit || null,
           secQtyIn: l.secQtyIn || 0,
           secQtyOut: l.secQtyOut || 0,
-          secRate: l.secRate || 0
+          secRate: l.secRate || 0,
+          qtyInPack: l.packQty || l.qtyInPack || null
         }))
       };
 
@@ -267,7 +315,7 @@ export const StockAdjustmentForm: React.FC = () => {
       }
     ] : []),
     {
-      title: hasSecondaryQty ? 'Single Qty In' : 'Qty In',
+      title: hasVariablePackFeature ? 'Qty In (Kg)' : (hasSecondaryQty ? 'Single Qty In' : 'Qty In'),
       dataIndex: 'qtyIn',
       key: 'qtyIn',
       width: 100,
@@ -282,7 +330,7 @@ export const StockAdjustmentForm: React.FC = () => {
       )
     },
     {
-      title: hasSecondaryQty ? 'Single Qty Out' : 'Qty Out',
+      title: hasVariablePackFeature ? 'Qty Out (Kg)' : (hasSecondaryQty ? 'Single Qty Out' : 'Qty Out'),
       dataIndex: 'qtyOut',
       key: 'qtyOut',
       width: 100,
@@ -296,8 +344,46 @@ export const StockAdjustmentForm: React.FC = () => {
         />
       )
     },
+    ...(hasVariablePackFeature ? [
+      {
+        title: 'Bag Qty In',
+        dataIndex: 'secQtyIn',
+        key: 'secQtyIn',
+        width: 100,
+        render: (val: number, record: any) => (
+          <InputNumber style={{ width: '100%' }} value={val} step={0.001} precision={3} onChange={(v) => updateLine(record.key, 'secQtyIn', v)} />
+        )
+      },
+      {
+        title: 'Bag Qty Out',
+        dataIndex: 'secQtyOut',
+        key: 'secQtyOut',
+        width: 100,
+        render: (val: number, record: any) => (
+          <InputNumber style={{ width: '100%' }} value={val} step={0.001} precision={3} onChange={(v) => updateLine(record.key, 'secQtyOut', v)} />
+        )
+      },
+      {
+        title: 'Pack Qty',
+        dataIndex: 'packQty',
+        key: 'packQty',
+        width: 100,
+        render: (val: number, record: any) => (
+          <InputNumber style={{ width: '100%' }} value={val} precision={2} onChange={(v) => updateLine(record.key, 'packQty', v)} />
+        )
+      },
+      {
+        title: 'Packing',
+        dataIndex: 'packing',
+        key: 'packing',
+        width: 100,
+        render: (val: number, record: any) => (
+          <InputNumber style={{ width: '100%' }} value={val} precision={2} onChange={(v) => updateLine(record.key, 'packing', v)} />
+        )
+      }
+    ] : []),
     {
-      title: hasSecondaryQty ? 'Single Rate' : 'Rate',
+      title: hasVariablePackFeature ? 'Rate (/Kg)' : (hasSecondaryQty ? 'Single Rate' : 'Rate'),
       dataIndex: 'rate',
       key: 'rate',
       width: 120,
@@ -312,39 +398,9 @@ export const StockAdjustmentForm: React.FC = () => {
         />
       )
     },
-    ...(hasSecondaryQty ? [
+    ...((hasSecondaryQty || hasVariablePackFeature) ? [
       {
-        title: 'Pack Qty In',
-        dataIndex: 'secQtyIn',
-        key: 'secQtyIn',
-        width: 100,
-        render: (val: number, record: any) => (
-          <InputNumber 
-            style={{ width: '100%' }} 
-            value={val} 
-            step={0.001}
-            precision={3}
-            onChange={(v) => updateLine(record.key, 'secQtyIn', v)} 
-          />
-        )
-      },
-      {
-        title: 'Pack Qty Out',
-        dataIndex: 'secQtyOut',
-        key: 'secQtyOut',
-        width: 100,
-        render: (val: number, record: any) => (
-          <InputNumber 
-            style={{ width: '100%' }} 
-            value={val} 
-            step={0.001}
-            precision={3}
-            onChange={(v) => updateLine(record.key, 'secQtyOut', v)} 
-          />
-        )
-      },
-      {
-        title: 'Pack Rate',
+        title: hasVariablePackFeature ? 'Bag Rate' : 'Pack Rate',
         dataIndex: 'secRate',
         key: 'secRate',
         width: 120,
@@ -357,6 +413,26 @@ export const StockAdjustmentForm: React.FC = () => {
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             onChange={(v) => updateLine(record.key, 'secRate', v)}
           />
+        )
+      }
+    ] : []),
+    ...(hasSecondaryQty && !hasVariablePackFeature ? [
+      {
+        title: 'Pack Qty In',
+        dataIndex: 'secQtyIn',
+        key: 'secQtyIn',
+        width: 100,
+        render: (val: number, record: any) => (
+          <InputNumber style={{ width: '100%' }} value={val} step={0.001} precision={3} onChange={(v) => updateLine(record.key, 'secQtyIn', v)} />
+        )
+      },
+      {
+        title: 'Pack Qty Out',
+        dataIndex: 'secQtyOut',
+        key: 'secQtyOut',
+        width: 100,
+        render: (val: number, record: any) => (
+          <InputNumber style={{ width: '100%' }} value={val} step={0.001} precision={3} onChange={(v) => updateLine(record.key, 'secQtyOut', v)} />
         )
       }
     ] : []),

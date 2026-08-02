@@ -64,7 +64,7 @@ export const SaleForm: React.FC = () => {
       cashReceipt: 0,
       cashBack: 0,
       date: dayjs(),
-      saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }]
+      saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]
     }];
   });
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
@@ -172,7 +172,7 @@ export const SaleForm: React.FC = () => {
       cashReceipt: 0,
       cashBack: 0,
       date: dayjs(),
-      saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }]
+      saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]
     };
 
     setTabs(prev => [...prev, newTab]);
@@ -281,7 +281,7 @@ export const SaleForm: React.FC = () => {
     if (isEdit) {
       fetchDetail();
     } else {
-      setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }]);
+      setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
       form.setFieldsValue({ date: dayjs() });
     }
     focusCustomerSelect();
@@ -325,18 +325,24 @@ export const SaleForm: React.FC = () => {
           cashBack: first.cashBack
         });
 
-        setSaleLines(details.map(d => ({
-          ...d,
-          key: d.seq,
-          rate: d.rate,
-          discount: d.discount,
-          amount: hasVariablePackFeature
-            ? d.qty * (d.rate - (d.discount || 0))
-            : d.amount,
-          secUnit: d.secUnit,
-          secQty: d.secQty,
-          secRate: d.secRate
-        })));
+        setSaleLines(details.map(d => {
+          const pQty = (d as any).qtyInPack || ((d.qty > 0 && d.secQty && d.secQty > 0) ? Math.round((d.qty / d.secQty) * 100) / 100 : 0);
+          const pCking = (d.rate > 0 && d.secRate && d.secRate > 0) ? Math.round((d.secRate / d.rate) * 100) / 100 : ((d as any).qtyInPack || 0);
+          return {
+            ...d,
+            key: d.seq,
+            rate: d.rate,
+            discount: d.discount,
+            amount: hasVariablePackFeature
+              ? d.qty * (d.rate - (d.discount || 0))
+              : d.amount,
+            secUnit: d.secUnit,
+            secQty: d.secQty,
+            secRate: d.secRate,
+            packQty: pQty,
+            packing: pCking
+          };
+        }));
       }
     } catch {
       message.error('Failed to fetch sale details');
@@ -433,40 +439,79 @@ export const SaleForm: React.FC = () => {
               updated.unit = item.defaultUnit || item.primaryUnit;
               updated.rate = item.priRate || 0;
               updated.secUnit = item.secondaryUnit;
-              const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 1);
+              const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 0);
+              updated.packQty = pSize;
+              updated.packing = pSize;
               updated.secRate = item.secRate || ((item.priRate || 0) * (pSize > 0 ? pSize : 1));
               updated.secQty = 0;
             }
           }
 
-          const packSize = Number(item?.qtyInPack || (item as any)?.QtyInPack || (item as any)?.qty_in_pack || 0);
           const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
           const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
 
           if (hasVariablePackFeature) {
-            const kgQty = field === 'qty' ? numVal : (updated.qty || 0);
-            const bagQty = field === 'secQty' ? numVal : (updated.secQty || 0);
-            const dynamicPackSize = (kgQty > 0 && bagQty > 0) ? kgQty / bagQty : 0;
+            let kgQty = updated.qty || 0;
+            let bagQty = updated.secQty || 0;
+            let packQty = updated.packQty || 0;
+            let packing = updated.packing || 0;
+            let kgRate = updated.rate || 0;
+            let bagRate = updated.secRate || 0;
 
-            if (dynamicPackSize > 0) {
-              if (field === 'rate') {
-                // kgRate changed → adjust bagRate
-                updated.secRate = Math.round(numVal * dynamicPackSize * 100) / 100;
-              } else if (field === 'secRate') {
-                // bagRate changed → adjust kgRate
-                updated.rate = Math.round((numVal / dynamicPackSize) * 100) / 100;
-              } else if (field === 'qty' || field === 'secQty') {
-                // qty ratio changed → keep kgRate, recalculate bagRate
-                updated.secRate = Math.round((updated.rate || 0) * dynamicPackSize * 100) / 100;
+            if (field === 'qty') {
+              kgQty = numVal;
+              if (bagQty > 0) {
+                packQty = Math.round((kgQty / bagQty) * 100) / 100;
+              } else if (packQty > 0) {
+                bagQty = Math.round((kgQty / packQty) * 100) / 100;
+              }
+            } else if (field === 'secQty') {
+              bagQty = numVal;
+              if (packQty > 0) {
+                kgQty = Math.round((bagQty * packQty) * 100) / 100;
+              } else if (kgQty > 0) {
+                packQty = Math.round((kgQty / bagQty) * 100) / 100;
+              }
+            } else if (field === 'packQty') {
+              packQty = numVal;
+              if (bagQty > 0) {
+                kgQty = Math.round((bagQty * packQty) * 100) / 100;
+              } else if (kgQty > 0) {
+                bagQty = Math.round((kgQty / packQty) * 100) / 100;
+              }
+            } else if (field === 'packing') {
+              packing = numVal;
+              if (packing > 0) {
+                if (bagRate > 0) {
+                  kgRate = Math.round((bagRate / packing) * 100) / 100;
+                } else if (kgRate > 0) {
+                  bagRate = Math.round((kgRate * packing) * 100) / 100;
+                }
+              }
+            } else if (field === 'rate') {
+              kgRate = numVal;
+              if (packing > 0) {
+                bagRate = Math.round((kgRate * packing) * 100) / 100;
+              }
+            } else if (field === 'secRate') {
+              bagRate = numVal;
+              if (packing > 0) {
+                kgRate = Math.round((bagRate / packing) * 100) / 100;
               }
             }
+
+            updated.qty = Math.round((kgQty || 0) * 100) / 100;
+            updated.secQty = Math.round((bagQty || 0) * 100) / 100;
+            updated.packQty = Math.round((packQty || 0) * 100) / 100;
+            updated.packing = Math.round((packing || 0) * 100) / 100;
+            updated.rate = Math.round((kgRate || 0) * 100) / 100;
+            updated.secRate = Math.round((bagRate || 0) * 100) / 100;
           }
-          console.log('[SaleForm updateLine]', { field, value, numVal, packSize, item: item?.title, targetItemId, rate: updated.rate, secRate: updated.secRate });
 
           const qty = updated.qty || 0;
           const rate = updated.rate || 0;
           const disc = updated.discount || 0;
-          updated.amount = qty * (rate - disc);
+          updated.amount = Math.round((qty * (rate - disc)) * 100) / 100;
           return updated;
         }
         return l;
@@ -475,7 +520,7 @@ export const SaleForm: React.FC = () => {
       const lastRow = newLines[newLines.length - 1];
       if (lastRow.key === key && lastRow.itemId) {
         const newSeq = newLines.length > 0 ? Math.max(...newLines.map(l => l.seq)) + 1 : 1;
-        return [...newLines, { key: Date.now() + 1, seq: newSeq, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }];
+        return [...newLines, { key: Date.now() + 1, seq: newSeq, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }];
       }
 
       return newLines;
@@ -539,7 +584,8 @@ export const SaleForm: React.FC = () => {
             discount: l.discount,
             secUnit: l.secUnit || null,
             secQty: l.secQty || 0,
-            secRate: l.secRate || 0
+            secRate: l.secRate || 0,
+            qtyInPack: l.packQty || l.qtyInPack || null
           };
         })
       };
@@ -658,10 +704,58 @@ export const SaleForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
+          precision={2}
           onChange={(v) => updateLine(record.key, 'qty', v)}
         />
       )
     },
+    ...(hasVariablePackFeature ? [
+      {
+        title: 'Bag Qty',
+        dataIndex: 'secQty',
+        key: 'secQty',
+        width: 90,
+        render: (val: number, record: any) => (
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            precision={2}
+            onChange={(v) => updateLine(record.key, 'secQty', v)}
+          />
+        )
+      },
+      {
+        title: 'Pack Qty',
+        dataIndex: 'packQty',
+        key: 'packQty',
+        width: 90,
+        render: (val: number, record: any) => (
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            precision={2}
+            onChange={(v) => updateLine(record.key, 'packQty', v)}
+          />
+        )
+      },
+      {
+        title: 'Packing',
+        dataIndex: 'packing',
+        key: 'packing',
+        width: 90,
+        render: (val: number, record: any) => (
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            precision={2}
+            onChange={(v) => updateLine(record.key, 'packing', v)}
+          />
+        )
+      }
+    ] : []),
     {
       title: hasVariablePackFeature ? 'Rate (/Kg)' : (hasSecondaryQty ? 'Single Rate' : 'Rate'),
       dataIndex: 'rate',
@@ -672,6 +766,7 @@ export const SaleForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
+          precision={2}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           parser={value => value?.replace(/[^0-9.]/g, '') as any}
           onChange={(v) => updateLine(record.key, 'rate', v)}
@@ -679,21 +774,7 @@ export const SaleForm: React.FC = () => {
         />
       )
     },
-    ...(hasSecondaryQty ? [
-      {
-        title: hasVariablePackFeature ? 'Bag Qty' : 'Pack Qty',
-        dataIndex: 'secQty',
-        key: 'secQty',
-        width: 90,
-        render: (val: number, record: any) => (
-          <InputNumber
-            style={{ width: '100%' }}
-            value={val}
-            min={0}
-            onChange={(v) => updateLine(record.key, 'secQty', v)}
-          />
-        )
-      },
+    ...((hasSecondaryQty || hasVariablePackFeature) ? [
       {
         title: hasVariablePackFeature ? 'Bag Rate' : 'Pack Rate',
         dataIndex: 'secRate',
@@ -704,10 +785,27 @@ export const SaleForm: React.FC = () => {
             style={{ width: '100%' }}
             value={val}
             min={0}
+            precision={2}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             parser={value => value?.replace(/[^0-9.]/g, '') as any}
             onChange={(v) => updateLine(record.key, 'secRate', v)}
             tabIndex={-1}
+          />
+        )
+      }
+    ] : []),
+    ...(hasSecondaryQty && !hasVariablePackFeature ? [
+      {
+        title: 'Pack Qty',
+        dataIndex: 'secQty',
+        key: 'secQty',
+        width: 90,
+        render: (val: number, record: any) => (
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            onChange={(v) => updateLine(record.key, 'secQty', v)}
           />
         )
       }

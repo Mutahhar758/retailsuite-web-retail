@@ -83,7 +83,9 @@ export const PurchaseForm: React.FC = () => {
                 : d.amount,
               secQty: d.secQty,
               secRate: d.secRate,
-              secUnit: d.secUnit
+              secUnit: d.secUnit,
+              packQty: (d as any).qtyInPack || ((d.qty > 0 && d.secQty && d.secQty > 0) ? Math.round((d.qty / d.secQty) * 100) / 100 : 0),
+              packing: (d.rate > 0 && d.secRate && d.secRate > 0) ? Math.round((d.secRate / d.rate) * 100) / 100 : ((d as any).qtyInPack || 0)
             })));
           }
         } catch (error) {
@@ -106,7 +108,9 @@ export const PurchaseForm: React.FC = () => {
         addLess: 0,
         amount: 0,
         secQty: 0,
-        secRate: 0
+        secRate: 0,
+        packQty: 0,
+        packing: 0
       }]);
     }
   }, [isEdit, voucherNo, form, navigate]);
@@ -123,7 +127,9 @@ export const PurchaseForm: React.FC = () => {
       addLess: 0,
       amount: 0,
       secQty: 0,
-      secRate: 0
+      secRate: 0,
+      packQty: 0,
+      packing: 0
     };
     setPurchaseLines([...purchaseLines, newRow]);
   };
@@ -153,7 +159,9 @@ export const PurchaseForm: React.FC = () => {
               updatedRow.unit = item.defaultUnit || item.primaryUnit;
               updatedRow.rate = item.priRate || 0;
               updatedRow.secUnit = item.secondaryUnit;
-              const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 1);
+              const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 0);
+              updatedRow.packQty = pSize;
+              updatedRow.packing = pSize;
               updatedRow.secRate = item.secRate || ((item.priRate || 0) * (pSize > 0 ? pSize : 1));
               updatedRow.secQty = 0;
             }
@@ -163,22 +171,61 @@ export const PurchaseForm: React.FC = () => {
           const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
 
           if (hasVariablePackFeature) {
-            const kgQty = field === 'qty' ? numVal : (updatedRow.qty || 0);
-            const bagQty = field === 'secQty' ? numVal : (updatedRow.secQty || 0);
-            const dynamicPackSize = (kgQty > 0 && bagQty > 0) ? kgQty / bagQty : 0;
+            let kgQty = updatedRow.qty || 0;
+            let bagQty = updatedRow.secQty || 0;
+            let packQty = updatedRow.packQty || 0;
+            let packing = updatedRow.packing || 0;
+            let kgRate = updatedRow.rate || 0;
+            let bagRate = updatedRow.secRate || 0;
 
-            if (dynamicPackSize > 0) {
-              if (field === 'rate') {
-                // kgRate changed → adjust bagRate
-                updatedRow.secRate = Math.round(numVal * dynamicPackSize * 100) / 100;
-              } else if (field === 'secRate') {
-                // bagRate changed → adjust kgRate
-                updatedRow.rate = Math.round((numVal / dynamicPackSize) * 100) / 100;
-              } else if (field === 'qty' || field === 'secQty') {
-                // qty ratio changed → keep kgRate, recalculate bagRate
-                updatedRow.secRate = Math.round((updatedRow.rate || 0) * dynamicPackSize * 100) / 100;
+            if (field === 'qty') {
+              kgQty = numVal;
+              if (bagQty > 0) {
+                packQty = Math.round((kgQty / bagQty) * 100) / 100;
+              } else if (packQty > 0) {
+                bagQty = Math.round((kgQty / packQty) * 100) / 100;
+              }
+            } else if (field === 'secQty') {
+              bagQty = numVal;
+              if (packQty > 0) {
+                kgQty = Math.round((bagQty * packQty) * 100) / 100;
+              } else if (kgQty > 0) {
+                packQty = Math.round((kgQty / bagQty) * 100) / 100;
+              }
+            } else if (field === 'packQty') {
+              packQty = numVal;
+              if (bagQty > 0) {
+                kgQty = Math.round((bagQty * packQty) * 100) / 100;
+              } else if (kgQty > 0) {
+                bagQty = Math.round((kgQty / packQty) * 100) / 100;
+              }
+            } else if (field === 'packing') {
+              packing = numVal;
+              if (packing > 0) {
+                if (bagRate > 0) {
+                  kgRate = Math.round((bagRate / packing) * 100) / 100;
+                } else if (kgRate > 0) {
+                  bagRate = Math.round((kgRate * packing) * 100) / 100;
+                }
+              }
+            } else if (field === 'rate') {
+              kgRate = numVal;
+              if (packing > 0) {
+                bagRate = Math.round((kgRate * packing) * 100) / 100;
+              }
+            } else if (field === 'secRate') {
+              bagRate = numVal;
+              if (packing > 0) {
+                kgRate = Math.round((bagRate / packing) * 100) / 100;
               }
             }
+
+            updatedRow.qty = Math.round((kgQty || 0) * 100) / 100;
+            updatedRow.secQty = Math.round((bagQty || 0) * 100) / 100;
+            updatedRow.packQty = Math.round((packQty || 0) * 100) / 100;
+            updatedRow.packing = Math.round((packing || 0) * 100) / 100;
+            updatedRow.rate = Math.round((kgRate || 0) * 100) / 100;
+            updatedRow.secRate = Math.round((bagRate || 0) * 100) / 100;
           }
 
           const qty = updatedRow.qty || 0;
@@ -188,9 +235,9 @@ export const PurchaseForm: React.FC = () => {
           const secRate = updatedRow.secRate || 0;
 
           if (hasVariablePackFeature) {
-            updatedRow.amount = (qty * rate) + addLess;
+            updatedRow.amount = Math.round(((qty * rate) + addLess) * 100) / 100;
           } else {
-            updatedRow.amount = (qty * rate) + addLess + (secQty * secRate);
+            updatedRow.amount = Math.round(((qty * rate) + addLess + (secQty * secRate)) * 100) / 100;
           }
           return updatedRow;
         }
@@ -210,7 +257,9 @@ export const PurchaseForm: React.FC = () => {
           addLess: 0,
           amount: 0,
           secQty: 0,
-          secRate: 0
+          secRate: 0,
+          packQty: 0,
+          packing: 0
         }];
       }
       return updatedLines;
@@ -254,7 +303,8 @@ export const PurchaseForm: React.FC = () => {
           addLess: l.addLess,
           secUnit: l.secUnit || null,
           secQty: l.secQty || 0,
-          secRate: l.secRate || 0
+          secRate: l.secRate || 0,
+          qtyInPack: l.packQty || l.qtyInPack || null
         }))
       };
 
@@ -327,9 +377,35 @@ export const PurchaseForm: React.FC = () => {
       dataIndex: 'qty',
       width: 100,
       render: (text: number, record: any) => (
-        <InputNumber value={text} style={{ width: '100%' }} onChange={(val) => updateRow(record.key, 'qty', val)} min={0} />
+        <InputNumber value={text} style={{ width: '100%' }} onChange={(val) => updateRow(record.key, 'qty', val)} min={0} precision={2} />
       )
     },
+    ...(hasVariablePackFeature ? [
+      {
+        title: 'Bag Qty',
+        dataIndex: 'secQty',
+        width: 100,
+        render: (text: number, record: any) => (
+          <InputNumber value={text} style={{ width: '100%' }} onChange={(val) => updateRow(record.key, 'secQty', val)} min={0} precision={2} />
+        )
+      },
+      {
+        title: 'Pack Qty',
+        dataIndex: 'packQty',
+        width: 100,
+        render: (text: number, record: any) => (
+          <InputNumber value={text} style={{ width: '100%' }} onChange={(val) => updateRow(record.key, 'packQty', val)} min={0} precision={2} />
+        )
+      },
+      {
+        title: 'Packing',
+        dataIndex: 'packing',
+        width: 100,
+        render: (text: number, record: any) => (
+          <InputNumber value={text} style={{ width: '100%' }} onChange={(val) => updateRow(record.key, 'packing', val)} min={0} precision={2} />
+        )
+      }
+    ] : []),
     {
       title: hasVariablePackFeature ? 'Rate (/Kg)' : (hasSecondaryQty ? 'Single Rate' : 'Rate'),
       dataIndex: 'rate',
@@ -340,20 +416,13 @@ export const PurchaseForm: React.FC = () => {
           style={{ width: '100%' }}
           onChange={(val) => updateRow(record.key, 'rate', val)}
           min={0}
+          precision={2}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           parser={value => value?.replace(/\$\s?|(,*)/g, '') as any}
         />
       )
     },
-    ...(hasSecondaryQty ? [
-      {
-        title: hasVariablePackFeature ? 'Bag Qty' : 'Pack Qty',
-        dataIndex: 'secQty',
-        width: 100,
-        render: (text: number, record: any) => (
-          <InputNumber value={text} style={{ width: '100%' }} onChange={(val) => updateRow(record.key, 'secQty', val)} min={0} />
-        )
-      },
+    ...((hasSecondaryQty || hasVariablePackFeature) ? [
       {
         title: hasVariablePackFeature ? 'Bag Rate' : 'Pack Rate',
         dataIndex: 'secRate',
@@ -364,9 +433,20 @@ export const PurchaseForm: React.FC = () => {
             style={{ width: '100%' }}
             onChange={(val) => updateRow(record.key, 'secRate', val)}
             min={0}
+            precision={2}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             parser={value => value?.replace(/\$\s?|(,*)/g, '') as any}
           />
+        )
+      }
+    ] : []),
+    ...(hasSecondaryQty && !hasVariablePackFeature ? [
+      {
+        title: 'Pack Qty',
+        dataIndex: 'secQty',
+        width: 100,
+        render: (text: number, record: any) => (
+          <InputNumber value={text} style={{ width: '100%' }} onChange={(val) => updateRow(record.key, 'secQty', val)} min={0} />
         )
       }
     ] : []),
