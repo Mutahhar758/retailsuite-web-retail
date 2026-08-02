@@ -770,7 +770,7 @@ export const SaleForm: React.FC = () => {
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           parser={value => value?.replace(/[^0-9.]/g, '') as any}
           onChange={(v) => updateLine(record.key, 'rate', v)}
-          tabIndex={-1}
+          tabIndex={hasVariablePackFeature ? 0 : -1}
         />
       )
     },
@@ -789,7 +789,7 @@ export const SaleForm: React.FC = () => {
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             parser={value => value?.replace(/[^0-9.]/g, '') as any}
             onChange={(v) => updateLine(record.key, 'secRate', v)}
-            tabIndex={-1}
+            tabIndex={hasVariablePackFeature ? 0 : -1}
           />
         )
       }
