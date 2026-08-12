@@ -6,9 +6,8 @@ import {
 } from 'antd';
 import {
   UserOutlined, CalendarOutlined, SaveOutlined, ReloadOutlined,
-  PlusOutlined, DeleteOutlined, EditOutlined, FileTextOutlined,
-  TruckOutlined, CheckCircleOutlined, ShoppingCartOutlined, DollarOutlined,
-  AppstoreOutlined
+  PlusOutlined, DeleteOutlined, TruckOutlined, ShoppingCartOutlined,
+  DollarOutlined, AppstoreOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
