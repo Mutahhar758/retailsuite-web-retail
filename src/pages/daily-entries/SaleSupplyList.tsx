@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, TruckOutlined, 
-  SearchOutlined, ReloadOutlined, CopyOutlined
+  SearchOutlined, ReloadOutlined, CopyOutlined, UserOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -164,14 +164,24 @@ export const SaleSupplyList: React.FC = () => {
             <Text type="secondary">Manage multi-customer bulk item distributions</Text>
           </div>
         </Space>
-        <Button 
-          type="primary" 
-          icon={<PlusOutlined />} 
-          onClick={() => navigate('/daily-entries/sale-supply/new')}
-          style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}
-        >
-          New Sale Supply
-        </Button>
+        <Space>
+          <Button 
+            type="default"
+            icon={<UserOutlined />} 
+            onClick={() => navigate('/daily-entries/customer-supply')}
+            style={{ fontWeight: 600 }}
+          >
+            Customer Supply Register
+          </Button>
+          <Button 
+            type="primary" 
+            icon={<PlusOutlined />} 
+            onClick={() => navigate('/daily-entries/sale-supply/new')}
+            style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}
+          >
+            New Sale Supply
+          </Button>
+        </Space>
       </div>
 
       <Form

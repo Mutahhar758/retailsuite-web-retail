@@ -19,6 +19,7 @@ import { SaleForm } from './pages/daily-entries/SaleForm';
 import { POSSaleForm } from './pages/daily-entries/POSSaleForm';
 import { SaleSupplyList } from './pages/daily-entries/SaleSupplyList';
 import { SaleSupplyForm } from './pages/daily-entries/SaleSupplyForm';
+import { CustomerSupplyRegister } from './pages/daily-entries/CustomerSupplyRegister';
 import { SupplyOrderList } from './pages/daily-entries/SupplyOrderList';
 import { SupplyOrderForm } from './pages/daily-entries/SupplyOrderForm';
 import { SaleReturnList } from './pages/daily-entries/SaleReturnList';
@@ -147,6 +148,7 @@ function App() {
              <Route path="daily-entries/sale-supply" element={<SaleSupplyList />} />
              <Route path="daily-entries/sale-supply/new" element={<SaleSupplyForm />} />
              <Route path="daily-entries/sale-supply/:voucherNo" element={<SaleSupplyForm />} />
+             <Route path="daily-entries/customer-supply" element={<CustomerSupplyRegister />} />
 
             <Route path="daily-entries/sale-return" element={<SaleReturnList />} />
             <Route path="daily-entries/sale-return/new" element={<SaleReturnForm />} />
