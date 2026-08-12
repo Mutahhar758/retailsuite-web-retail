@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Card, Typography, Form, DatePicker, Select, Button,
-  Table, Space, Tag, message, Divider
+  Table, Space, Tag, message, Divider, Radio
 } from 'antd';
 import {
   SearchOutlined, PrinterOutlined, FileProtectOutlined,
@@ -34,7 +34,8 @@ export const AccountStatementWithDue: React.FC = () => {
       const filter = {
         fromDate: values.dateRange[0].format('YYYY-MM-DD'),
         toDate: values.dateRange[1].format('YYYY-MM-DD'),
-        account: values.account
+        account: values.account,
+        dateBasis: values.dateBasis || 'VoucherDate'
       };
       const res = await reportService.getAccountStatementWithDue(filter);
       
@@ -135,13 +136,20 @@ export const AccountStatementWithDue: React.FC = () => {
         className="mb-8 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg no-print"
         onFinish={handleSearch}
         initialValues={{
-          dateRange: [dayjs().startOf('month'), dayjs()]
+          dateRange: [dayjs().startOf('month'), dayjs()],
+          dateBasis: 'VoucherDate'
         }}
       >
         <Form.Item name="dateRange" label="Date Range" rules={[{ required: true }]}>
           <DatePicker.RangePicker format="DD-MMM-YYYY" presets={rangePresets} />
         </Form.Item>
-        <Form.Item name="account" label="Select Account" rules={[{ required: true }]} style={{ minWidth: 300 }}>
+        <Form.Item name="dateBasis" label="Date Basis">
+          <Radio.Group buttonStyle="solid">
+            <Radio.Button value="VoucherDate">Voucher Date</Radio.Button>
+            <Radio.Button value="ClearingDate">Clearing Date</Radio.Button>
+          </Radio.Group>
+        </Form.Item>
+        <Form.Item name="account" label="Select Account" rules={[{ required: true }]} style={{ minWidth: 260 }}>
           <Select 
             showSearch 
             placeholder="Search account..." 

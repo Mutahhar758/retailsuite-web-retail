@@ -109,12 +109,12 @@ export const reportService = {
     return response.data.body as BalanceDetailLine[];
   },
 
-  async getAccountStatement(params: { fromDate: string; toDate: string; account: string }) {
+  async getAccountStatement(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }) {
     const response = await api.get('/api/reports/account-statement', { params });
     return response.data.body as AccountStatementLine[];
   },
 
-  async getAccountStatementWithDue(params: { fromDate: string; toDate: string; account: string }) {
+  async getAccountStatementWithDue(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }) {
     const response = await api.get('/api/reports/account-statement-with-due', { params });
     return response.data.body as AccountStatementWithDueLine[];
   },
@@ -139,7 +139,7 @@ export const reportService = {
     return response.data.body as IncomeSummaryLine[];
   },
 
-  async getCustomerBill(params: { fromDate: string; toDate: string; account: string }) {
+  async getCustomerBill(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }) {
     const response = await api.get('/api/reports/customer-bill', { params });
     return response.data.body as CustomerBillResponse;
   },

@@ -200,7 +200,8 @@ export const CustomerBill: React.FC = () => {
       const filter = {
         fromDate: values.dateRange[0].format('YYYY-MM-DD'),
         toDate: values.dateRange[1].format('YYYY-MM-DD'),
-        account: values.account
+        account: values.account,
+        dateBasis: values.dateBasis || 'VoucherDate'
       };
       const res = await reportService.getCustomerBill(filter);
       setBillData(res);
@@ -261,7 +262,8 @@ export const CustomerBill: React.FC = () => {
         const res = await reportService.getCustomerBill({
           fromDate,
           toDate,
-          account
+          account,
+          dateBasis: values.dateBasis || 'VoucherDate'
         });
 
         // Skip if no activity AND zero net balance AND zero previous balance
@@ -331,15 +333,28 @@ export const CustomerBill: React.FC = () => {
           layout="vertical"
           onFinish={handleSearch}
           initialValues={{
-            dateRange: [dayjs().startOf('month'), dayjs()]
+            dateRange: [dayjs().startOf('month'), dayjs()],
+            dateBasis: 'VoucherDate'
           }}
         >
-          <Form.Item label="Print Mode">
-            <Radio.Group value={printMode} onChange={e => setPrintMode(e.target.value)}>
-              <Radio.Button value="single">Single Customer Print</Radio.Button>
-              <Radio.Button value="multi">Multiple Customers Print</Radio.Button>
-            </Radio.Group>
-          </Form.Item>
+          <Row gutter={16} style={{ marginBottom: 16 }}>
+            <Col xs={24} sm={12}>
+              <Form.Item label="Print Mode">
+                <Radio.Group value={printMode} onChange={e => setPrintMode(e.target.value)}>
+                  <Radio.Button value="single">Single Customer Print</Radio.Button>
+                  <Radio.Button value="multi">Multiple Customers Print</Radio.Button>
+                </Radio.Group>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item name="dateBasis" label="Date Basis">
+                <Radio.Group buttonStyle="solid">
+                  <Radio.Button value="VoucherDate">Voucher Date</Radio.Button>
+                  <Radio.Button value="ClearingDate">Clearing Date</Radio.Button>
+                </Radio.Group>
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Row gutter={16} align="bottom">
             <Col xs={24} sm={12} md={8}>

@@ -56,6 +56,7 @@ export const PaymentVoucherForm: React.FC = () => {
             const first = details[0];
             form.setFieldsValue({
               date: dayjs(first.date),
+              clearingDate: first.clearingDate ? dayjs(first.clearingDate) : null,
               cashBankAccount: first.cashBankAccountId,
               narration: first.narrationId
             });
@@ -172,6 +173,7 @@ export const PaymentVoucherForm: React.FC = () => {
 
       const request = {
         date: values.date.format('YYYY-MM-DD'),
+        clearingDate: values.clearingDate ? values.clearingDate.format('YYYY-MM-DD') : undefined,
         cashBankAccount: values.cashBankAccount,
         narration: values.narration,
         lines
@@ -307,17 +309,22 @@ export const PaymentVoucherForm: React.FC = () => {
 
       <Form form={form} layout="vertical">
         <Row gutter={16}>
-          <Col xs={24} sm={8} lg={4}>
+          <Col xs={24} sm={6} lg={4}>
             <Form.Item label="Voucher #">
               <Input readOnly value={isEdit ? `PV-${voucherNo}` : ''} style={{ backgroundColor: '#f5f5f5' }} />
             </Form.Item>
           </Col>
-          <Col xs={24} sm={8} lg={4}>
+          <Col xs={24} sm={6} lg={4}>
             <Form.Item label="Date" name="date" rules={[{ required: true }]}>
               <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" />
             </Form.Item>
           </Col>
-          <Col xs={24} sm={8} lg={8}>
+          <Col xs={24} sm={6} lg={4}>
+            <Form.Item label="Clearing Date (Optional)" name="clearingDate">
+              <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" placeholder="Defaults to Date" />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={6} lg={6}>
             <Form.Item label="Cash/Bank Account" name="cashBankAccount" rules={[{ required: true }]}>
               <Select placeholder="Select Cash/Bank Account">
                 {cashBankAccounts.map(acc => (
@@ -328,7 +335,7 @@ export const PaymentVoucherForm: React.FC = () => {
               </Select>
             </Form.Item>
           </Col>
-          <Col xs={24} sm={24} lg={8}>
+          <Col xs={24} sm={24} lg={6}>
             <Form.Item label="Narration" name="narration" rules={[{ required: true }]}>
               <Select showSearch placeholder="Select or enter narration">
                 {narrations.map(n => (
