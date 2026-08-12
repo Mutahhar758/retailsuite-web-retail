@@ -16,6 +16,7 @@ import type { NarrationDto } from '../../services/narrationService';
 import type { Item } from '../../services/inventoryService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useAppStore } from '../../stores/useAppStore';
+import { round } from '../../utils/numberUtils';
 
 const { Title, Text } = Typography;
 
@@ -326,8 +327,6 @@ export const SaleForm: React.FC = () => {
         });
 
         setSaleLines(details.map(d => {
-          const pQty = (d as any).qtyInPack || ((d.qty > 0 && d.secQty && d.secQty > 0) ? Math.round((d.qty / d.secQty) * 100) / 100 : 0);
-          const pCking = (d.rate > 0 && d.secRate && d.secRate > 0) ? Math.round((d.secRate / d.rate) * 100) / 100 : ((d as any).qtyInPack || 0);
           return {
             ...d,
             key: d.seq,
@@ -339,8 +338,8 @@ export const SaleForm: React.FC = () => {
             secUnit: d.secUnit,
             secQty: d.secQty,
             secRate: d.secRate,
-            packQty: pQty,
-            packing: pCking
+            packQty: (d as any).qtyInPack || ((d.qty > 0 && d.secQty && d.secQty > 0) ? round(d.qty / d.secQty, 2) : 0),
+            packing: (d.rate > 0 && d.secRate && d.secRate > 0) ? round(d.secRate / d.rate, 2) : ((d as any).qtyInPack || 0)
           };
         }));
       }
@@ -461,57 +460,57 @@ export const SaleForm: React.FC = () => {
             if (field === 'qty') {
               kgQty = numVal;
               if (bagQty > 0) {
-                packQty = Math.round((kgQty / bagQty) * 100) / 100;
+                packQty = round(kgQty / bagQty, 2);
               } else if (packQty > 0) {
-                bagQty = Math.round((kgQty / packQty) * 100) / 100;
+                bagQty = round(kgQty / packQty, 2);
               }
             } else if (field === 'secQty') {
               bagQty = numVal;
               if (packQty > 0) {
-                kgQty = Math.round((bagQty * packQty) * 100) / 100;
+                kgQty = round(bagQty * packQty, 2);
               } else if (kgQty > 0) {
-                packQty = Math.round((kgQty / bagQty) * 100) / 100;
+                packQty = round(kgQty / bagQty, 2);
               }
             } else if (field === 'packQty') {
               packQty = numVal;
               if (bagQty > 0) {
-                kgQty = Math.round((bagQty * packQty) * 100) / 100;
+                kgQty = round(bagQty * packQty, 2);
               } else if (kgQty > 0) {
-                bagQty = Math.round((kgQty / packQty) * 100) / 100;
+                bagQty = round(kgQty / packQty, 2);
               }
             } else if (field === 'packing') {
               packing = numVal;
               if (packing > 0) {
                 if (bagRate > 0) {
-                  kgRate = Math.round((bagRate / packing) * 100) / 100;
+                  kgRate = round(bagRate / packing, 4);
                 } else if (kgRate > 0) {
-                  bagRate = Math.round((kgRate * packing) * 100) / 100;
+                  bagRate = round(kgRate * packing, 4);
                 }
               }
             } else if (field === 'rate') {
               kgRate = numVal;
               if (packing > 0) {
-                bagRate = Math.round((kgRate * packing) * 100) / 100;
+                bagRate = round(kgRate * packing, 4);
               }
             } else if (field === 'secRate') {
               bagRate = numVal;
               if (packing > 0) {
-                kgRate = Math.round((bagRate / packing) * 100) / 100;
+                kgRate = round(bagRate / packing, 4);
               }
             }
 
-            updated.qty = Math.round((kgQty || 0) * 100) / 100;
-            updated.secQty = Math.round((bagQty || 0) * 100) / 100;
-            updated.packQty = Math.round((packQty || 0) * 100) / 100;
-            updated.packing = Math.round((packing || 0) * 100) / 100;
-            updated.rate = Math.round((kgRate || 0) * 100) / 100;
-            updated.secRate = Math.round((bagRate || 0) * 100) / 100;
+            updated.qty = round(kgQty, 2);
+            updated.secQty = round(bagQty, 2);
+            updated.packQty = round(packQty, 2);
+            updated.packing = round(packing, 2);
+            updated.rate = round(kgRate, 4);
+            updated.secRate = round(bagRate, 4);
           }
 
           const qty = updated.qty || 0;
           const rate = updated.rate || 0;
           const disc = updated.discount || 0;
-          updated.amount = Math.round((qty * (rate - disc)) * 100) / 100;
+          updated.amount = round(qty * (rate - disc), 2);
           return updated;
         }
         return l;
@@ -766,7 +765,8 @@ export const SaleForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={2}
+          precision={4}
+          step={0.01}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           parser={value => value?.replace(/[^0-9.]/g, '') as any}
           onChange={(v) => updateLine(record.key, 'rate', v)}
@@ -785,7 +785,8 @@ export const SaleForm: React.FC = () => {
             style={{ width: '100%' }}
             value={val}
             min={0}
-            precision={2}
+            precision={4}
+            step={0.01}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             parser={value => value?.replace(/[^0-9.]/g, '') as any}
             onChange={(v) => updateLine(record.key, 'secRate', v)}

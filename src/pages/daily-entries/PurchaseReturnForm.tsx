@@ -15,6 +15,7 @@ import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../service
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 
 import { useAppStore } from '../../stores/useAppStore';
+import { round } from '../../utils/numberUtils';
 
 const { Title, Text } = Typography;
 
@@ -82,8 +83,8 @@ export const PurchaseReturnForm: React.FC = () => {
                secQty: d.secQty,
                secRate: d.secRate,
                secUnit: d.secUnit,
-               packQty: (d as any).qtyInPack || ((d.qty > 0 && d.secQty && d.secQty > 0) ? Math.round((d.qty / d.secQty) * 100) / 100 : 0),
-               packing: (d.rate > 0 && d.secRate && d.secRate > 0) ? Math.round((d.secRate / d.rate) * 100) / 100 : ((d as any).qtyInPack || 0)
+               packQty: (d as any).qtyInPack || ((d.qty > 0 && d.secQty && d.secQty > 0) ? round(d.qty / d.secQty, 2) : 0),
+               packing: (d.rate > 0 && d.secRate && d.secRate > 0) ? round(d.secRate / d.rate, 2) : ((d as any).qtyInPack || 0)
              })));
            }
          } catch (error) {
@@ -177,51 +178,51 @@ export const PurchaseReturnForm: React.FC = () => {
             if (field === 'qty') {
               kgQty = numVal;
               if (bagQty > 0) {
-                packQty = Math.round((kgQty / bagQty) * 100) / 100;
+                packQty = round(kgQty / bagQty, 2);
               } else if (packQty > 0) {
-                bagQty = Math.round((kgQty / packQty) * 100) / 100;
+                bagQty = round(kgQty / packQty, 2);
               }
             } else if (field === 'secQty') {
               bagQty = numVal;
               if (packQty > 0) {
-                kgQty = Math.round((bagQty * packQty) * 100) / 100;
+                kgQty = round(bagQty * packQty, 2);
               } else if (kgQty > 0) {
-                packQty = Math.round((kgQty / bagQty) * 100) / 100;
+                packQty = round(kgQty / bagQty, 2);
               }
             } else if (field === 'packQty') {
               packQty = numVal;
               if (bagQty > 0) {
-                kgQty = Math.round((bagQty * packQty) * 100) / 100;
+                kgQty = round(bagQty * packQty, 2);
               } else if (kgQty > 0) {
-                bagQty = Math.round((kgQty / bagQty) * 100) / 100;
+                bagQty = round(kgQty / bagQty, 2);
               }
             } else if (field === 'packing') {
               packing = numVal;
               if (packing > 0) {
                 if (bagRate > 0) {
-                  kgRate = Math.round((bagRate / packing) * 100) / 100;
+                  kgRate = round(bagRate / packing, 4);
                 } else if (kgRate > 0) {
-                  bagRate = Math.round((kgRate * packing) * 100) / 100;
+                  bagRate = round(kgRate * packing, 4);
                 }
               }
             } else if (field === 'rate') {
               kgRate = numVal;
               if (packing > 0) {
-                bagRate = Math.round((kgRate * packing) * 100) / 100;
+                bagRate = round(kgRate * packing, 4);
               }
             } else if (field === 'secRate') {
               bagRate = numVal;
               if (packing > 0) {
-                kgRate = Math.round((bagRate / packing) * 100) / 100;
+                kgRate = round(bagRate / packing, 4);
               }
             }
 
-            updatedRow.qty = Math.round((kgQty || 0) * 100) / 100;
-            updatedRow.secQty = Math.round((bagQty || 0) * 100) / 100;
-            updatedRow.packQty = Math.round((packQty || 0) * 100) / 100;
-            updatedRow.packing = Math.round((packing || 0) * 100) / 100;
-            updatedRow.rate = Math.round((kgRate || 0) * 100) / 100;
-            updatedRow.secRate = Math.round((bagRate || 0) * 100) / 100;
+            updatedRow.qty = round(kgQty, 2);
+            updatedRow.secQty = round(bagQty, 2);
+            updatedRow.packQty = round(packQty, 2);
+            updatedRow.packing = round(packing, 2);
+            updatedRow.rate = round(kgRate, 4);
+            updatedRow.secRate = round(bagRate, 4);
           }
 
           const qty = updatedRow.qty || 0;
@@ -230,8 +231,8 @@ export const PurchaseReturnForm: React.FC = () => {
           const secQty = updatedRow.secQty || 0;
           const secRate = updatedRow.secRate || 0;
           updatedRow.amount = hasVariablePackFeature
-            ? Math.round(((qty * rate) + addLess) * 100) / 100
-            : Math.round(((qty * rate) + addLess + (secQty * secRate)) * 100) / 100;
+            ? round((qty * rate) + addLess, 2)
+            : round((qty * rate) + addLess + (secQty * secRate), 2);
           return updatedRow;
         }
         return row;
@@ -402,7 +403,8 @@ export const PurchaseReturnForm: React.FC = () => {
           style={{ width: '100%' }}
           onChange={(val) => updateRow(record.key, 'rate', val)}
           min={0}
-          precision={2}
+          precision={4}
+          step={0.01}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
         />
       )
@@ -418,7 +420,8 @@ export const PurchaseReturnForm: React.FC = () => {
             value={text}
             onChange={(val) => updateRow(record.key, 'secRate', val)}
             min={0}
-            precision={2}
+            precision={4}
+            step={0.01}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           />
         )
