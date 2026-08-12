@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Table, Card, Button, Space, Typography, Tag, message,
-  Form, DatePicker, Select, InputNumber, Row, Col, Statistic,
+  Form, DatePicker, Select, InputNumber, Row, Col,
   Popconfirm, Tooltip, Drawer, Divider, Badge
 } from 'antd';
 import {
   UserOutlined, CalendarOutlined, SaveOutlined, ReloadOutlined,
   PlusOutlined, DeleteOutlined, TruckOutlined, ShoppingCartOutlined,
-  DollarOutlined, AppstoreOutlined
+  AppstoreOutlined, PrinterOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -15,6 +15,7 @@ import { saleSupplyService, type SaleSupplyLine, type SaleSupplyCustomerLineUpda
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { round } from '../../utils/numberUtils';
+import { rangePresets } from '../../utils/datePresets';
 import { useAppStore } from '../../stores/useAppStore';
 
 const { Title, Text } = Typography;
@@ -74,6 +75,8 @@ export const CustomerSupplyRegister: React.FC = () => {
         itemId: values.itemId
       };
       const result = await saleSupplyService.getCustomerLines(params);
+      // Sort ASC by date
+      result.sort((a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf());
       setLines(result.map(l => ({ ...l, isDirty: false })));
       setSelectedCustomerId(values.customerId);
     } catch (error) {
@@ -586,6 +589,25 @@ export const CustomerSupplyRegister: React.FC = () => {
               <Button
                 type="default"
                 size="large"
+                icon={<PrinterOutlined style={{ fontSize: '18px', color: '#1d4ed8' }} />}
+                disabled={!selectedCustomerId}
+                style={{ borderRadius: 8, fontWeight: 600, height: '44px', fontSize: '15px' }}
+                onClick={() => {
+                  const values = form.getFieldsValue();
+                  navigate('/reports/customer-bill', {
+                    state: {
+                      customerId: selectedCustomerId,
+                      fromDate: values.dateRange?.[0]?.format('YYYY-MM-DD'),
+                      toDate: values.dateRange?.[1]?.format('YYYY-MM-DD')
+                    }
+                  });
+                }}
+              >
+                Print Customer Bill
+              </Button>
+              <Button
+                type="default"
+                size="large"
                 icon={<PlusOutlined style={{ fontSize: '16px' }} />}
                 disabled={!selectedCustomerId}
                 style={{ borderRadius: 8, fontWeight: 600, height: '44px', fontSize: '15px' }}
@@ -666,7 +688,7 @@ export const CustomerSupplyRegister: React.FC = () => {
                 name="dateRange"
                 label={<Text strong style={{ fontSize: '15px' }}><CalendarOutlined /> Supply Date Range</Text>}
               >
-                <RangePicker size="large" style={{ width: '100%', fontSize: '15px' }} format="DD-MMM-YYYY" />
+                <RangePicker size="large" style={{ width: '100%', fontSize: '15px' }} format="DD-MMM-YYYY" presets={rangePresets} />
               </Form.Item>
             </Col>
 
@@ -711,44 +733,6 @@ export const CustomerSupplyRegister: React.FC = () => {
         </Form>
       </Card>
 
-      {/* KPI Cards (Shown when customer selected) */}
-      {selectedCustomerId && (
-        <Row gutter={[20, 20]} style={{ marginBottom: 20 }}>
-          <Col xs={24} sm={8} md={8}>
-            <Card bodyStyle={{ padding: '20px 24px' }} style={{ borderRadius: 10, borderLeft: '4px solid #2563eb' }}>
-              <Statistic
-                title={<Text type="secondary" style={{ fontSize: '14px', fontWeight: 500 }}>Selected Customer</Text>}
-                value={selectedCustomerName}
-                valueStyle={{ fontSize: '22px', color: '#1e40af', fontWeight: 700 }}
-                prefix={<UserOutlined style={{ marginRight: 8 }} />}
-              />
-            </Card>
-          </Col>
-          <Col xs={12} sm={8} md={8}>
-            <Card bodyStyle={{ padding: '20px 24px' }} style={{ borderRadius: 10, borderLeft: '4px solid #0284c7' }}>
-              <Statistic
-                title={<Text type="secondary" style={{ fontSize: '14px', fontWeight: 500 }}>Total Supply Records / Qty</Text>}
-                value={stats.totalQty}
-                precision={2}
-                valueStyle={{ fontSize: '24px', color: '#0369a1', fontWeight: 700 }}
-                suffix={<Text type="secondary" style={{ fontSize: '13px', marginLeft: 8 }}>({stats.totalRecords} records)</Text>}
-              />
-            </Card>
-          </Col>
-          <Col xs={12} sm={8} md={8}>
-            <Card bodyStyle={{ padding: '20px 24px' }} style={{ borderRadius: 10, borderLeft: '4px solid #16a34a' }}>
-              <Statistic
-                title={<Text type="secondary" style={{ fontSize: '14px', fontWeight: 500 }}>Total Net Supply Amount</Text>}
-                value={stats.totalAmount}
-                precision={2}
-                valueStyle={{ fontSize: '26px', color: '#15803d', fontWeight: 800 }}
-                prefix={<DollarOutlined style={{ marginRight: 4 }} />}
-              />
-            </Card>
-          </Col>
-        </Row>
-      )}
-
       {/* Main Data Table */}
       <Card style={{ borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
         <Table
@@ -769,8 +753,61 @@ export const CustomerSupplyRegister: React.FC = () => {
               : 'Please select a customer above to view their supply entries.'
           }}
           rowClassName={(record) => record.isDirty ? 'dirty-row-highlight' : ''}
+          summary={() => {
+            if (lines.length === 0) return null;
+            return (
+              <Table.Summary fixed>
+                <Table.Summary.Row style={{ background: '#f8fafc', fontWeight: 700 }}>
+                  <Table.Summary.Cell index={0} colSpan={4}>
+                    <Text strong style={{ fontSize: '15px', color: '#1e293b' }}>
+                      TOTAL SUMMARY ({stats.totalRecords} RECORDS)
+                    </Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1}>
+                    <Text strong style={{ fontSize: '16px', color: '#0284c7', fontWeight: 700 }}>
+                      {stats.totalQty.toFixed(2)}
+                    </Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} colSpan={(hasSecondaryQty || hasVariablePackFeature) ? 4 : 3} />
+                  <Table.Summary.Cell index={3} align="right">
+                    <Text strong style={{ fontSize: '17px', color: '#15803d', fontWeight: 800 }}>
+                      ${stats.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={4} />
+                </Table.Summary.Row>
+              </Table.Summary>
+            );
+          }}
         />
       </Card>
+
+      {/* Bottom Summary Bar */}
+      {selectedCustomerId && lines.length > 0 && (
+        <Card style={{ marginTop: 16, borderRadius: 10, background: '#0f172a', color: '#fff', boxShadow: '0 4px 14px rgba(15,23,42,0.15)' }} bodyStyle={{ padding: '16px 24px' }}>
+          <Row justify="space-between" align="middle" gutter={[16, 16]}>
+            <Col>
+              <Space size="large" align="center">
+                <div>
+                  <Text style={{ color: '#94a3b8', fontSize: '13px', display: 'block' }}>Customer</Text>
+                  <Text strong style={{ color: '#fff', fontSize: '17px' }}>{selectedCustomerName}</Text>
+                </div>
+                <Divider type="vertical" style={{ borderColor: '#334155', height: 32 }} />
+                <div>
+                  <Text style={{ color: '#94a3b8', fontSize: '13px', display: 'block' }}>Total Records / Qty</Text>
+                  <Text strong style={{ color: '#38bdf8', fontSize: '17px' }}>{stats.totalQty.toFixed(2)} <span style={{ fontSize: 13, color: '#94a3b8' }}>({stats.totalRecords} entries)</span></Text>
+                </div>
+              </Space>
+            </Col>
+            <Col>
+              <div style={{ textAlign: 'right' }}>
+                <Text style={{ color: '#94a3b8', fontSize: '11px', letterSpacing: '0.5px', display: 'block', fontWeight: 700 }}>NET TOTAL SUPPLY AMOUNT</Text>
+                <Text strong style={{ color: '#4ade80', fontSize: '24px', fontWeight: 800 }}>${stats.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+              </div>
+            </Col>
+          </Row>
+        </Card>
+      )}
 
       {/* Quick Add Supply Entry Drawer */}
       <Drawer

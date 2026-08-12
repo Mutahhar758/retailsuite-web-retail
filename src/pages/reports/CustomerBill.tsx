@@ -25,9 +25,12 @@ import {
 import { useAppStore } from '../../stores/useAppStore';
 import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
 
+import { useLocation } from 'react-router-dom';
+
 const { Title, Text } = Typography;
 
 export const CustomerBill: React.FC = () => {
+  const location = useLocation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState<{ account: string; title: string }[]>([]);
@@ -66,7 +69,27 @@ export const CustomerBill: React.FC = () => {
 
   useEffect(() => {
     api.get('/api/customers').then(res => {
-      setCustomers(res.data.body);
+      const cusList = res.data.body || [];
+      setCustomers(cusList);
+
+      // Auto-load state if redirected from Customer Supply Register
+      const state = location.state as { customerId?: string; fromDate?: string; toDate?: string } | null;
+      if (state && state.customerId) {
+        const fromD = state.fromDate ? dayjs(state.fromDate) : dayjs().startOf('month');
+        const toD = state.toDate ? dayjs(state.toDate) : dayjs();
+        form.setFieldsValue({
+          account: state.customerId,
+          dateRange: [fromD, toD]
+        });
+        const matchedCus = cusList.find((c: any) => c.account === state.customerId);
+        if (matchedCus) setSelectedCustomer(matchedCus);
+
+        // Auto trigger search
+        handleSearch({
+          account: state.customerId,
+          dateRange: [fromD, toD]
+        });
+      }
     });
     supplyOrderService.getList().then(setSupplyOrders).catch(console.error);
   }, []);
