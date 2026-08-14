@@ -4,7 +4,7 @@ import {
   Space, message, Divider, Checkbox, Radio, Input, Row, Col
 } from 'antd';
 import {
-  SearchOutlined, PrinterOutlined, FileTextOutlined
+  SearchOutlined, PrinterOutlined, FileTextOutlined, TruckOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { reportService, type CustomerBillResponse } from '../../services/reportService';
@@ -25,12 +25,13 @@ import {
 import { useAppStore } from '../../stores/useAppStore';
 import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
 
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const { Title, Text } = Typography;
 
 export const CustomerBill: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState<{ account: string; title: string }[]>([]);
@@ -310,21 +311,39 @@ export const CustomerBill: React.FC = () => {
             <Text type="secondary">Generate consolidated billing for a customer</Text>
           </div>
         </Space>
-        {printMode === 'single' && (
-          <Space className="no-print" size="middle">
-            <Button icon={<PrinterOutlined />} disabled={!billData} onClick={() => window.print()}>Print Bill (A4)</Button>
-            <Button 
-              type="primary"
-              icon={<PrinterOutlined />} 
-              disabled={!billData} 
-              loading={singlePrinting}
-              onClick={handlePrintSingleThermal}
-              style={{ backgroundColor: '#0284c7', borderColor: '#0284c7' }}
-            >
-              Print Slip
-            </Button>
-          </Space>
-        )}
+        <Space className="no-print" size="middle">
+          <Button
+            icon={<TruckOutlined />}
+            onClick={() => {
+              const acc = form.getFieldValue('account');
+              const dates = form.getFieldValue('dateRange');
+              navigate('/daily-entries/customer-supply', {
+                state: {
+                  customerId: acc,
+                  fromDate: dates?.[0]?.format('YYYY-MM-DD'),
+                  toDate: dates?.[1]?.format('YYYY-MM-DD')
+                }
+              });
+            }}
+          >
+            Customer Supply Register
+          </Button>
+          {printMode === 'single' && (
+            <>
+              <Button icon={<PrinterOutlined />} disabled={!billData} onClick={() => window.print()}>Print Bill (A4)</Button>
+              <Button 
+                type="primary"
+                icon={<PrinterOutlined />} 
+                disabled={!billData} 
+                loading={singlePrinting}
+                onClick={handlePrintSingleThermal}
+                style={{ backgroundColor: '#0284c7', borderColor: '#0284c7' }}
+              >
+                Print Slip
+              </Button>
+            </>
+          )}
+        </Space>
       </div>
 
       <div className="mb-8 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg no-print">

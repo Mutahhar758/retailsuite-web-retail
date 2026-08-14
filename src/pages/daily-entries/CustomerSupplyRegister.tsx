@@ -9,7 +9,7 @@ import {
   PlusOutlined, DeleteOutlined, TruckOutlined, ShoppingCartOutlined,
   AppstoreOutlined, PrinterOutlined
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { saleSupplyService, type SaleSupplyLine, type SaleSupplyCustomerLineUpdateRequest } from '../../services/saleSupplyService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
@@ -27,6 +27,7 @@ interface EditableLine extends SaleSupplyLine {
 
 export const CustomerSupplyRegister: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
@@ -52,11 +53,19 @@ export const CustomerSupplyRegister: React.FC = () => {
     inventoryService.getItemsLookup().then(setItems).catch(console.error);
     inventoryService.getUnitsLookup().then(setUnits).catch(console.error);
 
-    // Default dates to start of current month and today
+    const state = location.state as { customerId?: string; fromDate?: string; toDate?: string } | null;
+    const fromD = state?.fromDate ? dayjs(state.fromDate) : dayjs().startOf('month');
+    const toD = state?.toDate ? dayjs(state.toDate) : dayjs();
+
     form.setFieldsValue({
-      dateRange: [dayjs().startOf('month'), dayjs()]
+      customerId: state?.customerId,
+      dateRange: [fromD, toD]
     });
-  }, [form]);
+
+    if (state?.customerId) {
+      setSelectedCustomerId(state.customerId);
+    }
+  }, [form, location.state]);
 
   // Fetch data
   const fetchData = useCallback(async () => {
