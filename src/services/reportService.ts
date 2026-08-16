@@ -87,6 +87,12 @@ export interface CustomerBillLine {
   rate: number;
   addLess: number;
   amount: number;
+  secQty?: number;
+  secRate?: number;
+  qtyInPack?: number;
+  secUnitTitle?: string;
+  receiptDate?: string;
+  receiptAmount?: number;
 }
 
 export interface CustomerBillResponse {

@@ -1,0 +1,3 @@
+Startup registration started. exePath: C:\My Repos\Mutahhar758\RetailSuite\retailsuite-web-retail\public\downloads\printer-bridge.exe
+Existing value: "C:\My Repos\Mutahhar758\RetailSuite\retailsuite-web-retail\public\downloads\printer-bridge.exe", Expected value: "C:\My Repos\Mutahhar758\RetailSuite\retailsuite-web-retail\public\downloads\printer-bridge.exe"
+Registry key already matches.

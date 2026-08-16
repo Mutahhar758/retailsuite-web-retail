@@ -1,3 +1,10 @@
+@import url('https://fontlibrary.org//face/jameel-noori-nastaleeq');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400..700&display=swap');
+
+.font-urdu {
+  font-family: 'Jameel Noori Nastaleeq', 'JameelNooriNastaleeq', 'Noto Nastaliq Urdu', 'Urdu Typesetting', serif !important;
+}
+
 html, body, #root {
   margin: 0;
   padding: 0;
@@ -161,13 +168,14 @@ html[data-theme='dark'] .bg-rose-50 { background-color: rgba(225, 29, 72, 0.1); 
 
 /* Print Styles */
 @page {
-  size: auto;
-  margin: 0; 
+  size: A4 portrait;
+  margin: 10mm; 
 }
 
 @media print {
   body {
-    padding: 15mm !important;
+    padding: 0 !important;
+    margin: 0 !important;
     background: white !important;
   }
 
@@ -182,21 +190,25 @@ html[data-theme='dark'] .bg-rose-50 { background-color: rgba(225, 29, 72, 0.1); 
   }
 
   /* Reset layout for print */
+  html, 
+  body, 
+  #root, 
   .ant-layout, 
-  .ant-layout-content,
-  .ant-card,
-  #root {
-    background: white !important;
-    display: block !important;
+  .ant-layout-content, 
+  .ant-card, 
+  .ant-card-bordered, 
+  .ant-card-body {
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
-    height: auto !important;
+    max-width: 100% !important;
     min-height: auto !important;
     position: static !important;
     overflow: visible !important;
-    border: none !important;
-    box-shadow: none !important;
   }
 
   /* Force zero margin for layout which usually has sidebar margin */
@@ -204,15 +216,30 @@ html[data-theme='dark'] .bg-rose-50 { background-color: rgba(225, 29, 72, 0.1); 
     margin-left: 0 !important;
   }
 
-  /* Ensure report container is visible and clean */
-  .ant-card-body {
-    padding: 0 !important;
-  }
-
   #printable-report {
     display: block !important;
     width: 100% !important;
-    text-align: center !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 2mm 3mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+  }
+
+  #printable-report table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: fixed !important;
+    box-sizing: border-box !important;
+  }
+
+  #printable-report th,
+  #printable-report td {
+    border: 1px solid #000000 !important;
+    box-sizing: border-box !important;
   }
 
   /* Fix squashed text in headers */
