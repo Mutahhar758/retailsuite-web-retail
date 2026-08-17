@@ -1,5 +1,14 @@
 import api from './api';
 
+export interface CustomerSupplyItemDto {
+  customerAccountId?: string;
+  itemId: string;
+  itemTitle?: string;
+  qty: number;
+  secQty?: number;
+}
+
+
 export interface CustomerResponse {
   account: string;
   title: string;
@@ -21,6 +30,7 @@ export interface CustomerResponse {
   createdOn?: string;
   lastModifiedBy?: string;
   lastModifiedOn?: string;
+  supplyItems?: CustomerSupplyItemDto[];
 }
 
 export interface CustomerCreateRequest {
@@ -38,6 +48,7 @@ export interface CustomerCreateRequest {
   emailAlert: boolean;
   active: boolean;
   mediaId?: string;
+  supplyItems?: CustomerSupplyItemDto[];
 }
 
 export interface CustomerUpdateRequest {
@@ -55,6 +66,7 @@ export interface CustomerUpdateRequest {
   emailAlert: boolean;
   active: boolean;
   mediaId?: string;
+  supplyItems?: CustomerSupplyItemDto[];
 }
 
 export const customerService = {
@@ -76,5 +88,11 @@ export const customerService = {
   async getPresignedUploadUrl(fileName: string) {
     const response = await api.post('/api/customers/presigned-upload-url', null, { params: { fileName } });
     return response.data.body as { fileId: string; uploadUrl: string; expiresAt: string };
+  },
+
+  async getSupplyItems(params?: { customerId?: string; itemId?: string }) {
+    const response = await api.get('/api/customers/supply-items', { params });
+    return response.data.body as CustomerSupplyItemDto[];
   }
 };
+

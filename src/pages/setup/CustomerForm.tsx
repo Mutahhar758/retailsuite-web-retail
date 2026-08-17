@@ -1,17 +1,28 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Card, Button, Space, Typography, Form, Input, Row, Col, Checkbox, 
-  message, Divider, Avatar, Tag, Upload
+  message, Divider, Avatar, Upload, Table, InputNumber, Select
 } from 'antd';
 import { 
   SaveOutlined, ArrowLeftOutlined, UserOutlined, CameraOutlined,
-  MailOutlined, PhoneOutlined, AuditOutlined, BankOutlined, LoadingOutlined
+  MailOutlined, PhoneOutlined, BankOutlined, LoadingOutlined,
+  PlusOutlined, DeleteOutlined, ShoppingCartOutlined
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
-import { customerService, type CustomerCreateRequest, type CustomerUpdateRequest } from '../../services/customerService';
+import { customerService, type CustomerCreateRequest, type CustomerUpdateRequest, type CustomerSupplyItemDto } from '../../services/customerService';
+import { inventoryService, type Item } from '../../services/inventoryService';
+import { useAppStore } from '../../stores/useAppStore';
+
 
 const { Title, Text } = Typography;
+
+interface SupplyLineRow {
+  key: any;
+  itemId: string;
+  qty: number;
+  secQty?: number;
+}
 
 export const CustomerForm: React.FC = () => {
   const { account } = useParams<{ account: string }>();
@@ -19,17 +30,29 @@ export const CustomerForm: React.FC = () => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
   
+  const { licenses, currentTenantIdentifier } = useAppStore();
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
+  const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+
   const [loading, setLoading] = useState(false);
   const [customerTitle, setCustomerTitle] = useState<string>('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+
+  const [items, setItems] = useState<Item[]>([]);
+  const [supplyLines, setSupplyLines] = useState<SupplyLineRow[]>([]);
+
+  useEffect(() => {
+    inventoryService.getItemsLookup()
+      .then(setItems)
+      .catch(err => console.error('Failed to load items lookup:', err));
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
 
       if (isEdit) {
-        // Fetch current customer list to extract details for editing
         const customers = await customerService.getCustomers();
         const customer = customers.find(c => c.account === account);
         
@@ -54,6 +77,17 @@ export const CustomerForm: React.FC = () => {
           if (customer.mediaUrl) {
             setImageUrl(customer.mediaUrl);
           }
+
+          if (customer.supplyItems && customer.supplyItems.length > 0) {
+            setSupplyLines(customer.supplyItems.map((si, idx) => ({
+              key: `${si.itemId}-${idx}`,
+              itemId: si.itemId,
+              qty: si.qty || 1,
+              secQty: si.secQty || 0
+            })));
+          } else {
+            setSupplyLines([]);
+          }
         } else {
           message.error('Customer not found');
           navigate('/setup/customers');
@@ -70,13 +104,40 @@ export const CustomerForm: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  const handleAddSupplyRow = () => {
+    setSupplyLines([
+      ...supplyLines,
+      { key: Date.now(), itemId: '', qty: 1, secQty: 0 }
+    ]);
+  };
+
+  const handleRemoveSupplyRow = (key: any) => {
+    setSupplyLines(supplyLines.filter(l => l.key !== key));
+  };
+
+  const updateSupplyRow = (key: any, field: keyof SupplyLineRow, value: any) => {
+    setSupplyLines(supplyLines.map(l => {
+      if (l.key === key) {
+        return { ...l, [field]: value };
+      }
+      return l;
+    }));
+  };
+
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
       setLoading(true);
 
+      const validSupplyItems: CustomerSupplyItemDto[] = supplyLines
+        .filter(l => !!l.itemId)
+        .map(l => ({
+          itemId: l.itemId,
+          qty: l.qty || 1,
+          secQty: l.secQty || 0
+        }));
+
       if (isEdit) {
-        // Update Customer - name can be updated, code remains immutable
         const updateRequest: CustomerUpdateRequest = {
           title: values.title,
           email: values.email || null,
@@ -92,12 +153,12 @@ export const CustomerForm: React.FC = () => {
           emailAlert: !!values.emailAlert,
           active: values.active !== undefined ? values.active : true,
           mediaId: values.mediaId || null,
+          supplyItems: validSupplyItems
         };
 
         await customerService.update(account, updateRequest);
         message.success('Customer details updated successfully');
       } else {
-        // Create Customer - unified backend creation (Chart of Account & Details)
         const createRequest: CustomerCreateRequest = {
           title: values.title,
           email: values.email || null,
@@ -113,6 +174,7 @@ export const CustomerForm: React.FC = () => {
           emailAlert: !!values.emailAlert,
           active: values.active !== undefined ? values.active : true,
           mediaId: values.mediaId || null,
+          supplyItems: validSupplyItems
         };
 
         const generatedAccountCode = await customerService.create(createRequest);
@@ -163,6 +225,75 @@ export const CustomerForm: React.FC = () => {
     }
   };
 
+  const supplyItemColumns = [
+    {
+      title: 'Supply Item',
+      dataIndex: 'itemId',
+      key: 'itemId',
+      render: (val: string, record: SupplyLineRow) => (
+        <Select
+          showSearch
+          style={{ width: '100%' }}
+          placeholder="Select Item"
+          optionFilterProp="children"
+          value={val || undefined}
+          onChange={(newVal) => updateSupplyRow(record.key, 'itemId', newVal)}
+          filterOption={(input, option) =>
+            (option?.children as any || '').toLowerCase().includes(input.toLowerCase())
+          }
+        >
+          {items.map(i => (
+            <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
+          ))}
+        </Select>
+      )
+    },
+    {
+      title: 'Default Qty',
+      dataIndex: 'qty',
+      key: 'qty',
+      width: 140,
+      render: (val: number, record: SupplyLineRow) => (
+        <InputNumber
+          style={{ width: '100%' }}
+          value={val}
+          min={0.01}
+          precision={2}
+          onChange={(newVal) => updateSupplyRow(record.key, 'qty', newVal || 0)}
+        />
+      )
+    },
+    ...(hasSecondaryQty ? [{
+      title: 'Pack Qty',
+      dataIndex: 'secQty',
+      key: 'secQty',
+      width: 140,
+      render: (val: number, record: SupplyLineRow) => (
+        <InputNumber
+          style={{ width: '100%' }}
+          value={val}
+          min={0}
+          precision={2}
+          onChange={(newVal) => updateSupplyRow(record.key, 'secQty', newVal || 0)}
+        />
+      )
+    }] : []),
+    {
+      title: 'Action',
+      key: 'action',
+      width: 80,
+      align: 'center' as const,
+      render: (_: any, record: SupplyLineRow) => (
+        <Button
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
+          onClick={() => handleRemoveSupplyRow(record.key)}
+        />
+      )
+    }
+  ];
+
   return (
     <Card className="shadow-sm border-gray-100 rounded-xl">
       {/* Form Header */}
@@ -208,7 +339,7 @@ export const CustomerForm: React.FC = () => {
         <Form.Item name="mediaId" noStyle><Input type="hidden" /></Form.Item>
 
         <Row gutter={24}>
-          {/* Left Column: Avatar Display & Action Placeholder */}
+          {/* Left Column: Avatar Display */}
           <Col xs={24} md={6} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
             <div className="text-center">
               <Text strong className="block mb-3">Customer Avatar</Text>
@@ -217,7 +348,6 @@ export const CustomerForm: React.FC = () => {
                 showUploadList={false}
                 customRequest={handleCustomUpload}
                 disabled={uploading}
-                style={{ width: '130px', height: '130px', display: 'block' }}
               >
                 <div 
                   style={{ 
@@ -234,7 +364,7 @@ export const CustomerForm: React.FC = () => {
                     justifyContent: 'center',
                     backgroundColor: '#f5f5f5'
                   }}
-                  className="group transition-all hover:border-blue-400"
+                  className="group"
                 >
                   <Avatar 
                     size={120} 
@@ -249,99 +379,42 @@ export const CustomerForm: React.FC = () => {
                       left: 0, 
                       right: 0, 
                       bottom: 0, 
-                      backgroundColor: 'rgba(0, 0, 0, 0.5)', 
+                      background: 'rgba(0, 0, 0, 0.45)', 
                       display: 'flex', 
-                      flexDirection: 'column',
                       alignItems: 'center', 
                       justifyContent: 'center',
                       opacity: 0,
-                      transition: 'opacity 0.3s ease-in-out'
+                      transition: 'opacity 0.2s',
                     }}
-                    className="hover-overlay"
-                    onMouseEnter={(e) => {
-                      const el = e.currentTarget as HTMLElement;
-                      el.style.opacity = '1';
-                    }}
-                    onMouseLeave={(e) => {
-                      const el = e.currentTarget as HTMLElement;
-                      el.style.opacity = '0';
-                    }}
+                    className="group-hover:opacity-100"
                   >
-                    <CameraOutlined style={{ color: '#fff', fontSize: '24px', marginBottom: '4px' }} />
-                    <Text style={{ color: '#fff', fontSize: '11px' }}>{imageUrl ? 'Change Photo' : 'Upload Photo'}</Text>
+                    <CameraOutlined style={{ fontSize: 24, color: '#fff' }} />
                   </div>
                 </div>
               </Upload>
-              <div style={{ marginTop: '12px' }}>
-                <Tag color="blue" className="rounded-full">{uploading ? 'Uploading...' : 'Click to Upload'}</Tag>
-              </div>
-              
-              {isEdit && (
-                <div style={{ marginTop: '16px' }} className="flex flex-col items-center">
-                  <Text type="secondary" style={{ fontSize: '12px' }}>Account Number</Text>
-                  <Text strong style={{ fontFamily: 'monospace', fontSize: '15px', color: '#1677ff' }} className="block mt-1">
-                    {account}
-                  </Text>
-                </div>
-              )}
+              <Text type="secondary" className="block text-xs mt-2">
+                Click photo to change avatar
+              </Text>
             </div>
           </Col>
 
-          {/* Right Column: Form Inputs */}
+          {/* Right Column: Customer Details */}
           <Col xs={24} md={18}>
-            {/* Section 1: Basic Identity */}
-            <Card 
-              size="small" 
-              title={
-                <Space>
-                  <AuditOutlined style={{ color: '#1677ff' }} />
-                  <Text strong>Identity & Ledger Info</Text>
-                </Space>
-              }
-              className="bg-gray-50 border-gray-200 mb-6 rounded-lg shadow-sm"
-              style={{ background: '#fafafa' }}
-            >
-              <Row gutter={16}>
-                <Col xs={24} md={isEdit ? 12 : 24}>
-                  <Form.Item
-                    name="title"
-                    label="Customer Full Name (Ledger Title)"
-                    rules={[{ required: true, message: 'Customer name is required' }]}
-                  >
-                    <Input placeholder="e.g. Al-Syed Jewelers" />
-                  </Form.Item>
-                </Col>
-                {isEdit && (
-                  <Col xs={24} md={12}>
-                    <Form.Item label="Account Ledger Code">
-                      <Input value={account} disabled style={{ fontFamily: 'monospace', fontWeight: 'bold' }} />
-                    </Form.Item>
-                  </Col>
-                )}
-              </Row>
-              {!isEdit && (
-                <Text type="secondary" style={{ fontSize: '12px', fontStyle: 'italic' }}>
-                  💡 An appropriate Level 5 Detail Account will be automatically generated in your Chart of Accounts under the primary Customers head on save.
-                </Text>
-              )}
-            </Card>
-
-            {/* Section 2: Contact & Demographics */}
-            <Title level={5} className="mb-4">Profile & Contact Information</Title>
+            <Title level={5} className="mb-4">Identity & Contact Info</Title>
             <Row gutter={16}>
               <Col xs={24} md={12}>
                 <Form.Item
-                  name="email"
-                  label="Email Address"
-                  rules={[{ type: 'email', message: 'Please enter a valid email' }]}
+                  name="title"
+                  label="Customer Name / Organization"
+                  rules={[{ required: true, message: 'Customer name is required' }]}
                 >
-                  <Input prefix={<MailOutlined className="text-gray-400" />} placeholder="customer@example.com" />
+                  <Input placeholder="e.g. John Doe / Apex Enterprises" />
                 </Form.Item>
               </Col>
               <Col xs={24} md={12}>
                 <Form.Item
                   name="cnic"
-                  label="National ID Card Number (CNIC)"
+                  label="National ID / Registration (CNIC / NTN)"
                 >
                   <Input placeholder="e.g. 42101-1234567-1" />
                 </Form.Item>
@@ -351,12 +424,24 @@ export const CustomerForm: React.FC = () => {
             <Row gutter={16}>
               <Col xs={24} md={12}>
                 <Form.Item
+                  name="email"
+                  label="Email Address"
+                  rules={[{ type: 'email', message: 'Please enter a valid email' }]}
+                >
+                  <Input prefix={<MailOutlined className="text-gray-400" />} placeholder="e.g. customer@domain.com" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12}>
+                <Form.Item
                   name="qualification"
                   label="Qualification"
                 >
                   <Input placeholder="e.g. Graduate, Business Owner" />
                 </Form.Item>
               </Col>
+            </Row>
+
+            <Row gutter={16}>
               <Col xs={24} md={12}>
                 <Form.Item
                   name="fax"
@@ -365,25 +450,21 @@ export const CustomerForm: React.FC = () => {
                   <Input placeholder="e.g. +92 21 34567890" />
                 </Form.Item>
               </Col>
-            </Row>
-
-            <Row gutter={16}>
-              <Col xs={24} md={24}>
+              <Col xs={24} md={12}>
                 <Form.Item
-                  name="address"
-                  label="Postal / Delivery Address"
+                  name="iban"
+                  label="International Bank Account Number (IBAN)"
                 >
-                  <Input.TextArea rows={2} placeholder="Enter full street, city, and country address" />
+                  <Input prefix={<BankOutlined className="text-gray-400" />} placeholder="e.g. PK00 UNIL 0123 4567 8901 2345" />
                 </Form.Item>
               </Col>
             </Row>
 
-            <Title level={5} className="mb-4 mt-6">Communication Channels & Alerts</Title>
             <Row gutter={16}>
               <Col xs={24} md={8}>
                 <Form.Item
                   name="phone1"
-                  label="Primary Phone Number"
+                  label="Primary Phone"
                   rules={[{ required: true, message: 'Primary phone is required' }]}
                 >
                   <Input prefix={<PhoneOutlined className="text-gray-400" />} placeholder="e.g. +92 300 1234567" />
@@ -392,7 +473,7 @@ export const CustomerForm: React.FC = () => {
               <Col xs={24} md={8}>
                 <Form.Item
                   name="phone2"
-                  label="Alternate Phone Number"
+                  label="Alternate Phone"
                 >
                   <Input prefix={<PhoneOutlined className="text-gray-400" />} placeholder="e.g. +92 21 3123456" />
                 </Form.Item>
@@ -409,10 +490,19 @@ export const CustomerForm: React.FC = () => {
 
             <Row gutter={16}>
               <Col xs={24} md={24}>
+                <Form.Item name="address" label="Postal / Delivery Address">
+                  <Input.TextArea rows={2} placeholder="Enter full address" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+
+            <Row gutter={16}>
+              <Col xs={24} md={24}>
                 <div style={{ padding: '16px', background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: '8px' }}>
                   <Space size="large" className="w-full flex justify-between flex-wrap">
                     <Form.Item name="smsAlert" valuePropName="checked" noStyle>
-                      <Checkbox>Enable SMS Alerts & Reminders</Checkbox>
+                      <Checkbox>Enable SMS Alerts</Checkbox>
                     </Form.Item>
                     <Form.Item name="emailAlert" valuePropName="checked" noStyle>
                       <Checkbox>Enable Email Statements</Checkbox>
@@ -425,17 +515,37 @@ export const CustomerForm: React.FC = () => {
               </Col>
             </Row>
 
-            <Title level={5} className="mb-4 mt-6">Financial Settlement</Title>
-            <Row gutter={16}>
-              <Col xs={24} md={24}>
-                <Form.Item
-                  name="iban"
-                  label="International Bank Account Number (IBAN)"
-                >
-                  <Input prefix={<BankOutlined className="text-gray-400" />} placeholder="e.g. PK00 UNIL 0123 4567 8901 2345" />
-                </Form.Item>
-              </Col>
-            </Row>
+            <Divider style={{ margin: '24px 0 16px 0' }} />
+
+            {/* Supply Items & Quantities Section */}
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <Title level={5} style={{ margin: 0 }}>
+                  <ShoppingCartOutlined style={{ color: '#1677ff', marginRight: 8 }} />
+                  Supply Items & Default Quantities
+                </Title>
+                <Text type="secondary" className="text-xs">
+                  Configure default order quantities per item for this customer when populating supply orders.
+                </Text>
+              </div>
+              <Button
+                type="dashed"
+                icon={<PlusOutlined />}
+                onClick={handleAddSupplyRow}
+              >
+                Add Supply Item
+              </Button>
+            </div>
+
+            <Table
+              dataSource={supplyLines}
+              columns={supplyItemColumns}
+              pagination={false}
+              size="small"
+              bordered
+              locale={{ emptyText: 'No specific item quantities configured. Default supply order quantity (1) will be used.' }}
+              rowKey="key"
+            />
           </Col>
         </Row>
       </Form>

@@ -16,6 +16,7 @@ import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../service
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
+import { customerService } from '../../services/customerService';
 
 const { Title, Text } = Typography;
 
@@ -115,19 +116,51 @@ export const SaleSupplyForm: React.FC = () => {
     
     setLoading(true);
     try {
-      const order = await supplyOrderService.getById(orderId);
+      const [order, customSupplyItems] = await Promise.all([
+        supplyOrderService.getById(orderId),
+        masterItemId ? customerService.getSupplyItems({ itemId: masterItemId }) : Promise.resolve([])
+      ]);
+
+      const customerQtyMap = new Map<string, { qty: number; secQty?: number }>();
+      if (customSupplyItems && Array.isArray(customSupplyItems)) {
+        customSupplyItems.forEach(ci => {
+          if (ci.customerAccountId) {
+            customerQtyMap.set(ci.customerAccountId, { qty: ci.qty, secQty: ci.secQty });
+          }
+        });
+      }
+
       if (order && order.details) {
-        const newLines = order.details.map((d, index) => ({
-          key: Date.now() + index,
-          seq: index + 1,
-          customerId: d.customerId,
-          unit: item?.defaultUnit || '',
-          qty: 1,
-          rate: item?.defaultUnit === item?.secondaryUnit ? item?.secRate : item?.priRate || 0,
-          discount: 0,
-          addLess: 0,
-          amount: ((item?.defaultUnit === item?.secondaryUnit ? item?.secRate : item?.priRate) || 0) * 1
-        }));
+        const isSec = item?.defaultUnit === item?.secondaryUnit;
+        const rate = isSec ? (item?.secRate || 0) : (item?.priRate || 0);
+        const secRate = item?.secRate || 0;
+
+        const newLines = order.details.map((d, index) => {
+          const setting = customerQtyMap.get(d.customerId);
+          const qty = setting ? setting.qty : 1;
+          const secQty = setting ? (setting.secQty || 0) : 0;
+
+          const amount = hasVariablePackFeature
+            ? round(qty * rate, 2)
+            : round((qty * rate) + (secQty * secRate), 2);
+
+          return {
+            key: Date.now() + index,
+            seq: index + 1,
+            customerId: d.customerId,
+            unit: item?.defaultUnit || '',
+            qty: qty,
+            rate: rate,
+            discount: 0,
+            addLess: 0,
+            amount: amount,
+            secQty: secQty,
+            secRate: secRate,
+            secUnit: item?.secondaryUnit || '',
+            packQty: 0,
+            packing: 0
+          };
+        });
         setSupplyLines(newLines);
         message.success(`Loaded ${newLines.length} customers from ${order.title}`);
       }
@@ -137,6 +170,52 @@ export const SaleSupplyForm: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const handleItemChange = async (newItemId: string) => {
+    const item = items.find(i => i.id === newItemId);
+    if (!item) return;
+
+    try {
+      const customSupplyItems = await customerService.getSupplyItems({ itemId: newItemId });
+      const customerQtyMap = new Map<string, { qty: number; secQty?: number }>();
+      if (customSupplyItems && Array.isArray(customSupplyItems)) {
+        customSupplyItems.forEach(ci => {
+          if (ci.customerAccountId) {
+            customerQtyMap.set(ci.customerAccountId, { qty: ci.qty, secQty: ci.secQty });
+          }
+        });
+      }
+
+      const isSec = item?.defaultUnit === item?.secondaryUnit;
+      const rate = isSec ? (item?.secRate || 0) : (item?.priRate || 0);
+      const secRate = item?.secRate || 0;
+
+      setSupplyLines(prev => prev.map(line => {
+        if (!line.customerId) return line;
+        const setting = customerQtyMap.get(line.customerId);
+        const qty = setting ? setting.qty : (line.qty || 1);
+        const secQty = setting ? (setting.secQty || 0) : (line.secQty || 0);
+
+        const amount = hasVariablePackFeature
+          ? round(qty * (rate - (line.discount || 0)) + (line.addLess || 0), 2)
+          : round(qty * (rate - (line.discount || 0)) + (line.addLess || 0) + (secQty * secRate), 2);
+
+        return {
+          ...line,
+          unit: item?.defaultUnit || line.unit,
+          qty,
+          secQty,
+          rate,
+          secRate,
+          secUnit: item?.secondaryUnit || line.secUnit,
+          amount
+        };
+      }));
+    } catch (err) {
+      console.error('Failed to load item default customer quantities', err);
+    }
+  };
+
 
   const handleAddRow = () => {
     const newSeq = supplyLines.length > 0 ? Math.max(...supplyLines.map(l => l.seq)) + 1 : 1;
@@ -548,6 +627,7 @@ export const SaleSupplyForm: React.FC = () => {
                 placeholder="Select Item"
                 prefix={<AppstoreOutlined />}
                 optionFilterProp="children"
+                onChange={handleItemChange}
               >
                 {items.map(i => (
                   <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
@@ -555,6 +635,7 @@ export const SaleSupplyForm: React.FC = () => {
               </Select>
             </Form.Item>
           </Col>
+
           <Col xs={24} sm={24} lg={8}>
             <Form.Item label="Supply Order Profile" name="supplyOrderMasterId">
               <Select
