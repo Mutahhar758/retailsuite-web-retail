@@ -86,7 +86,7 @@ export const PurchaseForm: React.FC = () => {
               secRate: d.secRate,
               secUnit: d.secUnit,
               packQty: (d as any).qtyInPack || ((d.qty > 0 && d.secQty && d.secQty > 0) ? round(d.qty / d.secQty, 2) : 0),
-              packing: (d.rate > 0 && d.secRate && d.secRate > 0) ? round(d.secRate / d.rate, 2) : ((d as any).qtyInPack || 0)
+              packing: (d as any).packing || 0
             })));
           }
         } catch (error) {
@@ -305,7 +305,8 @@ export const PurchaseForm: React.FC = () => {
           secUnit: l.secUnit || null,
           secQty: l.secQty || 0,
           secRate: l.secRate || 0,
-          qtyInPack: l.packQty || l.qtyInPack || null
+          qtyInPack: l.packQty || l.qtyInPack || null,
+          packing: l.packing || null
         }))
       };
 

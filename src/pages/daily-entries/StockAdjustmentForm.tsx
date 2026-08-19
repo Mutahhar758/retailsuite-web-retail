@@ -75,7 +75,7 @@ export const StockAdjustmentForm: React.FC = () => {
           const netKg = (d.qtyIn || 0) - (d.qtyOut || 0);
           const netBag = ((d.secQtyIn ?? 0) - (d.secQtyOut ?? 0));
           const pQty = (d as any).qtyInPack || ((netKg > 0 && netBag > 0) ? round((netKg / netBag), 2) : 0);
-          const pCking = (d.rate > 0 && d.secRate && d.secRate > 0) ? round((d.secRate / d.rate), 2) : ((d as any).qtyInPack || 0);
+          const pCking = (d as any).packing || 0;
           return {
             ...d,
             key: d.seq || Date.now() + Math.random(),
@@ -244,7 +244,8 @@ export const StockAdjustmentForm: React.FC = () => {
           secQtyIn: l.secQtyIn || 0,
           secQtyOut: l.secQtyOut || 0,
           secRate: l.secRate || 0,
-          qtyInPack: l.packQty || l.qtyInPack || null
+          qtyInPack: l.packQty || l.qtyInPack || null,
+          packing: l.packing || null
         }))
       };
 
