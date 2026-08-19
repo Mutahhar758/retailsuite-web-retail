@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Row, Col, Card, Typography, Form, Input, Button,
   Table, Space, message, InputNumber, Popconfirm, Select
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
-  ShoppingCartOutlined
+  ShoppingCartOutlined, SearchOutlined
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supplyOrderService } from '../../services/supplyOrderService';
@@ -22,6 +22,7 @@ export const SupplyOrderForm: React.FC = () => {
   
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [orderLines, setOrderLines] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     // Load customer accounts
@@ -146,6 +147,20 @@ export const SupplyOrderForm: React.FC = () => {
     }
   };
 
+  // Filter rows in table by search query
+  const displayedOrderLines = useMemo(() => {
+    if (!searchQuery.trim()) return orderLines;
+    const q = searchQuery.toLowerCase().trim();
+    return orderLines.filter(l => {
+      if (!l.customerId) return true;
+      const cust = customers.find(c => c.account === l.customerId);
+      const titleMatch = cust?.title.toLowerCase().includes(q);
+      const accMatch = l.customerId.toLowerCase().includes(q);
+      const sortMatch = String(l.sortOrder).includes(q);
+      return titleMatch || accMatch || sortMatch;
+    });
+  }, [orderLines, searchQuery, customers]);
+
   const columns = [
     {
       title: 'Sort Order',
@@ -258,11 +273,21 @@ export const SupplyOrderForm: React.FC = () => {
             <Title level={5} style={{ margin: 0 }}>Customers & Order Sequence</Title>
             <Text type="secondary" style={{ fontSize: 13 }}>Customers in this template will be loaded into the Sale Supply form in this sequence.</Text>
           </div>
-          <Button type="dashed" onClick={handleAddRow} icon={<PlusOutlined />}>Add Customer Row</Button>
+          <Space>
+            <Input
+              prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+              placeholder="Search customers..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              allowClear
+              style={{ width: 220 }}
+            />
+            <Button type="dashed" onClick={handleAddRow} icon={<PlusOutlined />}>Add Customer Row</Button>
+          </Space>
         </div>
         
         <Table
-          dataSource={orderLines}
+          dataSource={displayedOrderLines}
           columns={columns}
           pagination={false}
           rowKey="key"
