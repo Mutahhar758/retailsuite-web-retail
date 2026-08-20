@@ -383,6 +383,48 @@ export const SaleSupplyForm: React.FC = () => {
     }
   };
 
+  const handleCustomerChange = async (key: number, customerId: string) => {
+    const masterItemId = form.getFieldValue('itemId');
+    const item = items.find(i => i.id === masterItemId);
+    const isSec = item?.defaultUnit === item?.secondaryUnit;
+    const rate = isSec ? (item?.secRate || 0) : (item?.priRate || 0);
+    const secRate = item?.secRate || 0;
+
+    let defQty = 1;
+    let defSecQty = 0;
+
+    if (masterItemId && customerId) {
+      try {
+        const customItems = await customerService.getSupplyItems({ customerId, itemId: masterItemId });
+        if (customItems && customItems.length > 0) {
+          defQty = customItems[0].qty > 0 ? customItems[0].qty : 1;
+          defSecQty = customItems[0].secQty || 0;
+        }
+      } catch (err) {
+        console.error('Failed to get customer supply item default', err);
+      }
+    }
+
+    setSupplyLines(prev => prev.map(l => {
+      if (l.key === key) {
+        const amount = hasVariablePackFeature
+          ? round(defQty * (rate - (l.discount || 0)) + (l.addLess || 0), 2)
+          : round(defQty * (rate - (l.discount || 0)) + (l.addLess || 0) + (defSecQty * secRate), 2);
+
+        return {
+          ...l,
+          customerId,
+          qty: defQty,
+          secQty: defSecQty,
+          rate,
+          secRate,
+          amount
+        };
+      }
+      return l;
+    }));
+  };
+
   const columns = [
     {
       title: 'Customer',
@@ -395,7 +437,7 @@ export const SaleSupplyForm: React.FC = () => {
           placeholder="Select Customer"
           optionFilterProp="children"
           value={text}
-          onChange={(val) => updateLine(record.key, 'customerId', val)}
+          onChange={(val) => handleCustomerChange(record.key, val)}
         >
           {customers.map(c => (
             <Select.Option key={c.account} value={c.account}>{c.title}</Select.Option>
