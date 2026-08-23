@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
-  Table, Space, message, InputNumber, Popconfirm
+  Table, Space, message, InputNumber, Popconfirm, Tooltip
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
@@ -17,6 +17,7 @@ import { narrationService, type NarrationDto } from '../../services/narrationSer
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
 import { customerService } from '../../services/customerService';
+import { useGridKeyboard } from '../../hooks/useGridKeyboard';
 
 const { Title, Text } = Typography;
 
@@ -32,7 +33,7 @@ export const SaleSupplyForm: React.FC = () => {
   const location = useLocation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  
+
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -40,6 +41,72 @@ export const SaleSupplyForm: React.FC = () => {
   const [supplyLines, setSupplyLines] = useState<any[]>([]);
   const [supplyOrders, setSupplyOrders] = useState<SupplyOrder[]>([]);
 
+  // ── Keyboard navigation ────────────────────────────────────────────────────
+  // pendingFocusRef: set BEFORE calling onAddRow so the useEffect in the hook
+  // can auto-focus the new row's Customer cell once rowCount increments.
+  const pendingFocusRef = useRef<{ rowIdx: number; colKey: 'customerId' } | null>(null);
+
+  const handleAddRow = useCallback(() => {
+    setSupplyLines(prev => {
+      const newSeq = prev.length > 0 ? Math.max(...prev.map(l => l.seq)) + 1 : 1;
+      return [
+        ...prev,
+        { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }
+      ];
+    });
+  }, []);
+
+  const { getCellRef, handleCellKeyDown, focusCell } = useGridKeyboard({
+    rowCount: supplyLines.length,
+    hasSecondaryQty,
+    hasVariablePackFeature,
+    onAddRow: handleAddRow,
+    pendingFocusRef,
+  });
+
+  // Header field refs
+  const datePickerRef = useRef<any>(null);
+  const itemSelectRef = useRef<any>(null);
+  const supplyOrderSelectRef = useRef<any>(null);
+
+  // Form wrapper ref — receives global key events
+  const formWrapperRef = useRef<HTMLDivElement>(null);
+
+  // ── Global shortcut keys ───────────────────────────────────────────────────
+  const handleFormKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    switch (e.key) {
+      case 'F1':
+        e.preventDefault();
+        handleNew();
+        break;
+      case 'F2':
+        e.preventDefault();
+        itemSelectRef.current?.focus();
+        break;
+      case 'F5':
+        e.preventDefault();
+        handleSave();
+        break;
+      case 'Insert':
+        e.preventDefault();
+        // Schedule focus on new row Customer before state update
+        pendingFocusRef.current = { rowIdx: supplyLines.length, colKey: 'customerId' };
+        handleAddRow();
+        break;
+      default:
+        break;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supplyLines.length, handleAddRow]);
+
+  const handleNew = useCallback(() => {
+    form.resetFields();
+    form.setFieldsValue({ date: dayjs() });
+    setSupplyLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
+    setTimeout(() => datePickerRef.current?.focus(), 50);
+  }, [form]);
+
+  // ── Data loading ───────────────────────────────────────────────────────────
   useEffect(() => {
     chartOfAccountService.getCustomerAccounts().then(setCustomers);
     narrationService.getActiveNarrationsLookup().then(setNarrations);
@@ -52,7 +119,6 @@ export const SaleSupplyForm: React.FC = () => {
     } else {
       const copyFrom = (location.state as any)?.copyFrom;
       if (copyFrom) {
-        // Pre-populate from Copy as New
         form.setFieldsValue({
           date: dayjs(),
           itemId: copyFrom.itemId,
@@ -113,7 +179,7 @@ export const SaleSupplyForm: React.FC = () => {
     if (!orderId || isEdit) return;
     const masterItemId = form.getFieldValue('itemId');
     const item = items.find(i => i.id === masterItemId);
-    
+
     setLoading(true);
     try {
       const [order, customSupplyItems] = await Promise.all([
@@ -216,11 +282,27 @@ export const SaleSupplyForm: React.FC = () => {
     }
   };
 
+  // ── Header Enter Navigation: Date → Item → Supply Order Profile → Grid Row 0 Customer ──
+  const handleDatePickerKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      setTimeout(() => itemSelectRef.current?.focus(), 50);
+    }
+  }, []);
 
-  const handleAddRow = () => {
-    const newSeq = supplyLines.length > 0 ? Math.max(...supplyLines.map(l => l.seq)) + 1 : 1;
-    setSupplyLines([...supplyLines, { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
-  };
+  const handleItemSelectKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      // Small delay to let Ant Design's own Enter handler close the dropdown first
+      setTimeout(() => supplyOrderSelectRef.current?.focus(), 50);
+    }
+  }, []);
+
+  const handleSupplyOrderKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      // Small delay to let Ant Design's own Enter handler close the dropdown first
+      setTimeout(() => focusCell(0, 'customerId'), 50);
+    }
+  }, [focusCell]);
 
   const handleRemoveRow = async (key: number, seq: number) => {
     if (isEdit && typeof key === 'number' && key < 1000000000) {
@@ -316,15 +398,11 @@ export const SaleSupplyForm: React.FC = () => {
     setSupplyLines(newLines);
   };
 
-  // const calculateTotal = () => {
-  //   return supplyLines.reduce((sum, l) => sum + (l.amount || 0), 0);
-  // };
-
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
       const validLines = supplyLines.filter(l => l.customerId && l.qty > 0);
-      
+
       if (validLines.length === 0) {
         message.error('Please add at least one customer');
         return;
@@ -425,19 +503,22 @@ export const SaleSupplyForm: React.FC = () => {
     }));
   };
 
+  // ── Table columns ──────────────────────────────────────────────────────────
   const columns = [
     {
       title: 'Customer',
       dataIndex: 'customerId',
       key: 'customerId',
-      render: (text: string, record: any) => (
+      render: (text: string, record: any, rowIdx: number) => (
         <Select
+          ref={getCellRef(rowIdx, 'customerId')}
           showSearch
           style={{ width: '100%' }}
           placeholder="Select Customer"
           optionFilterProp="children"
           value={text}
           onChange={(val) => handleCustomerChange(record.key, val)}
+          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'customerId', e)}
         >
           {customers.map(c => (
             <Select.Option key={c.account} value={c.account}>{c.title}</Select.Option>
@@ -451,18 +532,21 @@ export const SaleSupplyForm: React.FC = () => {
         dataIndex: 'unit',
         key: 'unit',
         width: 120,
-        render: (text: string, record: any) => {
+        render: (text: string, record: any, rowIdx: number) => {
           const masterItemId = form.getFieldValue('itemId');
           const item = items.find(i => i.id === masterItemId);
-          const filteredUnits = item 
+          const filteredUnits = item
             ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit)
             : units;
-            
+
           return (
             <Select
+              ref={getCellRef(rowIdx, 'unit')}
               style={{ width: '100%' }}
               value={text}
+              tabIndex={-1}
               onChange={(val) => updateLine(record.key, 'unit', val)}
+              onKeyDown={(e) => handleCellKeyDown(rowIdx, 'unit', e)}
             >
               {filteredUnits.map(u => (
                 <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
@@ -477,8 +561,18 @@ export const SaleSupplyForm: React.FC = () => {
       dataIndex: 'qty',
       key: 'qty',
       width: 100,
-      render: (val: number, record: any) => (
-        <InputNumber style={{ width: '100%' }} value={val} min={0} precision={2} onChange={(v) => updateLine(record.key, 'qty', v)} />
+      render: (val: number, record: any, rowIdx: number) => (
+        <InputNumber
+          ref={getCellRef(rowIdx, 'qty')}
+          style={{ width: '100%' }}
+          value={val}
+          min={0}
+          precision={2}
+          keyboard={false}
+          controls={false}
+          onChange={(v) => updateLine(record.key, 'qty', v)}
+          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'qty', e)}
+        />
       )
     },
     ...(hasVariablePackFeature ? [
@@ -487,8 +581,18 @@ export const SaleSupplyForm: React.FC = () => {
         dataIndex: 'secQty',
         key: 'secQty',
         width: 100,
-        render: (val: number, record: any) => (
-          <InputNumber style={{ width: '100%' }} value={val} min={0} precision={2} onChange={(v) => updateLine(record.key, 'secQty', v)} />
+        render: (val: number, record: any, rowIdx: number) => (
+          <InputNumber
+            ref={getCellRef(rowIdx, 'secQty')}
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            precision={2}
+            keyboard={false}
+            controls={false}
+            onChange={(v) => updateLine(record.key, 'secQty', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secQty', e)}
+          />
         )
       },
       {
@@ -496,8 +600,18 @@ export const SaleSupplyForm: React.FC = () => {
         dataIndex: 'packQty',
         key: 'packQty',
         width: 100,
-        render: (val: number, record: any) => (
-          <InputNumber style={{ width: '100%' }} value={val} min={0} precision={2} onChange={(v) => updateLine(record.key, 'packQty', v)} />
+        render: (val: number, record: any, rowIdx: number) => (
+          <InputNumber
+            ref={getCellRef(rowIdx, 'packQty')}
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            precision={2}
+            keyboard={false}
+            controls={false}
+            onChange={(v) => updateLine(record.key, 'packQty', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'packQty', e)}
+          />
         )
       },
       {
@@ -505,8 +619,18 @@ export const SaleSupplyForm: React.FC = () => {
         dataIndex: 'packing',
         key: 'packing',
         width: 100,
-        render: (val: number, record: any) => (
-          <InputNumber style={{ width: '100%' }} value={val} min={0} precision={2} onChange={(v) => updateLine(record.key, 'packing', v)} />
+        render: (val: number, record: any, rowIdx: number) => (
+          <InputNumber
+            ref={getCellRef(rowIdx, 'packing')}
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            precision={2}
+            keyboard={false}
+            controls={false}
+            onChange={(v) => updateLine(record.key, 'packing', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'packing', e)}
+          />
         )
       }
     ] : []),
@@ -515,15 +639,21 @@ export const SaleSupplyForm: React.FC = () => {
       dataIndex: 'rate',
       key: 'rate',
       width: 120,
-      render: (val: number, record: any) => (
+      render: (val: number, record: any, rowIdx: number) => (
+        // Rate is auto-filled — reachable by arrows but NOT by Enter flow
         <InputNumber
+          ref={getCellRef(rowIdx, 'rate')}
           style={{ width: '100%' }}
           value={val}
           min={0}
           precision={4}
           step={0.01}
+          tabIndex={-1}
+          keyboard={false}
+          controls={false}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           onChange={(v) => updateLine(record.key, 'rate', v)}
+          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'rate', e)}
         />
       )
     },
@@ -533,15 +663,19 @@ export const SaleSupplyForm: React.FC = () => {
         dataIndex: 'secRate',
         key: 'secRate',
         width: 120,
-        render: (val: number, record: any) => (
+        render: (val: number, record: any, rowIdx: number) => (
           <InputNumber
+            ref={getCellRef(rowIdx, 'secRate')}
             style={{ width: '100%' }}
             value={val}
             min={0}
             precision={4}
             step={0.01}
+            keyboard={false}
+            controls={false}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             onChange={(v) => updateLine(record.key, 'secRate', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secRate', e)}
           />
         )
       }
@@ -552,8 +686,17 @@ export const SaleSupplyForm: React.FC = () => {
         dataIndex: 'secQty',
         key: 'secQty',
         width: 100,
-        render: (val: number, record: any) => (
-          <InputNumber style={{ width: '100%' }} value={val} min={0} onChange={(v) => updateLine(record.key, 'secQty', v)} />
+        render: (val: number, record: any, rowIdx: number) => (
+          <InputNumber
+            ref={getCellRef(rowIdx, 'secQty')}
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            keyboard={false}
+            controls={false}
+            onChange={(v) => updateLine(record.key, 'secQty', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secQty', e)}
+          />
         )
       }
     ] : []),
@@ -563,7 +706,22 @@ export const SaleSupplyForm: React.FC = () => {
       key: 'discount',
       width: 100,
       render: (val: number, record: any) => (
-        <InputNumber style={{ width: '100%' }} value={val} min={0} onChange={(v) => updateLine(record.key, 'discount', v)} />
+        // Discount is always visible but excluded from Enter flow (tabIndex={-1})
+        // Users can still click it or reach it via arrow keys.
+        <InputNumber
+          ref={getCellRef(supplyLines.findIndex(l => l.key === record.key), 'discount')}
+          style={{ width: '100%' }}
+          value={val}
+          min={0}
+          tabIndex={-1}
+          keyboard={false}
+          controls={false}
+          onChange={(v) => updateLine(record.key, 'discount', v)}
+          onKeyDown={(e) => {
+            const rowIdx = supplyLines.findIndex(l => l.key === record.key);
+            handleCellKeyDown(rowIdx, 'discount', e);
+          }}
+        />
       )
     },
     {
@@ -571,8 +729,17 @@ export const SaleSupplyForm: React.FC = () => {
       dataIndex: 'addLess',
       key: 'addLess',
       width: 100,
-      render: (val: number, record: any) => (
-        <InputNumber style={{ width: '100%' }} value={val} onChange={(v) => updateLine(record.key, 'addLess', v)} />
+      render: (val: number, record: any, rowIdx: number) => (
+        <InputNumber
+          ref={getCellRef(rowIdx, 'addLess')}
+          style={{ width: '100%' }}
+          value={val}
+          tabIndex={-1}
+          keyboard={false}
+          controls={false}
+          onChange={(v) => updateLine(record.key, 'addLess', v)}
+          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'addLess', e)}
+        />
       )
     },
     {
@@ -581,6 +748,7 @@ export const SaleSupplyForm: React.FC = () => {
       key: 'amount',
       width: 150,
       align: 'right' as const,
+      // Amount is read-only display — no ref, no keyboard handler, no tabIndex
       render: (val: number) => <Text strong>{(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
     },
     {
@@ -588,161 +756,234 @@ export const SaleSupplyForm: React.FC = () => {
       key: 'actions',
       width: 60,
       render: (_: any, record: any) => (
-        <Button 
-          type="text" 
-          danger 
-          icon={<DeleteOutlined />} 
+        <Button
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
           onClick={() => handleRemoveRow(record.key, record.seq)}
           disabled={supplyLines.length === 1}
+          tabIndex={-1}
         />
       )
     }
   ];
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <Card className="shadow-sm border-gray-100 rounded-xl">
-      <div className="flex justify-between items-center mb-6">
-        <Space align="center">
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/daily-entries/sale-supply')} type="text" />
-          <TruckOutlined style={{ fontSize: 24, color: '#f59e0b' }} />
-          <div>
-            <Title level={4} style={{ margin: 0 }}>
-              {isEdit ? `Edit Sale Supply: SP-${voucherNo}` : 'New Sale Supply'}
-            </Title>
-            <Text type="secondary">{isEdit ? 'Modify existing supply voucher' : 'Supply items to multiple customers'}</Text>
-          </div>
-        </Space>
-        <Space>
-          {isEdit && (
-            <Popconfirm title="Delete this supply voucher?" onConfirm={handleDelete}>
-              <Button danger icon={<DeleteOutlined />}>Delete</Button>
-            </Popconfirm>
-          )}
-          {isEdit && (
-            <Button
-              icon={<CopyOutlined />}
-              onClick={() => {
-                const values = form.getFieldsValue();
-                navigate('/daily-entries/sale-supply/new', {
-                  state: {
-                    copyFrom: {
-                      itemId: values.itemId,
-                      narration: values.narration,
-                      description: values.description,
-                      supplyOrderMasterId: values.supplyOrderMasterId,
-                      lines: supplyLines
+    // Keyboard shortcuts wrapper — must be focusable (tabIndex={-1}) to receive keydown
+    <div
+      ref={formWrapperRef}
+      onKeyDown={handleFormKeyDown}
+      tabIndex={-1}
+      style={{ outline: 'none' }}
+    >
+      <Card className="shadow-sm border-gray-100 rounded-xl">
+        <div className="flex justify-between items-center mb-6">
+          <Space align="center">
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/daily-entries/sale-supply')} type="text" />
+            <TruckOutlined style={{ fontSize: 24, color: '#f59e0b' }} />
+            <div>
+              <Title level={4} style={{ margin: 0 }}>
+                {isEdit ? `Edit Sale Supply: SP-${voucherNo}` : 'New Sale Supply'}
+              </Title>
+              <Text type="secondary">{isEdit ? 'Modify existing supply voucher' : 'Supply items to multiple customers'}</Text>
+            </div>
+          </Space>
+          <Space>
+            {isEdit && (
+              <Popconfirm title="Delete this supply voucher?" onConfirm={handleDelete}>
+                <Button danger icon={<DeleteOutlined />}>Delete</Button>
+              </Popconfirm>
+            )}
+            {isEdit && (
+              <Button
+                icon={<CopyOutlined />}
+                onClick={() => {
+                  const values = form.getFieldsValue();
+                  navigate('/daily-entries/sale-supply/new', {
+                    state: {
+                      copyFrom: {
+                        itemId: values.itemId,
+                        narration: values.narration,
+                        description: values.description,
+                        supplyOrderMasterId: values.supplyOrderMasterId,
+                        lines: supplyLines
+                      }
                     }
-                  }
-                });
-              }}
+                  });
+                }}
+              >
+                Copy as New
+              </Button>
+            )}
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              onClick={handleSave}
+              loading={loading}
+              style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}
             >
-              Copy as New
+              Save Supply
             </Button>
-          )}
-          <Button 
-            type="primary" 
-            icon={<SaveOutlined />} 
-            onClick={handleSave} 
-            loading={loading}
-            style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}
-          >
-            Save Supply
-          </Button>
-        </Space>
-      </div>
-
-      <Form form={form} layout="vertical">
-        <Row gutter={16}>
-          <Col xs={24} sm={8} lg={4}>
-            <Form.Item label="Voucher #">
-              <Input value={isEdit ? `SP-${voucherNo}` : ''} readOnly style={{ backgroundColor: '#f5f5f5' }} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} sm={8} lg={4}>
-            <Form.Item label="Date" name="date" rules={[{ required: true }]}>
-              <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" />
-            </Form.Item>
-          </Col>
-          <Col xs={24} sm={16} lg={8}>
-            <Form.Item label="Item to Supply" name="itemId" rules={[{ required: true }]}>
-              <Select 
-                showSearch 
-                placeholder="Select Item"
-                prefix={<AppstoreOutlined />}
-                optionFilterProp="children"
-                onChange={handleItemChange}
-              >
-                {items.map(i => (
-                  <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          </Col>
-
-          <Col xs={24} sm={24} lg={8}>
-            <Form.Item label="Supply Order Profile" name="supplyOrderMasterId">
-              <Select
-                placeholder="Select Supply Order Profile"
-                onChange={handleLoadFromSupplyOrder}
-                allowClear
-              >
-                {supplyOrders.map(o => (
-                  <Select.Option key={o.id} value={o.id}>{o.title}</Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          </Col>
-        </Row>
-
-        <Row gutter={16}>
-          <Col xs={24} lg={12}>
-            <Form.Item label="Narration" name="narration">
-              <Select showSearch placeholder="Select narration" prefix={<FileTextOutlined />} allowClear>
-                {narrations.map(n => (
-                  <Select.Option key={n.code} value={n.code}>{n.title}</Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          </Col>
-          <Col xs={24} lg={12}>
-            <Form.Item label="Description" name="description">
-              <Input placeholder="Additional supply details..." />
-            </Form.Item>
-          </Col>
-        </Row>
-
-        <div className="flex justify-between items-center mb-4 mt-2">
-          <Title level={5} style={{ margin: 0 }}>Customer List</Title>
-          <Button type="dashed" onClick={handleAddRow} icon={<PlusOutlined />}>Add Row</Button>
+          </Space>
         </div>
-        
-        <Table
-          dataSource={supplyLines}
-          columns={columns}
-          pagination={false}
-          rowKey="key"
-          size="small"
-          bordered
-          className="mb-4"
-          summary={pageData => {
-            let total = 0;
-            pageData.forEach(({ amount }) => {
-              total += amount || 0;
-            });
-            return (
-              <Table.Summary fixed>
-                <Table.Summary.Row>
-                  <Table.Summary.Cell index={0} colSpan={6} align="right"><b>Net Total</b></Table.Summary.Cell>
-                  <Table.Summary.Cell index={1} align="right">
-                    <Text strong style={{ color: '#f59e0b' }}>{total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={2}></Table.Summary.Cell>
-                </Table.Summary.Row>
-              </Table.Summary>
-            );
+
+        <Form form={form} layout="vertical">
+          <Row gutter={16}>
+            <Col xs={24} sm={8} lg={4}>
+              <Form.Item label="Voucher #">
+                <Input value={isEdit ? `SP-${voucherNo}` : ''} readOnly style={{ backgroundColor: '#f5f5f5' }} tabIndex={-1} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={8} lg={4}>
+              <Form.Item label="Date" name="date" rules={[{ required: true }]}>
+                <DatePicker
+                  ref={datePickerRef}
+                  style={{ width: '100%' }}
+                  format="DD-MMM-YYYY"
+                  onKeyDown={handleDatePickerKeyDown}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={16} lg={8}>
+              <Form.Item label="Item to Supply" name="itemId" rules={[{ required: true }]}>
+                <Select
+                  id="item-select"
+                  ref={itemSelectRef}
+                  showSearch
+                  placeholder="Select Item"
+                  prefix={<AppstoreOutlined />}
+                  optionFilterProp="children"
+                  onChange={handleItemChange}
+                  onKeyDown={handleItemSelectKeyDown}
+                >
+                  {items.map(i => (
+                    <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+
+            <Col xs={24} sm={24} lg={8}>
+              <Form.Item label="Supply Order Profile" name="supplyOrderMasterId">
+                <Select
+                  ref={supplyOrderSelectRef}
+                  showSearch
+                  placeholder="Select Supply Order Profile"
+                  optionFilterProp="children"
+                  onChange={handleLoadFromSupplyOrder}
+                  onKeyDown={handleSupplyOrderKeyDown}
+                  allowClear
+                >
+                  {supplyOrders.map(o => (
+                    <Select.Option key={o.id} value={o.id}>{o.title}</Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col xs={24} lg={12}>
+              {/* Narration — mouse-only, removed from Tab flow */}
+              <Form.Item label="Narration" name="narration">
+                <Select showSearch placeholder="Select narration" prefix={<FileTextOutlined />} allowClear tabIndex={-1}>
+                  {narrations.map(n => (
+                    <Select.Option key={n.code} value={n.code}>{n.title}</Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} lg={12}>
+              {/* Description — mouse-only, removed from Tab flow */}
+              <Form.Item label="Description" name="description">
+                <Input placeholder="Additional supply details..." tabIndex={-1} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <div className="flex justify-between items-center mb-4 mt-2">
+            <Title level={5} style={{ margin: 0 }}>Customer List</Title>
+            <Space>
+              <Tooltip title="Ins — Add new row">
+                <Button type="dashed" onClick={handleAddRow} icon={<PlusOutlined />}>Add Row</Button>
+              </Tooltip>
+            </Space>
+          </div>
+
+          <Table
+            dataSource={supplyLines}
+            columns={columns}
+            pagination={false}
+            rowKey="key"
+            size="small"
+            bordered
+            className="mb-4"
+            summary={pageData => {
+              let total = 0;
+              pageData.forEach(({ amount }) => {
+                total += amount || 0;
+              });
+              return (
+                <Table.Summary fixed>
+                  <Table.Summary.Row>
+                    <Table.Summary.Cell index={0} colSpan={6} align="right"><b>Net Total</b></Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right">
+                      <Text strong style={{ color: '#f59e0b' }}>{total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={2}></Table.Summary.Cell>
+                  </Table.Summary.Row>
+                </Table.Summary>
+              );
+            }}
+          />
+        </Form>
+
+        {/* ── Keyboard shortcut hint bar ─────────────────────────────────── */}
+        <div
+          style={{
+            marginTop: 8,
+            padding: '6px 12px',
+            background: '#fafafa',
+            border: '1px solid #f0f0f0',
+            borderRadius: 6,
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '12px',
+            alignItems: 'center',
           }}
-        />
-      </Form>
-    </Card>
+        >
+          <span style={{ color: '#aaa', fontSize: 14 }}>⌨️</span>
+          {[
+            ['F1', 'New'],
+            ['F2', 'Item'],
+            ['F5', 'Save'],
+            ['Ins', 'Add Row'],
+            ['Enter', 'Next Field'],
+            ['↑↓←→', 'Navigate'],
+            ['Esc', 'Cancel Edit'],
+          ].map(([key, label]) => (
+            <span key={key} style={{ fontSize: 12, color: '#666', whiteSpace: 'nowrap' }}>
+              <kbd
+                style={{
+                  display: 'inline-block',
+                  padding: '1px 5px',
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                  background: '#fff',
+                  border: '1px solid #d9d9d9',
+                  borderRadius: 3,
+                  boxShadow: '0 1px 0 rgba(0,0,0,.1)',
+                  marginRight: 4,
+                }}
+              >
+                {key}
+              </kbd>
+              {label}
+            </span>
+          ))}
+        </div>
+      </Card>
+    </div>
   );
 };
