@@ -187,11 +187,17 @@ export const SaleSupplyForm: React.FC = () => {
         masterItemId ? customerService.getSupplyItems({ itemId: masterItemId }) : Promise.resolve([])
       ]);
 
-      const customerQtyMap = new Map<string, { qty: number; secQty?: number }>();
+      const customerQtyMap = new Map<string, { qty: number; secQty?: number; rate?: number; addLess?: number; discount?: number }>();
       if (customSupplyItems && Array.isArray(customSupplyItems)) {
         customSupplyItems.forEach(ci => {
           if (ci.customerAccountId) {
-            customerQtyMap.set(ci.customerAccountId, { qty: ci.qty, secQty: ci.secQty });
+            customerQtyMap.set(ci.customerAccountId, {
+              qty: ci.qty,
+              secQty: ci.secQty,
+              rate: ci.rate,
+              addLess: ci.addLess,
+              discount: ci.discount
+            });
           }
         });
       }
@@ -205,10 +211,13 @@ export const SaleSupplyForm: React.FC = () => {
           const setting = customerQtyMap.get(d.customerId);
           const qty = setting ? setting.qty : 1;
           const secQty = setting ? (setting.secQty || 0) : 0;
+          const lineRate = setting?.rate != null ? setting.rate : rate;
+          const lineDiscount = setting?.discount != null ? setting.discount : 0;
+          const lineAddLess = setting?.addLess != null ? setting.addLess : 0;
 
           const amount = hasVariablePackFeature
-            ? round(qty * rate, 2)
-            : round((qty * rate) + (secQty * secRate), 2);
+            ? round(qty * (lineRate - lineDiscount) + lineAddLess, 2)
+            : round((qty * (lineRate - lineDiscount)) + lineAddLess + (secQty * secRate), 2);
 
           return {
             key: Date.now() + index,
@@ -216,9 +225,9 @@ export const SaleSupplyForm: React.FC = () => {
             customerId: d.customerId,
             unit: item?.defaultUnit || '',
             qty: qty,
-            rate: rate,
-            discount: 0,
-            addLess: 0,
+            rate: lineRate,
+            discount: lineDiscount,
+            addLess: lineAddLess,
             amount: amount,
             secQty: secQty,
             secRate: secRate,
@@ -243,11 +252,17 @@ export const SaleSupplyForm: React.FC = () => {
 
     try {
       const customSupplyItems = await customerService.getSupplyItems({ itemId: newItemId });
-      const customerQtyMap = new Map<string, { qty: number; secQty?: number }>();
+      const customerQtyMap = new Map<string, { qty: number; secQty?: number; rate?: number; addLess?: number; discount?: number }>();
       if (customSupplyItems && Array.isArray(customSupplyItems)) {
         customSupplyItems.forEach(ci => {
           if (ci.customerAccountId) {
-            customerQtyMap.set(ci.customerAccountId, { qty: ci.qty, secQty: ci.secQty });
+            customerQtyMap.set(ci.customerAccountId, {
+              qty: ci.qty,
+              secQty: ci.secQty,
+              rate: ci.rate,
+              addLess: ci.addLess,
+              discount: ci.discount
+            });
           }
         });
       }
@@ -261,17 +276,22 @@ export const SaleSupplyForm: React.FC = () => {
         const setting = customerQtyMap.get(line.customerId);
         const qty = setting ? setting.qty : (line.qty || 1);
         const secQty = setting ? (setting.secQty || 0) : (line.secQty || 0);
+        const lineRate = setting?.rate != null ? setting.rate : rate;
+        const lineDiscount = setting?.discount != null ? setting.discount : (line.discount || 0);
+        const lineAddLess = setting?.addLess != null ? setting.addLess : (line.addLess || 0);
 
         const amount = hasVariablePackFeature
-          ? round(qty * (rate - (line.discount || 0)) + (line.addLess || 0), 2)
-          : round(qty * (rate - (line.discount || 0)) + (line.addLess || 0) + (secQty * secRate), 2);
+          ? round(qty * (lineRate - lineDiscount) + lineAddLess, 2)
+          : round(qty * (lineRate - lineDiscount) + lineAddLess + (secQty * secRate), 2);
 
         return {
           ...line,
           unit: item?.defaultUnit || line.unit,
           qty,
           secQty,
-          rate,
+          rate: lineRate,
+          discount: lineDiscount,
+          addLess: lineAddLess,
           secRate,
           secUnit: item?.secondaryUnit || line.secUnit,
           amount

@@ -22,6 +22,9 @@ interface SupplyLineRow {
   itemId: string;
   qty: number;
   secQty?: number;
+  rate?: number | null;
+  addLess?: number;
+  discount?: number;
 }
 
 export const CustomerForm: React.FC = () => {
@@ -83,7 +86,10 @@ export const CustomerForm: React.FC = () => {
               key: `${si.itemId}-${idx}`,
               itemId: si.itemId,
               qty: si.qty || 1,
-              secQty: si.secQty || 0
+              secQty: si.secQty || 0,
+              rate: si.rate != null ? si.rate : null,
+              addLess: si.addLess || 0,
+              discount: si.discount || 0
             })));
           } else {
             setSupplyLines([]);
@@ -107,7 +113,7 @@ export const CustomerForm: React.FC = () => {
   const handleAddSupplyRow = () => {
     setSupplyLines([
       ...supplyLines,
-      { key: Date.now(), itemId: '', qty: 1, secQty: 0 }
+      { key: Date.now(), itemId: '', qty: 1, secQty: 0, rate: null, addLess: 0, discount: 0 }
     ]);
   };
 
@@ -134,7 +140,10 @@ export const CustomerForm: React.FC = () => {
         .map(l => ({
           itemId: l.itemId,
           qty: l.qty || 1,
-          secQty: l.secQty || 0
+          secQty: l.secQty || 0,
+          rate: l.rate != null && l.rate !== undefined ? l.rate : undefined,
+          addLess: l.addLess || 0,
+          discount: l.discount || 0
         }));
 
       if (isEdit) {
@@ -267,7 +276,7 @@ export const CustomerForm: React.FC = () => {
       title: 'Pack Qty',
       dataIndex: 'secQty',
       key: 'secQty',
-      width: 140,
+      width: 120,
       render: (val: number, record: SupplyLineRow) => (
         <InputNumber
           style={{ width: '100%' }}
@@ -278,6 +287,51 @@ export const CustomerForm: React.FC = () => {
         />
       )
     }] : []),
+    {
+      title: 'Rate',
+      dataIndex: 'rate',
+      key: 'rate',
+      width: 130,
+      render: (val: number | null | undefined, record: SupplyLineRow) => (
+        <InputNumber
+          style={{ width: '100%' }}
+          placeholder="Item Default"
+          value={val ?? undefined}
+          min={0}
+          precision={2}
+          onChange={(newVal) => updateSupplyRow(record.key, 'rate', newVal != null ? newVal : null)}
+        />
+      )
+    },
+    {
+      title: 'Add / Less',
+      dataIndex: 'addLess',
+      key: 'addLess',
+      width: 120,
+      render: (val: number, record: SupplyLineRow) => (
+        <InputNumber
+          style={{ width: '100%' }}
+          value={val}
+          precision={2}
+          onChange={(newVal) => updateSupplyRow(record.key, 'addLess', newVal || 0)}
+        />
+      )
+    },
+    {
+      title: 'Discount',
+      dataIndex: 'discount',
+      key: 'discount',
+      width: 120,
+      render: (val: number, record: SupplyLineRow) => (
+        <InputNumber
+          style={{ width: '100%' }}
+          value={val}
+          min={0}
+          precision={2}
+          onChange={(newVal) => updateSupplyRow(record.key, 'discount', newVal || 0)}
+        />
+      )
+    },
     {
       title: 'Action',
       key: 'action',
