@@ -402,6 +402,20 @@ export const SaleSupplyForm: React.FC = () => {
           updated.secRate = round(bagRate, 4);
         }
 
+        if (field === 'discPercent') {
+          const rate = updated.rate || 0;
+          updated.discount = rate > 0 ? round(rate * (numVal / 100), 2) : 0;
+          updated.discPercent = numVal;
+        } else if (field === 'discount') {
+          const rate = updated.rate || 0;
+          updated.discount = numVal;
+          updated.discPercent = rate > 0 ? round((numVal / rate) * 100, 2) : 0;
+        } else if (field === 'rate') {
+          const rate = updated.rate || 0;
+          const disc = updated.discount || 0;
+          updated.discPercent = rate > 0 ? round((disc / rate) * 100, 2) : 0;
+        }
+
         const qty = updated.qty || 0;
         const rate = updated.rate || 0;
         const disc = updated.discount || 0;
@@ -741,6 +755,26 @@ export const SaleSupplyForm: React.FC = () => {
             const rowIdx = supplyLines.findIndex(l => l.key === record.key);
             handleCellKeyDown(rowIdx, 'discount', e);
           }}
+        />
+      )
+    },
+    {
+      title: 'Disc (%)',
+      dataIndex: 'discPercent',
+      key: 'discPercent',
+      width: 100,
+      render: (val: number, record: any) => (
+        <InputNumber
+          style={{ width: '100%' }}
+          value={val != null ? val : (record.rate > 0 && record.discount > 0 ? round((record.discount / record.rate) * 100, 2) : 0)}
+          min={0}
+          max={100}
+          tabIndex={-1}
+          keyboard={false}
+          controls={false}
+          formatter={value => `${value}%`}
+          parser={value => value ? Number(value.replace('%', '')) : 0}
+          onChange={(v) => updateLine(record.key, 'discPercent', v)}
         />
       )
     },

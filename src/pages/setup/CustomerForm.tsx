@@ -25,6 +25,7 @@ interface SupplyLineRow {
   rate?: number | null;
   addLess?: number;
   discount?: number;
+  discPercent?: number | null;
 }
 
 export const CustomerForm: React.FC = () => {
@@ -81,18 +82,22 @@ export const CustomerForm: React.FC = () => {
             setImageUrl(customer.mediaUrl);
           }
 
-          if (customer.supplyItems && customer.supplyItems.length > 0) {
-            setSupplyLines(customer.supplyItems.map((si, idx) => ({
-              key: `${si.itemId}-${idx}`,
-              itemId: si.itemId,
-              qty: si.qty || 1,
-              secQty: si.secQty || 0,
-              rate: si.rate != null ? si.rate : null,
-              addLess: si.addLess || 0,
-              discount: si.discount || 0
-            })));
-          } else {
-            setSupplyLines([]);
+          if (customer.supplyItems && Array.isArray(customer.supplyItems)) {
+            setSupplyLines(customer.supplyItems.map((si, idx) => {
+              const rate = si.rate != null ? Number(si.rate) : 0;
+              const discount = si.discount != null ? Number(si.discount) : 0;
+              const discPercent = (rate > 0 && discount > 0) ? Number(((discount / rate) * 100).toFixed(2)) : null;
+              return {
+                key: idx,
+                itemId: si.itemId,
+                qty: si.qty,
+                secQty: si.secQty,
+                rate: si.rate,
+                addLess: si.addLess,
+                discount: si.discount,
+                discPercent
+              };
+            }));
           }
         } else {
           message.error('Customer not found');
@@ -113,7 +118,7 @@ export const CustomerForm: React.FC = () => {
   const handleAddSupplyRow = () => {
     setSupplyLines([
       ...supplyLines,
-      { key: Date.now(), itemId: '', qty: 1, secQty: 0, rate: null, addLess: 0, discount: 0 }
+      { key: Date.now(), itemId: '', qty: 1, secQty: 0, rate: null, addLess: 0, discount: 0, discPercent: null }
     ]);
   };
 
@@ -124,7 +129,19 @@ export const CustomerForm: React.FC = () => {
   const updateSupplyRow = (key: any, field: keyof SupplyLineRow, value: any) => {
     setSupplyLines(supplyLines.map(l => {
       if (l.key === key) {
-        return { ...l, [field]: value };
+        const updated = { ...l, [field]: value };
+        const rate = updated.rate != null ? Number(updated.rate) : 0;
+        if (field === 'discPercent') {
+          const pct = value != null ? Number(value) : 0;
+          updated.discount = rate > 0 ? Number(((rate * pct) / 100).toFixed(2)) : 0;
+        } else if (field === 'discount') {
+          const disc = value != null ? Number(value) : 0;
+          updated.discPercent = rate > 0 ? Number(((disc / rate) * 100).toFixed(2)) : null;
+        } else if (field === 'rate') {
+          const disc = updated.discount != null ? Number(updated.discount) : 0;
+          updated.discPercent = rate > 0 ? Number(((disc / rate) * 100).toFixed(2)) : null;
+        }
+        return updated;
       }
       return l;
     }));
@@ -329,6 +346,24 @@ export const CustomerForm: React.FC = () => {
           min={0}
           precision={2}
           onChange={(newVal) => updateSupplyRow(record.key, 'discount', newVal || 0)}
+        />
+      )
+    },
+    {
+      title: 'Disc (%)',
+      dataIndex: 'discPercent',
+      key: 'discPercent',
+      width: 110,
+      render: (val: number | null | undefined, record: SupplyLineRow) => (
+        <InputNumber
+          style={{ width: '100%' }}
+          value={val ?? undefined}
+          min={0}
+          max={100}
+          precision={2}
+          formatter={value => `${value}%`}
+          parser={value => value ? Number(value.replace('%', '')) : 0}
+          onChange={(newVal) => updateSupplyRow(record.key, 'discPercent', newVal != null ? newVal : null)}
         />
       )
     },
