@@ -149,4 +149,50 @@ export const reportService = {
     const response = await api.get('/api/reports/customer-bill', { params });
     return response.data.body as CustomerBillResponse;
   },
+
+  async getPurchaseSupplyComparison(params: { fromDate: string; toDate: string; itemId?: string }) {
+    const response = await api.get('/api/reports/purchase-supply-comparison', { params });
+    return response.data.body as PurchaseSupplyComparisonResponse;
+  },
 };
+
+export interface PurchaseSupplyComparisonLine {
+  date: string;
+  dayName: string;
+  purchaseQty: number;
+  purchaseAvgRate: number;
+  purchaseAmount: number;
+  supplyQty: number;
+  supplyAvgRate: number;
+  supplyAmount: number;
+  regularSaleQty: number;
+  regularSaleAmount: number;
+  totalDispatchedQty: number;
+  diffQty: number;
+  diffAmount: number;
+  netDiffQty: number;
+  status: 'Equal' | 'Surplus' | 'Shortage' | string;
+}
+
+export interface PurchaseSupplyComparisonSummary {
+  totalPurchaseQty: number;
+  totalPurchaseAmount: number;
+  avgPurchaseRate: number;
+  totalSupplyQty: number;
+  totalSupplyAmount: number;
+  avgSupplyRate: number;
+  totalRegularSaleQty: number;
+  totalRegularSaleAmount: number;
+  totalDispatchedQty: number;
+  totalDiffQty: number;
+  totalDiffAmount: number;
+  totalNetDiffQty: number;
+}
+
+export interface PurchaseSupplyComparisonResponse {
+  itemTitle: string;
+  unitTitle?: string;
+  lines: PurchaseSupplyComparisonLine[];
+  summary: PurchaseSupplyComparisonSummary;
+}
+

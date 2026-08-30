@@ -39,6 +39,7 @@ import { ItemLedger } from './pages/reports/ItemLedger';
 import { IncomeSummary } from './pages/reports/IncomeSummary';
 import { BalanceSheet } from './pages/reports/BalanceSheet';
 import { CustomerBill } from './pages/reports/CustomerBill';
+import { MilkComparisonReport } from './pages/reports/MilkComparisonReport';
 import { NarrationList } from './pages/setup/NarrationList';
 import { UnitList } from './pages/setup/UnitList';
 import { ItemCategoryList } from './pages/setup/ItemCategoryList';
@@ -175,6 +176,7 @@ function App() {
             <Route path="reports/income-summary" element={<IncomeSummary />} />
             <Route path="reports/balance-sheet" element={<BalanceSheet />} />
             <Route path="reports/customer-bill" element={<CustomerBill />} />
+            <Route path="reports/milk-comparison" element={<MilkComparisonReport />} />
             <Route path="profile" element={<Profile />} />
             
             {/* Setup */}
