@@ -246,6 +246,7 @@ export const MainLayout: React.FC = () => {
         { key: '/reports/balance-sheet', label: 'Balance Sheet' },
         { key: '/reports/customer-bill', label: 'Customer Bill' },
         { key: '/reports/milk-comparison', label: 'Milk Purchase vs Supply Comparison' },
+        { key: '/reports/customer-balance-recovery', label: 'Customer Balance & Recovery' },
       ]
     },
   ];

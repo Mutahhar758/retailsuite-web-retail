@@ -40,6 +40,7 @@ import { IncomeSummary } from './pages/reports/IncomeSummary';
 import { BalanceSheet } from './pages/reports/BalanceSheet';
 import { CustomerBill } from './pages/reports/CustomerBill';
 import { MilkComparisonReport } from './pages/reports/MilkComparisonReport';
+import { CustomerBalanceRecoveryReport } from './pages/reports/CustomerBalanceRecoveryReport';
 import { NarrationList } from './pages/setup/NarrationList';
 import { UnitList } from './pages/setup/UnitList';
 import { ItemCategoryList } from './pages/setup/ItemCategoryList';
@@ -177,6 +178,7 @@ function App() {
             <Route path="reports/balance-sheet" element={<BalanceSheet />} />
             <Route path="reports/customer-bill" element={<CustomerBill />} />
             <Route path="reports/milk-comparison" element={<MilkComparisonReport />} />
+            <Route path="reports/customer-balance-recovery" element={<CustomerBalanceRecoveryReport />} />
             <Route path="profile" element={<Profile />} />
             
             {/* Setup */}

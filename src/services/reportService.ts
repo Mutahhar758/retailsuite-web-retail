@@ -154,7 +154,49 @@ export const reportService = {
     const response = await api.get('/api/reports/purchase-supply-comparison', { params });
     return response.data.body as PurchaseSupplyComparisonResponse;
   },
+
+  async getCustomerBalanceRecovery(params: {
+    fromDate: string;
+    toDate: string;
+    customerAccountId?: string;
+    dateBasis?: 'ClearingDate' | 'VoucherDate';
+    balanceFilter?: 'All' | 'OutstandingOnly' | 'ClearedOnly' | 'UnpaidOnly';
+  }) {
+    const response = await api.get('/api/reports/customer-balance-recovery', { params });
+    return response.data.body as CustomerBalanceRecoveryResponse;
+  },
 };
+
+export interface CustomerBalanceRecoveryLine {
+  customerAccountId: string;
+  customerTitle: string;
+  phone?: string;
+  address?: string;
+  previousBalance: number;
+  currentBilling: number;
+  totalDue: number;
+  recoveryAmount: number;
+  discount: number;
+  closingBalance: number;
+  recoveryPercentage: number;
+  status: 'Cleared' | 'Partial' | 'Unpaid' | 'Advance' | string;
+}
+
+export interface CustomerBalanceRecoverySummary {
+  totalCustomers: number;
+  totalPreviousBalance: number;
+  totalCurrentBilling: number;
+  totalDue: number;
+  totalRecovery: number;
+  totalDiscount: number;
+  totalClosingBalance: number;
+  overallRecoveryRate: number;
+}
+
+export interface CustomerBalanceRecoveryResponse {
+  lines: CustomerBalanceRecoveryLine[];
+  summary: CustomerBalanceRecoverySummary;
+}
 
 export interface PurchaseSupplyComparisonLine {
   date: string;
