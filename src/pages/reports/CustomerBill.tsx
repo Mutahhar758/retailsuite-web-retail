@@ -23,6 +23,7 @@ import {
   ESC_DOUBLE_OFF
 } from '../../hooks/useThermalPrinter';
 import { useAppStore } from '../../stores/useAppStore';
+import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT } from '../../stores/useSettingsStore';
 import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -42,6 +43,7 @@ const StandardBillReportView: React.FC<BillReportViewProps> = ({
   dateRange,
   billData
 }) => {
+  const thankYouMsg = useSettingsStore(s => s.getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT));
   const fromStr = dateRange ? dateRange[0].format('DD-MMM-YYYY') : '';
   const toStr = dateRange ? dateRange[1].format('DD-MMM-YYYY') : '';
 
@@ -143,9 +145,11 @@ const StandardBillReportView: React.FC<BillReportViewProps> = ({
         </div>
       </div>
       
-      <div style={{ borderTop: '1px dashed #000', paddingTop: 8, marginTop: 16, textAlign: 'center', fontSize: 9, color: '#666666' }}>
-        Software Powered by Bizgrip Solutions
-      </div>
+      {thankYouMsg && (
+        <div style={{ borderTop: '1px dashed #000', paddingTop: 8, marginTop: 16, textAlign: 'center', fontSize: 10, fontWeight: 600 }}>
+          {thankYouMsg}
+        </div>
+      )}
     </div>
   );
 };
@@ -157,6 +161,7 @@ const WandaBillReportView: React.FC<BillReportViewProps> = ({
   dateRange,
   billData
 }) => {
+  const thankYouMsg = useSettingsStore(s => s.getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT));
   const fromStr = dateRange ? dateRange[0].format('DD-MMM-YYYY') : '';
   const toStr = dateRange ? dateRange[1].format('DD-MMM-YYYY') : '';
 
@@ -353,9 +358,11 @@ const WandaBillReportView: React.FC<BillReportViewProps> = ({
         </div>
       </div>
 
-      <div style={{ borderTop: '1px dashed #000000', paddingTop: 8, marginTop: 16, textAlign: 'center', fontSize: 11, color: '#000000' }}>
-        Software Powered by Bizgrip Solutions
-      </div>
+      {thankYouMsg && (
+        <div style={{ borderTop: '1px dashed #000000', paddingTop: 8, marginTop: 16, textAlign: 'center', fontSize: 11, color: '#000000', fontWeight: 700 }}>
+          {thankYouMsg}
+        </div>
+      )}
     </div>
   );
 };
@@ -418,7 +425,10 @@ const generateStandardThermalLines = (
   lines.push('');
   lines.push(padLine('Customer Signature', 'Authorized Signature', width));
   lines.push('');
-  lines.push(ESC_ALIGN_CENTER + 'Software Powered by Bizgrip Solutions');
+  const thankYouMsg = useSettingsStore.getState().getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT);
+  if (thankYouMsg) {
+    lines.push(ESC_ALIGN_CENTER + thankYouMsg);
+  }
   lines.push(ESC_ALIGN_LEFT);
   lines.push('');
   lines.push('');
@@ -496,7 +506,10 @@ const generateWandaThermalLines = (
   lines.push('');
   lines.push(padLine('Customer Signature', 'Authorized Signature', width));
   lines.push('');
-  lines.push(ESC_ALIGN_CENTER + 'Software Powered by Bizgrip Solutions');
+  const thankYouMsg = useSettingsStore.getState().getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT);
+  if (thankYouMsg) {
+    lines.push(ESC_ALIGN_CENTER + thankYouMsg);
+  }
   lines.push(ESC_ALIGN_LEFT);
   lines.push('');
   lines.push('');

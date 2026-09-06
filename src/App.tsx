@@ -45,6 +45,7 @@ import { NarrationList } from './pages/setup/NarrationList';
 import { UnitList } from './pages/setup/UnitList';
 import { ItemCategoryList } from './pages/setup/ItemCategoryList';
 import { PrinterSettings } from './pages/setup/PrinterSettings';
+import { SettingsPage } from './pages/setup/SettingsPage';
 import { ChartOfAccountList } from './pages/setup/ChartOfAccountList';
 import { DetailAccountList } from './pages/setup/DetailAccountList';
 import { InventoryItemList } from './pages/setup/InventoryItemList';
@@ -214,6 +215,7 @@ function App() {
             <Route path="setup/supply-order" element={<SupplyOrderList />} />
             <Route path="setup/supply-order/new" element={<SupplyOrderForm />} />
             <Route path="setup/supply-order/:id" element={<SupplyOrderForm />} />
+            <Route path="setup/settings" element={<SettingsPage />} />
             <Route path="setup/printer-settings" element={<PrinterSettings />} />
             <Route path="setup/opening-balance" element={<OpeningBalance />} />
             <Route path="setup/dining-tables" element={<DiningTableList />} />

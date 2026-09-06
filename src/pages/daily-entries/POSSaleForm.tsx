@@ -32,6 +32,7 @@ import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCa
 import type { NarrationDto } from '../../services/narrationService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { kotService, type DiningTableDto, type KotOrderResponse } from '../../services/kotService';
+import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT } from '../../stores/useSettingsStore';
 
 const { Title, Text } = Typography;
 
@@ -69,6 +70,13 @@ export const POSSaleForm: React.FC = () => {
   const hasKotFeature = currentOrg?.hasKotFeature ?? false;
   const { isOnline } = useNetworkStatus();
   const [isOfflineSaved, setIsOfflineSaved] = useState(false);
+  const { getSetting, fetchSettings, initialized: settingsInitialized } = useSettingsStore();
+
+  useEffect(() => {
+    if (!settingsInitialized) {
+      fetchSettings();
+    }
+  }, [settingsInitialized, fetchSettings]);
 
   // Data states
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
@@ -457,8 +465,10 @@ export const POSSaleForm: React.FC = () => {
     lines.push(padLine('Cash Back / Change:', `Rs. ${cashBack.toFixed(2)}`, width));
     lines.push(divider('-', width));
 
-    lines.push(ESC_ALIGN_CENTER + 'Thank you for shopping with us!');
-    lines.push('Software Powered by Bizgrip Solutions');
+    const thankYouMsg = getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT);
+    if (thankYouMsg) {
+      lines.push(ESC_ALIGN_CENTER + thankYouMsg);
+    }
     lines.push(ESC_ALIGN_LEFT); // Reset alignment to default
     lines.push('');
     lines.push('');
@@ -1976,8 +1986,7 @@ export const POSSaleForm: React.FC = () => {
           </div>
 
           <div style={{ borderTop: '1px dashed #000', paddingTop: 10, marginTop: 10, textAlign: 'center', fontSize: 11 }}>
-            Thank you for shopping with us!<br />
-            Software Powered by Bizgrip Solutions
+            {getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT)}
           </div>
         </div>
 

@@ -42,6 +42,7 @@ const permissionMap: Record<string, string> = {
   '/setup/users': 'Permissions.Users.View',
   '/setup/roles': 'Permissions.Roles.View',
   '/setup/supply-order': 'Permissions.SupplyOrders.View',
+  '/setup/settings': 'Permissions.Settings.View',
   '/setup/printer-settings': 'Permissions.PrinterSettings.View',
   '/setup/opening-balance': 'Permissions.OpeningBalances.View',
 
@@ -205,6 +206,7 @@ export const MainLayout: React.FC = () => {
         { key: '/setup/users', label: 'Users' },
         { key: '/setup/roles', label: 'Roles & Permissions' },
         hasSupplyFeature ? { key: '/setup/supply-order', label: 'Supply Order' } : null,
+        { key: '/setup/settings', label: 'Settings' },
         { key: '/setup/printer-settings', label: 'Printer Settings' },
         { key: '/setup/opening-balance', label: 'Opening Balance' },
         hasKotFeature ? { key: '/setup/dining-tables', label: 'Dining Tables' } : null,

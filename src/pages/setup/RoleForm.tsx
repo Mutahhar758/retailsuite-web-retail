@@ -30,6 +30,7 @@ const MODULE_CATEGORIES: Record<string, string> = {
   HRInfo: 'Setup',
   SupplyOrders: 'Setup',
   PrinterSettings: 'Setup',
+  Settings: 'Setup',
   OpeningBalances: 'Setup',
   // Daily Entries
   PaymentVouchers: 'Daily Entries',
