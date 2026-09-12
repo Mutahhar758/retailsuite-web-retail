@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, ShoppingCartOutlined, 
-  SearchOutlined, ReloadOutlined 
+  SearchOutlined, ReloadOutlined, CopyOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -92,15 +92,61 @@ export const PurchaseList: React.FC = () => {
       title: 'Actions',
       key: 'action',
       render: (_: any, record: Purchase) => (
-        <Button 
-          type="primary" 
-          icon={<EditOutlined />} 
-          size="small"
-          style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
-          onClick={() => navigate(`/daily-entries/purchase/${record.voucherNo}`)}
-        >
-          Edit
-        </Button>
+        <Space>
+          <Button 
+            type="primary" 
+            icon={<EditOutlined />} 
+            size="small"
+            style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
+            onClick={() => navigate(`/daily-entries/purchase/${record.voucherNo}`)}
+          >
+            Edit
+          </Button>
+          <Button
+            icon={<CopyOutlined />}
+            size="small"
+            onClick={async () => {
+              try {
+                setLoading(true);
+                const details = await purchaseService.getDetail(record.voucherNo);
+                if (details && details.length > 0) {
+                  const first = details[0];
+                  navigate('/daily-entries/purchase/new', {
+                    state: {
+                      copyFrom: {
+                        account: first.accountId,
+                        narration: first.narrationId,
+                        description: first.description,
+                        lines: details.map(d => ({
+                          seq: d.seq,
+                          itemId: d.itemId,
+                          unit: d.unit,
+                          qty: d.qty,
+                          rate: d.rate,
+                          addLess: d.addLess,
+                          amount: d.amount,
+                          secQty: d.secQty,
+                          secRate: d.secRate,
+                          secUnit: d.secUnit,
+                          qtyInPack: (d as any).qtyInPack,
+                          packing: (d as any).packing
+                        }))
+                      }
+                    }
+                  });
+                } else {
+                  message.error('No details found to copy');
+                }
+              } catch {
+                message.error('Failed to load details for copy');
+              } finally {
+                setLoading(false);
+              }
+            }}
+          >
+            Copy
+          </Button>
+        </Space>
       ),
     },
   ];

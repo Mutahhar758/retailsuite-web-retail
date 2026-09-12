@@ -5,10 +5,11 @@ import {
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
-  RocketOutlined, UserOutlined, FileTextOutlined, WifiOutlined, DisconnectOutlined
+  RocketOutlined, UserOutlined, FileTextOutlined, WifiOutlined, DisconnectOutlined,
+  CopyOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { saleService } from '../../services/saleService';
 import { offlineCacheService, OfflineCacheMissError } from '../../services/offlineCacheService';
 import type { ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
@@ -41,6 +42,7 @@ export const SaleForm: React.FC = () => {
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
   const navigate = useNavigate();
+  const location = useLocation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const { isOnline } = useNetworkStatus();
@@ -282,11 +284,44 @@ export const SaleForm: React.FC = () => {
     if (isEdit) {
       fetchDetail();
     } else {
-      setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
-      form.setFieldsValue({ date: dayjs() });
+      const copyFrom = (location.state as any)?.copyFrom;
+      if (copyFrom) {
+        form.setFieldsValue({
+          date: dayjs(),
+          account: copyFrom.account,
+          narration: copyFrom.narration,
+          description: copyFrom.description,
+          cashReceipt: copyFrom.cashReceipt,
+          cashBack: copyFrom.cashBack
+        });
+        const initialLines = (copyFrom.lines || []).map((l: any, idx: number) => ({
+          ...l,
+          key: Date.now() + idx,
+          seq: idx + 1,
+          secQty: l.secQty || 0,
+          secRate: l.secRate || 0,
+          secUnit: l.secUnit || null,
+          packQty: l.packQty || 0,
+          packing: l.packing || 0
+        }));
+        setSaleLines(initialLines.length > 0 ? initialLines : [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
+        setTabs(prev => prev.map((t, idx) => idx === 0 ? {
+          ...t,
+          account: copyFrom.account,
+          narration: copyFrom.narration,
+          description: copyFrom.description,
+          cashReceipt: copyFrom.cashReceipt,
+          cashBack: copyFrom.cashBack,
+          date: dayjs(),
+          saleLines: initialLines.length > 0 ? initialLines : t.saleLines
+        } : t));
+      } else {
+        setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
+        form.setFieldsValue({ date: dayjs() });
+      }
     }
     focusCustomerSelect();
-  }, [isEdit, voucherNo]);
+  }, [isEdit, voucherNo, location.state]);
 
   const loadReferenceData = async () => {
     try {
@@ -1047,6 +1082,29 @@ export const SaleForm: React.FC = () => {
             >
               <Button danger icon={<DeleteOutlined />} disabled={!isOnline} tabIndex={-1}>Delete</Button>
             </Popconfirm>
+          )}
+          {isEdit && (
+            <Button
+              icon={<CopyOutlined />}
+              tabIndex={-1}
+              onClick={() => {
+                const values = form.getFieldsValue();
+                navigate('/daily-entries/sale/new', {
+                  state: {
+                    copyFrom: {
+                      account: values.account,
+                      narration: values.narration,
+                      description: values.description,
+                      cashReceipt: values.cashReceipt,
+                      cashBack: values.cashBack,
+                      lines: saleLines
+                    }
+                  }
+                });
+              }}
+            >
+              Copy as New
+            </Button>
           )}
           <Button
             className="pos-save-btn"

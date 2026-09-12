@@ -6,7 +6,7 @@ import {
 import {
   PlusOutlined, EditOutlined, RocketOutlined,
   SearchOutlined, ReloadOutlined, CloudSyncOutlined,
-  CloudServerOutlined, WarningOutlined
+  CloudServerOutlined, WarningOutlined, CopyOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -210,15 +210,63 @@ export const SaleList: React.FC = () => {
           );
         }
         return (
-          <Button
-            type="primary"
-            icon={<EditOutlined />}
-            size="small"
-            style={{ backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' }}
-            onClick={() => navigate(`/daily-entries/sale/${record.voucherNo}`)}
-          >
-            Edit
-          </Button>
+          <Space>
+            <Button
+              type="primary"
+              icon={<EditOutlined />}
+              size="small"
+              style={{ backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' }}
+              onClick={() => navigate(`/daily-entries/sale/${record.voucherNo}`)}
+            >
+              Edit
+            </Button>
+            <Button
+              icon={<CopyOutlined />}
+              size="small"
+              onClick={async () => {
+                try {
+                  setLoading(true);
+                  const details = await saleService.getDetail(record.voucherNo!);
+                  if (details && details.length > 0) {
+                    const first = details[0];
+                    navigate('/daily-entries/sale/new', {
+                      state: {
+                        copyFrom: {
+                          account: first.accountId,
+                          narration: first.narrationId,
+                          description: first.description,
+                          cashReceipt: first.cashReceipt,
+                          cashBack: first.cashBack,
+                          lines: details.map(d => ({
+                            seq: d.seq,
+                            itemId: d.itemId,
+                            unit: d.unit,
+                            qty: d.qty,
+                            rate: d.rate,
+                            discount: d.discount,
+                            amount: d.amount,
+                            secUnit: d.secUnit,
+                            secQty: d.secQty,
+                            secRate: d.secRate,
+                            qtyInPack: (d as any).qtyInPack,
+                            packing: (d as any).packing
+                          }))
+                        }
+                      }
+                    });
+                  } else {
+                    message.error('No details found to copy');
+                  }
+                } catch {
+                  message.error('Failed to load details for copy');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              Copy
+            </Button>
+          </Space>
         );
       },
     },

@@ -5,10 +5,10 @@ import {
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
-  ShoppingCartOutlined, UserOutlined, FileTextOutlined
+  ShoppingCartOutlined, UserOutlined, FileTextOutlined, CopyOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { purchaseService } from '../../services/purchaseService';
 import { inventoryService, type Item, type Unit } from '../../services/inventoryService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
@@ -27,6 +27,7 @@ export const PurchaseForm: React.FC = () => {
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
@@ -98,23 +99,43 @@ export const PurchaseForm: React.FC = () => {
       };
       loadPurchase();
     } else {
-      form.setFieldsValue({ date: dayjs() });
-      setPurchaseLines([{
-        key: Date.now(),
-        seq: 1,
-        itemId: undefined,
-        unit: undefined,
-        qty: 1,
-        rate: 0,
-        addLess: 0,
-        amount: 0,
-        secQty: 0,
-        secRate: 0,
-        packQty: 0,
-        packing: 0
-      }]);
+      const copyFrom = (location.state as any)?.copyFrom;
+      if (copyFrom) {
+        form.setFieldsValue({
+          date: dayjs(),
+          account: copyFrom.account,
+          narration: copyFrom.narration,
+          description: copyFrom.description
+        });
+        setPurchaseLines((copyFrom.lines || []).map((l: any, i: number) => ({
+          ...l,
+          key: Date.now() + i,
+          seq: i + 1,
+          secQty: l.secQty || 0,
+          secRate: l.secRate || 0,
+          secUnit: l.secUnit || null,
+          packQty: l.packQty || 0,
+          packing: l.packing || 0
+        })));
+      } else {
+        form.setFieldsValue({ date: dayjs() });
+        setPurchaseLines([{
+          key: Date.now(),
+          seq: 1,
+          itemId: undefined,
+          unit: undefined,
+          qty: 1,
+          rate: 0,
+          addLess: 0,
+          amount: 0,
+          secQty: 0,
+          secRate: 0,
+          packQty: 0,
+          packing: 0
+        }]);
+      }
     }
-  }, [isEdit, voucherNo, form, navigate]);
+  }, [isEdit, voucherNo, location.state, form, navigate]);
 
   const addRow = () => {
     const maxSeq = purchaseLines.reduce((max, row) => Math.max(max, row.seq || 0), 0);
@@ -502,6 +523,26 @@ export const PurchaseForm: React.FC = () => {
             <Popconfirm title="Delete this purchase?" onConfirm={handleDelete}>
               <Button danger icon={<DeleteOutlined />}>Delete</Button>
             </Popconfirm>
+          )}
+          {isEdit && (
+            <Button
+              icon={<CopyOutlined />}
+              onClick={() => {
+                const values = form.getFieldsValue();
+                navigate('/daily-entries/purchase/new', {
+                  state: {
+                    copyFrom: {
+                      account: values.account,
+                      narration: values.narration,
+                      description: values.description,
+                      lines: purchaseLines
+                    }
+                  }
+                });
+              }}
+            >
+              Copy as New
+            </Button>
           )}
           <Button 
             type="primary" 
