@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
   Table, Space, message, InputNumber, Popconfirm, Tooltip
@@ -40,6 +40,48 @@ export const SaleSupplyForm: React.FC = () => {
   const [units, setUnits] = useState<{ code: string; title: string }[]>([]);
   const [supplyLines, setSupplyLines] = useState<any[]>([]);
   const [supplyOrders, setSupplyOrders] = useState<SupplyOrder[]>([]);
+
+  // ── Calculated Totals ──────────────────────────────────────────────────────
+  const totals = useMemo(() => {
+    let totalQty = 0;
+    let totalSecQty = 0;
+    let totalPackQty = 0;
+    let totalDiscount = 0;
+    let totalAddLess = 0;
+    let totalAmount = 0;
+    let validCustomers = 0;
+
+    supplyLines.forEach(l => {
+      const q = Number(l.qty) || 0;
+      const sq = Number(l.secQty) || 0;
+      const pq = Number(l.packQty) || 0;
+      const disc = Number(l.discount) || 0;
+      const al = Number(l.addLess) || 0;
+      const amt = Number(l.amount) || 0;
+
+      totalQty += q;
+      totalSecQty += sq;
+      totalPackQty += pq;
+      totalDiscount += disc;
+      totalAddLess += al;
+      totalAmount += amt;
+
+      if (l.customerId) {
+        validCustomers += 1;
+      }
+    });
+
+    return {
+      totalQty: round(totalQty, 2),
+      totalSecQty: round(totalSecQty, 2),
+      totalPackQty: round(totalPackQty, 2),
+      totalDiscount: round(totalDiscount, 2),
+      totalAddLess: round(totalAddLess, 2),
+      totalAmount: round(totalAmount, 2),
+      customerCount: validCustomers,
+      rowCount: supplyLines.length
+    };
+  }, [supplyLines]);
 
   // ── Keyboard navigation ────────────────────────────────────────────────────
   // pendingFocusRef: set BEFORE calling onAddRow so the useEffect in the hook
@@ -973,19 +1015,99 @@ export const SaleSupplyForm: React.FC = () => {
             size="small"
             bordered
             className="mb-4"
-            summary={pageData => {
-              let total = 0;
-              pageData.forEach(({ amount }) => {
-                total += amount || 0;
-              });
+            summary={() => {
+              let cellIndex = 0;
               return (
                 <Table.Summary fixed>
-                  <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={6} align="right"><b>Net Total</b></Table.Summary.Cell>
-                    <Table.Summary.Cell index={1} align="right">
-                      <Text strong style={{ color: '#f59e0b' }}>{total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                  <Table.Summary.Row style={{ backgroundColor: '#fafafa', fontWeight: 600 }}>
+                    {/* Customer */}
+                    <Table.Summary.Cell index={cellIndex++} align="left">
+                      <Text strong>Total ({totals.customerCount})</Text>
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={2}></Table.Summary.Cell>
+
+                    {/* Unit */}
+                    {!hasSecondaryQty && (
+                      <Table.Summary.Cell index={cellIndex++} />
+                    )}
+
+                    {/* Qty */}
+                    <Table.Summary.Cell index={cellIndex++} align="right">
+                      <Text strong style={{ color: '#0369a1' }}>
+                        {totals.totalQty.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                    </Table.Summary.Cell>
+
+                    {/* Variable Pack: Bag Qty, Pack Qty, Packing */}
+                    {hasVariablePackFeature && (
+                      <Table.Summary.Cell index={cellIndex++} align="right">
+                        <Text strong>
+                          {totals.totalSecQty.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </Text>
+                      </Table.Summary.Cell>
+                    )}
+                    {hasVariablePackFeature && (
+                      <Table.Summary.Cell index={cellIndex++} align="right">
+                        <Text strong>
+                          {totals.totalPackQty.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </Text>
+                      </Table.Summary.Cell>
+                    )}
+                    {hasVariablePackFeature && (
+                      <Table.Summary.Cell index={cellIndex++} />
+                    )}
+
+                    {/* Rate */}
+                    <Table.Summary.Cell index={cellIndex++} />
+
+                    {/* SecRate */}
+                    {(hasSecondaryQty || hasVariablePackFeature) && (
+                      <Table.Summary.Cell index={cellIndex++} />
+                    )}
+
+                    {/* SecQty (Pack Qty when not variable pack) */}
+                    {hasSecondaryQty && !hasVariablePackFeature && (
+                      <Table.Summary.Cell index={cellIndex++} align="right">
+                        <Text strong>
+                          {totals.totalSecQty.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </Text>
+                      </Table.Summary.Cell>
+                    )}
+
+                    {/* Disc */}
+                    <Table.Summary.Cell index={cellIndex++} align="right">
+                      <Text strong>
+                        {totals.totalDiscount > 0
+                          ? totals.totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                          : '-'}
+                      </Text>
+                    </Table.Summary.Cell>
+
+                    {/* Disc (%) */}
+                    <Table.Summary.Cell index={cellIndex++} />
+
+                    {/* Add/Less */}
+                    <Table.Summary.Cell index={cellIndex++} align="right">
+                      <Text
+                        strong
+                        style={{
+                          color: totals.totalAddLess < 0 ? '#ef4444' : totals.totalAddLess > 0 ? '#10b981' : undefined
+                        }}
+                      >
+                        {totals.totalAddLess > 0
+                          ? `+${totals.totalAddLess.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : totals.totalAddLess.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                    </Table.Summary.Cell>
+
+                    {/* Amount */}
+                    <Table.Summary.Cell index={cellIndex++} align="right">
+                      <Text strong style={{ color: '#d97706', fontSize: 14 }}>
+                        {totals.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                    </Table.Summary.Cell>
+
+                    {/* Actions */}
+                    <Table.Summary.Cell index={cellIndex++} />
                   </Table.Summary.Row>
                 </Table.Summary>
               );
