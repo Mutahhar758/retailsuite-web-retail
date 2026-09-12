@@ -117,6 +117,8 @@ export const PurchaseList: React.FC = () => {
                         account: first.accountId,
                         narration: first.narrationId,
                         description: first.description,
+                        cashPaid: first.cashPaid ?? 0,
+                        cashBack: first.cashBack ?? 0,
                         lines: details.map(d => ({
                           seq: d.seq,
                           itemId: d.itemId,

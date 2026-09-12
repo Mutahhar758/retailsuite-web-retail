@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
-  Table, Space, message, InputNumber, Popconfirm
+  Table, Space, message, InputNumber, Popconfirm, Tag
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
@@ -70,7 +70,9 @@ export const PurchaseForm: React.FC = () => {
               date: dayjs(first.date),
               account: first.accountId,
               narration: first.narrationId,
-              description: first.description
+              description: first.description,
+              cashPaid: (first as any).cashPaid ?? 0,
+              cashBack: (first as any).cashBack ?? 0
             });
             setPurchaseLines(details.map((d, i) => ({
               key: i,
@@ -105,7 +107,9 @@ export const PurchaseForm: React.FC = () => {
           date: dayjs(),
           account: copyFrom.account,
           narration: copyFrom.narration,
-          description: copyFrom.description
+          description: copyFrom.description,
+          cashPaid: copyFrom.cashPaid,
+          cashBack: copyFrom.cashBack
         });
         setPurchaseLines((copyFrom.lines || []).map((l: any, i: number) => ({
           ...l,
@@ -301,6 +305,31 @@ export const PurchaseForm: React.FC = () => {
     }
   };
 
+  const prevTotalAmountRef = useRef(0);
+  const totalAmount = purchaseLines.reduce((sum, l) => sum + (l.amount || 0), 0);
+  const cashPaid = Form.useWatch('cashPaid', form) || 0;
+  const cashBack = Form.useWatch('cashBack', form) || 0;
+  const balance = totalAmount - cashPaid + cashBack;
+
+  useEffect(() => {
+    if (!isEdit) {
+      const currentPaid = form.getFieldValue('cashPaid');
+      const isAutoSynced = currentPaid === undefined || currentPaid === null || currentPaid === 0 || currentPaid === prevTotalAmountRef.current;
+      
+      if (isAutoSynced) {
+        form.setFieldsValue({
+          cashPaid: totalAmount,
+          cashBack: 0
+        });
+      } else {
+        form.setFieldValue('cashBack', Math.max(0, (currentPaid || 0) - totalAmount));
+      }
+      prevTotalAmountRef.current = totalAmount;
+    } else if (isEdit && loading === false) {
+      form.setFieldValue('cashBack', Math.max(0, cashPaid - totalAmount));
+    }
+  }, [totalAmount, cashPaid, isEdit, loading, form]);
+
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
@@ -316,6 +345,8 @@ export const PurchaseForm: React.FC = () => {
         account: values.account,
         narration: values.narration,
         description: values.description,
+        cashPaid: values.cashPaid || 0,
+        cashBack: values.cashBack || 0,
         lines: validLines.map(l => ({
           seq: l.seq,
           itemId: l.itemId,
@@ -535,6 +566,8 @@ export const PurchaseForm: React.FC = () => {
                       account: values.account,
                       narration: values.narration,
                       description: values.description,
+                      cashPaid: values.cashPaid,
+                      cashBack: values.cashBack,
                       lines: purchaseLines
                     }
                   }
@@ -549,6 +582,7 @@ export const PurchaseForm: React.FC = () => {
             icon={<SaveOutlined />} 
             onClick={handleSave} 
             loading={loading}
+            className="purchase-save-btn"
             style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
           >
             Save Purchase
@@ -630,6 +664,58 @@ export const PurchaseForm: React.FC = () => {
             );
           }}
         />
+
+        <div className="mt-8 pt-6 border-t border-gray-100">
+          <Row gutter={24} align="bottom">
+            <Col xs={24} sm={8} lg={6}>
+              <Form.Item label="Cash Paid" name="cashPaid">
+                <InputNumber
+                  className="purchase-cash-paid"
+                  style={{ width: '100%' }}
+                  size="large"
+                  min={0}
+                  placeholder="0.00"
+                  formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={8} lg={6}>
+              <Form.Item label="Cash Back" name="cashBack">
+                <InputNumber
+                  className="purchase-cash-back"
+                  style={{ width: '100%' }}
+                  size="large"
+                  min={0}
+                  placeholder="0.00"
+                  formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && !e.shiftKey) {
+                      e.preventDefault();
+                      const saveBtn = document.querySelector('.purchase-save-btn') as HTMLButtonElement;
+                      if (saveBtn) {
+                        saveBtn.focus();
+                      }
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={8} lg={12}>
+              <div className="text-right pb-6">
+                <Text type="secondary" className="uppercase text-xs tracking-widest block mb-1">Net Balance</Text>
+                <div className="flex items-center justify-end gap-3">
+                  <Tag color={balance > 0 ? 'red' : balance < 0 ? 'green' : 'blue'} className="px-3 py-0.5 rounded-full border-none font-bold uppercase text-[10px]">
+                    {balance > 0 ? 'Payable' : balance < 0 ? 'Change' : 'Settled'}
+                  </Tag>
+                  <div className={`text-4xl font-bold tracking-tight ${balance > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                    <span className="text-xl mr-1 font-medium opacity-50">Rs.</span>
+                    {Math.abs(balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            </Col>
+          </Row>
+        </div>
       </Form>
     </Card>
   );

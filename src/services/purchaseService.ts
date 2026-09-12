@@ -17,6 +17,8 @@ export interface PurchaseLine {
   date?: string;
   accountId?: string;
   description?: string;
+  cashPaid?: number;
+  cashBack?: number;
 }
 
 export interface Purchase {
@@ -34,6 +36,8 @@ export interface PurchaseCreateRequest {
   account: string;
   description?: string;
   narration?: string;
+  cashPaid?: number;
+  cashBack?: number;
   lines: {
     seq: number;
     itemId: string;
