@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Card, Typography, Form, DatePicker, Select, Button,
   Space, message, Divider, Checkbox, Radio, Input, Row, Col
@@ -23,9 +23,20 @@ import {
   ESC_DOUBLE_OFF
 } from '../../hooks/useThermalPrinter';
 import { useAppStore } from '../../stores/useAppStore';
-import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT } from '../../stores/useSettingsStore';
+import {
+  useSettingsStore,
+  BILL_THANK_YOU_KEY,
+  BILL_THANK_YOU_DEFAULT,
+  BILL_QR_ENABLED_KEY,
+  BILL_QR_ACCOUNT_TITLE,
+  BILL_QR_ACCOUNT_NUMBER,
+  BILL_QR_BANK_NAME,
+  BILL_QR_INCLUDE_AMOUNT
+} from '../../stores/useSettingsStore';
 import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { buildEmvCoPayload, formatIban, normalizeToIban } from '../../utils/emvcoQr';
+import QRCode from 'qrcode';
 
 const { Title, Text } = Typography;
 
@@ -44,6 +55,25 @@ const StandardBillReportView: React.FC<BillReportViewProps> = ({
   billData
 }) => {
   const thankYouMsg = useSettingsStore(s => s.getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT));
+  const qrEnabled      = useSettingsStore(s => s.getSetting(BILL_QR_ENABLED_KEY, 'false')) === 'true';
+  const qrAccountTitle = useSettingsStore(s => s.getSetting(BILL_QR_ACCOUNT_TITLE, ''));
+  const qrAccountNum   = useSettingsStore(s => s.getSetting(BILL_QR_ACCOUNT_NUMBER, ''));
+  const qrBankName     = useSettingsStore(s => s.getSetting(BILL_QR_BANK_NAME, ''));
+  const qrIncludeAmount = useSettingsStore(s => s.getSetting(BILL_QR_INCLUDE_AMOUNT, 'false')) === 'true';
+  const qrCanvasRef    = useRef<HTMLCanvasElement>(null);
+
+  const netBalance = billData?.summary?.balance ?? 0;
+
+  useEffect(() => {
+    if (!qrEnabled || !qrAccountNum.trim() || !qrCanvasRef.current) return;
+    const amt = (qrIncludeAmount && netBalance > 0) ? netBalance : 0;
+    const payload = buildEmvCoPayload(qrAccountTitle, qrAccountNum, amt, qrBankName);
+    QRCode.toCanvas(qrCanvasRef.current, payload, {
+      width: 160, margin: 1, errorCorrectionLevel: 'M',
+      color: { dark: '#000000', light: '#ffffff' }
+    }).catch(console.warn);
+  }, [qrEnabled, qrAccountTitle, qrAccountNum, qrBankName, netBalance, qrIncludeAmount]);
+
   const fromStr = dateRange ? dateRange[0].format('DD-MMM-YYYY') : '';
   const toStr = dateRange ? dateRange[1].format('DD-MMM-YYYY') : '';
 
@@ -150,6 +180,29 @@ const StandardBillReportView: React.FC<BillReportViewProps> = ({
           {thankYouMsg}
         </div>
       )}
+
+      {/* QR Payment Section */}
+      {qrEnabled && qrAccountNum && (
+        <div style={{ borderTop: '1px dashed #000', marginTop: 16, paddingTop: 12, textAlign: 'center' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6, letterSpacing: '0.5px' }}>SCAN TO PAY (RAAST / IBFT)</div>
+          <canvas
+            ref={qrCanvasRef}
+            width={160}
+            height={160}
+            style={{ display: 'block', margin: '0 auto 6px' }}
+          />
+          {qrBankName && <div style={{ fontSize: 10, fontWeight: 700 }}>{qrBankName}</div>}
+          <div style={{ fontSize: 9, color: '#333', fontFamily: 'monospace', marginTop: 2 }}>
+            {formatIban(normalizeToIban(qrAccountNum, qrBankName))}
+          </div>
+          {qrAccountTitle && <div style={{ fontSize: 9, color: '#555', marginTop: 1 }}>{qrAccountTitle}</div>}
+          {netBalance > 0 && (
+            <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>
+              Amount Due: Rs. {Math.abs(netBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -162,6 +215,12 @@ const WandaBillReportView: React.FC<BillReportViewProps> = ({
   billData
 }) => {
   const thankYouMsg = useSettingsStore(s => s.getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT));
+  const qrEnabled      = useSettingsStore(s => s.getSetting(BILL_QR_ENABLED_KEY, 'false')) === 'true';
+  const qrAccountTitle = useSettingsStore(s => s.getSetting(BILL_QR_ACCOUNT_TITLE, ''));
+  const qrAccountNum   = useSettingsStore(s => s.getSetting(BILL_QR_ACCOUNT_NUMBER, ''));
+  const qrBankName     = useSettingsStore(s => s.getSetting(BILL_QR_BANK_NAME, ''));
+  const qrIncludeAmount = useSettingsStore(s => s.getSetting(BILL_QR_INCLUDE_AMOUNT, 'false')) === 'true';
+  const qrCanvasRef    = useRef<HTMLCanvasElement>(null);
   const fromStr = dateRange ? dateRange[0].format('DD-MMM-YYYY') : '';
   const toStr = dateRange ? dateRange[1].format('DD-MMM-YYYY') : '';
 
@@ -177,7 +236,17 @@ const WandaBillReportView: React.FC<BillReportViewProps> = ({
   const previousBal = billData.summary.previousBalance;
   const totalAmount = previousBal + totalBill;
   const payment = billData.summary.payment;
-  const netBalance = totalAmount - payment;
+  const netBalance = billData?.summary?.balance ?? (totalAmount - payment);
+
+  useEffect(() => {
+    if (!qrEnabled || !qrAccountNum.trim() || !qrCanvasRef.current) return;
+    const amt = (qrIncludeAmount && netBalance > 0) ? netBalance : 0;
+    const payload = buildEmvCoPayload(qrAccountTitle, qrAccountNum, amt, qrBankName);
+    QRCode.toCanvas(qrCanvasRef.current, payload, {
+      width: 160, margin: 1, errorCorrectionLevel: 'M',
+      color: { dark: '#000000', light: '#ffffff' }
+    }).catch(console.warn);
+  }, [qrEnabled, qrAccountTitle, qrAccountNum, qrBankName, netBalance, qrIncludeAmount]);
 
   return (
     <div 
@@ -363,6 +432,29 @@ const WandaBillReportView: React.FC<BillReportViewProps> = ({
           {thankYouMsg}
         </div>
       )}
+
+      {/* QR Payment Section */}
+      {qrEnabled && qrAccountNum && (
+        <div style={{ borderTop: '1px dashed #000000', marginTop: 16, paddingTop: 12, textAlign: 'center' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6, letterSpacing: '0.5px' }}>SCAN TO PAY (RAAST / IBFT)</div>
+          <canvas
+            ref={qrCanvasRef}
+            width={160}
+            height={160}
+            style={{ display: 'block', margin: '0 auto 6px' }}
+          />
+          {qrBankName && <div style={{ fontSize: 10, fontWeight: 700 }}>{qrBankName}</div>}
+          <div style={{ fontSize: 9, color: '#333', fontFamily: 'monospace', marginTop: 2 }}>
+            {formatIban(normalizeToIban(qrAccountNum, qrBankName))}
+          </div>
+          {qrAccountTitle && <div style={{ fontSize: 9, color: '#555', marginTop: 1 }}>{qrAccountTitle}</div>}
+          {netBalance > 0 && (
+            <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>
+              Amount Due: Rs. {Math.abs(netBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -429,6 +521,37 @@ const generateStandardThermalLines = (
   if (thankYouMsg) {
     lines.push(ESC_ALIGN_CENTER + thankYouMsg);
   }
+
+  // QR Payment — ESC/POS GS(k) QR code command
+  const store = useSettingsStore.getState();
+  const qrEnabled = store.getSetting(BILL_QR_ENABLED_KEY, 'false') === 'true';
+  const qrAccountTitle = store.getSetting(BILL_QR_ACCOUNT_TITLE, '');
+  const qrAccountNum   = store.getSetting(BILL_QR_ACCOUNT_NUMBER, '');
+  const qrBankName     = store.getSetting(BILL_QR_BANK_NAME, '');
+  const qrIncludeAmount = store.getSetting(BILL_QR_INCLUDE_AMOUNT, 'false') === 'true';
+  if (qrEnabled && qrAccountNum.trim()) {
+    const netBal = data.summary.balance;
+    const amt = (qrIncludeAmount && netBal > 0) ? netBal : 0;
+    const payload = buildEmvCoPayload(qrAccountTitle, qrAccountNum, amt, qrBankName);
+    lines.push(ESC_ALIGN_CENTER);
+    lines.push(divider('-', width));
+    lines.push('SCAN TO PAY (RAAST / IBFT)');
+    if (qrBankName) lines.push(qrBankName);
+    const enc = new TextEncoder();
+    const payloadBytes = enc.encode(payload);
+    const pL = payloadBytes.length & 0xff;
+    const pH = (payloadBytes.length >> 8) & 0xff;
+    const qrCmd = [
+      0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00,
+      0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31,
+      0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x04,
+      0x1d, 0x28, 0x6b, pL + 3, pH, 0x31, 0x50, 0x30, ...Array.from(payloadBytes),
+      0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30
+    ];
+    lines.push(String.fromCharCode(...qrCmd));
+    lines.push(ESC_ALIGN_LEFT);
+  }
+
   lines.push(ESC_ALIGN_LEFT);
   lines.push('');
   lines.push('');
@@ -510,6 +633,37 @@ const generateWandaThermalLines = (
   if (thankYouMsg) {
     lines.push(ESC_ALIGN_CENTER + thankYouMsg);
   }
+
+  // QR Payment — ESC/POS GS(k) QR code command
+  const store = useSettingsStore.getState();
+  const qrEnabled = store.getSetting(BILL_QR_ENABLED_KEY, 'false') === 'true';
+  const qrAccountTitle = store.getSetting(BILL_QR_ACCOUNT_TITLE, '');
+  const qrAccountNum   = store.getSetting(BILL_QR_ACCOUNT_NUMBER, '');
+  const qrBankName     = store.getSetting(BILL_QR_BANK_NAME, '');
+  const qrIncludeAmount = store.getSetting(BILL_QR_INCLUDE_AMOUNT, 'false') === 'true';
+  if (qrEnabled && qrAccountNum.trim()) {
+    const netBal = data.summary.balance;
+    const amt = (qrIncludeAmount && netBal > 0) ? netBal : 0;
+    const payload = buildEmvCoPayload(qrAccountTitle, qrAccountNum, amt, qrBankName);
+    lines.push(ESC_ALIGN_CENTER);
+    lines.push(divider('-', width));
+    lines.push('SCAN TO PAY (RAAST / IBFT)');
+    if (qrBankName) lines.push(qrBankName);
+    const enc = new TextEncoder();
+    const payloadBytes = enc.encode(payload);
+    const pL = payloadBytes.length & 0xff;
+    const pH = (payloadBytes.length >> 8) & 0xff;
+    const qrCmd = [
+      0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00,
+      0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31,
+      0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x04,
+      0x1d, 0x28, 0x6b, pL + 3, pH, 0x31, 0x50, 0x30, ...Array.from(payloadBytes),
+      0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30
+    ];
+    lines.push(String.fromCharCode(...qrCmd));
+    lines.push(ESC_ALIGN_LEFT);
+  }
+
   lines.push(ESC_ALIGN_LEFT);
   lines.push('');
   lines.push('');

@@ -15,6 +15,13 @@ interface SettingsState {
 export const BILL_THANK_YOU_KEY = 'Bill.ThankYouMessage';
 export const BILL_THANK_YOU_DEFAULT = 'Thank you for shopping with us!';
 
+// QR Payment setting keys (per-tenant, stored in Settings table)
+export const BILL_QR_ENABLED_KEY    = 'Bill.QrPayment.Enabled';
+export const BILL_QR_ACCOUNT_TITLE  = 'Bill.QrPayment.AccountTitle';
+export const BILL_QR_ACCOUNT_NUMBER = 'Bill.QrPayment.AccountNumber';
+export const BILL_QR_BANK_NAME      = 'Bill.QrPayment.BankName';
+export const BILL_QR_INCLUDE_AMOUNT = 'Bill.QrPayment.IncludeAmount';
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
