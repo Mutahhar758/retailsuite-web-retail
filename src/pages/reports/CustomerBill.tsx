@@ -65,7 +65,7 @@ const StandardBillReportView: React.FC<BillReportViewProps> = ({
   const netBalance = billData?.summary?.balance ?? 0;
 
   useEffect(() => {
-    if (!qrEnabled || !qrAccountNum.trim() || !qrCanvasRef.current) return;
+    if (!qrEnabled || !qrAccountNum.trim() || !qrCanvasRef.current || netBalance <= 0) return;
     const amt = (qrIncludeAmount && netBalance > 0) ? netBalance : 0;
     const payload = buildEmvCoPayload(qrAccountTitle, qrAccountNum, amt, qrBankName);
     QRCode.toCanvas(qrCanvasRef.current, payload, {
@@ -182,7 +182,7 @@ const StandardBillReportView: React.FC<BillReportViewProps> = ({
       )}
 
       {/* QR Payment Section */}
-      {qrEnabled && qrAccountNum && (
+      {qrEnabled && qrAccountNum && netBalance > 0 && (
         <div style={{ borderTop: '1px dashed #000', marginTop: 16, paddingTop: 12, textAlign: 'center' }}>
           <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6, letterSpacing: '0.5px' }}>SCAN TO PAY (RAAST / IBFT)</div>
           <canvas
@@ -196,11 +196,9 @@ const StandardBillReportView: React.FC<BillReportViewProps> = ({
             {formatIban(normalizeToIban(qrAccountNum, qrBankName))}
           </div>
           {qrAccountTitle && <div style={{ fontSize: 9, color: '#555', marginTop: 1 }}>{qrAccountTitle}</div>}
-          {netBalance > 0 && (
-            <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>
-              Amount Due: Rs. {Math.abs(netBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-          )}
+          <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>
+            Amount Due: Rs. {Math.abs(netBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
         </div>
       )}
     </div>
@@ -239,7 +237,7 @@ const WandaBillReportView: React.FC<BillReportViewProps> = ({
   const netBalance = billData?.summary?.balance ?? (totalAmount - payment);
 
   useEffect(() => {
-    if (!qrEnabled || !qrAccountNum.trim() || !qrCanvasRef.current) return;
+    if (!qrEnabled || !qrAccountNum.trim() || !qrCanvasRef.current || netBalance <= 0) return;
     const amt = (qrIncludeAmount && netBalance > 0) ? netBalance : 0;
     const payload = buildEmvCoPayload(qrAccountTitle, qrAccountNum, amt, qrBankName);
     QRCode.toCanvas(qrCanvasRef.current, payload, {
@@ -434,7 +432,7 @@ const WandaBillReportView: React.FC<BillReportViewProps> = ({
       )}
 
       {/* QR Payment Section */}
-      {qrEnabled && qrAccountNum && (
+      {qrEnabled && qrAccountNum && netBalance > 0 && (
         <div style={{ borderTop: '1px dashed #000000', marginTop: 16, paddingTop: 12, textAlign: 'center' }}>
           <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6, letterSpacing: '0.5px' }}>SCAN TO PAY (RAAST / IBFT)</div>
           <canvas
@@ -448,11 +446,9 @@ const WandaBillReportView: React.FC<BillReportViewProps> = ({
             {formatIban(normalizeToIban(qrAccountNum, qrBankName))}
           </div>
           {qrAccountTitle && <div style={{ fontSize: 9, color: '#555', marginTop: 1 }}>{qrAccountTitle}</div>}
-          {netBalance > 0 && (
-            <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>
-              Amount Due: Rs. {Math.abs(netBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-          )}
+          <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>
+            Amount Due: Rs. {Math.abs(netBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
         </div>
       )}
     </div>
@@ -529,7 +525,7 @@ const generateStandardThermalLines = (
   const qrAccountNum   = store.getSetting(BILL_QR_ACCOUNT_NUMBER, '');
   const qrBankName     = store.getSetting(BILL_QR_BANK_NAME, '');
   const qrIncludeAmount = store.getSetting(BILL_QR_INCLUDE_AMOUNT, 'false') === 'true';
-  if (qrEnabled && qrAccountNum.trim()) {
+  if (qrEnabled && qrAccountNum.trim() && data.summary.balance > 0) {
     const netBal = data.summary.balance;
     const amt = (qrIncludeAmount && netBal > 0) ? netBal : 0;
     const payload = buildEmvCoPayload(qrAccountTitle, qrAccountNum, amt, qrBankName);
@@ -641,7 +637,7 @@ const generateWandaThermalLines = (
   const qrAccountNum   = store.getSetting(BILL_QR_ACCOUNT_NUMBER, '');
   const qrBankName     = store.getSetting(BILL_QR_BANK_NAME, '');
   const qrIncludeAmount = store.getSetting(BILL_QR_INCLUDE_AMOUNT, 'false') === 'true';
-  if (qrEnabled && qrAccountNum.trim()) {
+  if (qrEnabled && qrAccountNum.trim() && data.summary.balance > 0) {
     const netBal = data.summary.balance;
     const amt = (qrIncludeAmount && netBal > 0) ? netBal : 0;
     const payload = buildEmvCoPayload(qrAccountTitle, qrAccountNum, amt, qrBankName);
