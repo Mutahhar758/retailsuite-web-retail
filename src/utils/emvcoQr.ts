@@ -200,7 +200,20 @@ export function buildRaastPayload(
     tlv('04', iban);           // Destination Account (24-char IBAN)
 
   if (hasAmount) {
-    const amtStr = (num % 1 === 0) ? num.toFixed(0) : num.toFixed(2);
+    // SBP Raast QR implementation note:
+    // 1. Pakistani banking apps (Meezan Bank, etc.) only accept whole Rupees in Raast transfers.
+    //    Fractional paisas (e.g. 10167.10) cause the dot to be stripped, resulting in 101671 (10x bug).
+    //    Rounding to whole Rupees (Math.round) ensures clean integer transfers.
+    // 2. Meezan Bank's QR parser applies an implicit 10x multiplier on Tag 05.
+    //    Scaling by / 10 produces the exact target Rupee balance upon scanning.
+    // 3. Meezan Bank's parser expects Tag 05 to have at least 4 integer digits followed by 2 decimals
+    //    (minimum 7 characters, e.g. "0579.40", "1579.50", "2326.10"). Shorter lengths (e.g. "579.40")
+    //    fail to match its parser and default to 0.
+    const rounded = Math.round(num);
+    const scaled = rounded / 10;
+    const parts = scaled.toFixed(2).split('.');
+    const intPart = parts[0].padStart(4, '0');
+    const amtStr = `${intPart}.${parts[1]}`;
     payload += tlv('05', amtStr);                  // Tag 05: Transaction Amount
     payload += tlv('07', formatRaastExpiry(30));   // Tag 07: Expiry (mandatory for dynamic SBP Raast QR)
   }
