@@ -47,7 +47,42 @@ const MODULE_CATEGORIES: Record<string, string> = {
   Payrolls: 'Daily Entries',
   // Reports
   Dashboard: 'Analytics & Reports',
-  Reports: 'Analytics & Reports',
+  AccountStatement: 'Analytics & Reports',
+  AccountStatementWithDue: 'Analytics & Reports',
+  AccountBalance: 'Analytics & Reports',
+  TrialBalance: 'Analytics & Reports',
+  StockBalance: 'Analytics & Reports',
+  StockLedger: 'Analytics & Reports',
+  IncomeSummary: 'Analytics & Reports',
+  BalanceSheet: 'Analytics & Reports',
+  CustomerBill: 'Analytics & Reports',
+  MilkComparison: 'Analytics & Reports',
+  CustomerBalanceRecovery: 'Analytics & Reports',
+  EnvelopeReport: 'Analytics & Reports',
+  BarcodeReport: 'Analytics & Reports',
+  ShipmentLabelReport: 'Analytics & Reports',
+};
+
+const MODULE_DISPLAY_NAMES: Record<string, string> = {
+  AccountStatement: 'Account Statement',
+  AccountStatementWithDue: 'Account Statement (With Due)',
+  AccountBalance: 'Account Balance',
+  TrialBalance: 'Trial Balance',
+  StockBalance: 'Stock Balance',
+  StockLedger: 'Stock Ledger (Product)',
+  IncomeSummary: 'Income Summary',
+  BalanceSheet: 'Balance Sheet',
+  CustomerBill: 'Customer Bill',
+  MilkComparison: 'Milk Comparison',
+  CustomerBalanceRecovery: 'Customer Balance Recovery',
+  EnvelopeReport: 'Envelope Report',
+  BarcodeReport: 'Barcode Report',
+  ShipmentLabelReport: 'Shipment Label Report',
+  POSSales: 'POS Touch Sales',
+  ItemCategories: 'Item Categories',
+  ChartOfAccounts: 'Chart Of Accounts',
+  DetailAccounts: 'Detail Accounts',
+  HRInfo: 'HR Info',
 };
 
 export const RoleForm: React.FC = () => {
@@ -351,8 +386,8 @@ export const RoleForm: React.FC = () => {
                         const totalCount = getModuleTotalCount(mKey);
                         const allSelected = isModuleAllSelected(mKey);
                         
-                        // PascalCase to spaced display
-                        const moduleDisplayName = mKey.replace(/([A-Z])/g, ' $1').trim();
+                        // Friendly display name
+                        const moduleDisplayName = MODULE_DISPLAY_NAMES[mKey] || mKey.replace(/([A-Z])/g, ' $1').trim();
 
                         return (
                           <Col xs={24} sm={12} lg={8} key={mKey}>

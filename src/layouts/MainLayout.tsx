@@ -62,16 +62,17 @@ const permissionMap: Record<string, string> = {
   '/setup/dining-tables': 'Permissions.DiningTables.View',
   '/daily-entries/kitchen-display': 'Permissions.KotOrders.View',
 
-  '/reports': 'Permissions.Reports.View',
-  '/reports/account-statement': 'Permissions.Reports.View',
-  '/reports/account-statement-with-due': 'Permissions.Reports.View',
-  '/reports/account-balance': 'Permissions.Reports.View',
-  '/reports/trial-balance': 'Permissions.Reports.View',
-  '/reports/stock-balance': 'Permissions.Reports.View',
-  '/reports/item-ledger': 'Permissions.Reports.View',
-  '/reports/income-summary': 'Permissions.Reports.View',
-  '/reports/balance-sheet': 'Permissions.Reports.View',
-  '/reports/customer-bill': 'Permissions.Reports.View',
+  '/reports/account-statement': 'Permissions.AccountStatement.View',
+  '/reports/account-statement-with-due': 'Permissions.AccountStatementWithDue.View',
+  '/reports/account-balance': 'Permissions.AccountBalance.View',
+  '/reports/trial-balance': 'Permissions.TrialBalance.View',
+  '/reports/stock-balance': 'Permissions.StockBalance.View',
+  '/reports/item-ledger': 'Permissions.StockLedger.View',
+  '/reports/income-summary': 'Permissions.IncomeSummary.View',
+  '/reports/balance-sheet': 'Permissions.BalanceSheet.View',
+  '/reports/customer-bill': 'Permissions.CustomerBill.View',
+  '/reports/milk-comparison': 'Permissions.MilkComparison.View',
+  '/reports/customer-balance-recovery': 'Permissions.CustomerBalanceRecovery.View',
 };
 
 export const MainLayout: React.FC = () => {
