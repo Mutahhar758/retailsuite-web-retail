@@ -37,6 +37,7 @@ import {
 } from '../../stores/useSettingsStore';
 import { useLocation } from 'react-router-dom';
 import { buildEmvCoPayload } from '../../utils/emvcoQr';
+import { rangePresets } from '../../utils/datePresets';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -208,14 +209,23 @@ export const CustomerBill: React.FC = () => {
     });
   }, [form]);
 
-  // Cleanup blob URL
+  // Cleanup blob URL and any injected print styles
   useEffect(() => {
+    const cleanupStyles = () => {
+      const el1 = document.getElementById('thermal-page-print-rules');
+      if (el1) el1.remove();
+      const el2 = document.getElementById('report-page-print-rules');
+      if (el2) el2.remove();
+    };
+    cleanupStyles();
+
     return () => {
+      cleanupStyles();
       if (pdfBlobUrl) {
         URL.revokeObjectURL(pdfBlobUrl);
       }
     };
-  }, [pdfBlobUrl]);
+  }, [layout, pdfBlobUrl]);
 
   const handleQuickPreset = (preset: '1-10' | '1-15' | '1-20' | 'month' | 'last-month') => {
     let from = dayjs().startOf('month');
@@ -331,13 +341,20 @@ export const CustomerBill: React.FC = () => {
       message.warning('Please generate the bill first');
       return;
     }
+
+    // Clean up any previously injected style tags to prevent DOM pollution
+    const old1 = document.getElementById('thermal-page-print-rules');
+    if (old1) old1.remove();
+    const old2 = document.getElementById('report-page-print-rules');
+    if (old2) old2.remove();
+
     if (iframeRef.current && iframeRef.current.contentWindow) {
       try {
         iframeRef.current.contentWindow.focus();
         iframeRef.current.contentWindow.print();
         return;
-      } catch {
-        // Fallback below
+      } catch (e) {
+        console.warn('Iframe print error, falling back to new window:', e);
       }
     }
     window.open(pdfBlobUrl, '_blank');
@@ -638,7 +655,11 @@ export const CustomerBill: React.FC = () => {
                 rules={[{ required: true, message: 'Please select dates' }]}
                 style={{ marginBottom: 14 }}
               >
-                <RangePicker style={{ width: '100%' }} />
+                <RangePicker 
+                  style={{ width: '100%' }} 
+                  format="DD-MMM-YYYY"
+                  presets={rangePresets}
+                />
               </Form.Item>
 
               <Form.Item
@@ -839,7 +860,8 @@ export const CustomerBill: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          position: 'relative'
+          position: 'relative',
+          padding: layout === 'Thermal' ? '16px 0' : 0
         }}>
           {pdfLoading ? (
             <div style={{
@@ -854,14 +876,18 @@ export const CustomerBill: React.FC = () => {
             </div>
           ) : pdfBlobUrl ? (
             <iframe
+              key={layout}
               ref={iframeRef}
-              src={`${pdfBlobUrl}#view=FitH`}
+              src={layout === 'Thermal' ? `${pdfBlobUrl}#view=Fit` : `${pdfBlobUrl}#view=FitH`}
               title="Customer Bill Preview"
               style={{
-                width: '100%',
+                width: layout === 'Thermal' ? '380px' : '100%',
+                maxWidth: '100%',
                 height: '100%',
                 border: 'none',
-                display: 'block'
+                display: 'block',
+                boxShadow: layout === 'Thermal' ? '0 4px 20px rgba(0,0,0,0.35)' : 'none',
+                borderRadius: layout === 'Thermal' ? 4 : 0
               }}
             />
           ) : (

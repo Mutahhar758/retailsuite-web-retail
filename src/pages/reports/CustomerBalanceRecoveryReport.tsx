@@ -28,6 +28,8 @@ import {
   ESC_DOUBLE_OFF
 } from '../../hooks/useThermalPrinter';
 
+import { rangePresets } from '../../utils/datePresets';
+
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
@@ -508,7 +510,11 @@ export const CustomerBalanceRecoveryReport: React.FC = () => {
                 rules={[{ required: true, message: 'Please select dates' }]}
                 style={{ marginBottom: 12 }}
               >
-                <RangePicker style={{ width: '100%' }} />
+                <RangePicker 
+                  style={{ width: '100%' }} 
+                  format="DD-MMM-YYYY"
+                  presets={rangePresets}
+                />
               </Form.Item>
 
               <Form.Item
