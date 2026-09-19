@@ -1,23 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card, Typography, Form, DatePicker, Button,
-  Table, Space, message, Divider, Input
+  Space, message, Spin, Empty, Tooltip
 } from 'antd';
 import {
-  SearchOutlined, PrinterOutlined, BarChartOutlined,
-  CalendarOutlined
+  SearchOutlined, PrinterOutlined, DownloadOutlined,
+  ExportOutlined, FileExcelOutlined, FileTextOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined, BarChartOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { reportService, type TrialBalanceLine } from '../../services/reportService';
 import { rangePresets } from '../../utils/datePresets';
 
 const { Title, Text } = Typography;
+const { RangePicker } = DatePicker;
 
 export const TrialBalanceReport: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<TrialBalanceLine[]>([]);
-  const [searchText, setSearchText] = useState('');
+  const [trialData, setTrialData] = useState<TrialBalanceLine[] | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+    };
+  }, []);
 
   const handleSearch = async (values: any) => {
     setLoading(true);
@@ -26,250 +37,421 @@ export const TrialBalanceReport: React.FC = () => {
         fromDate: values.dateRange[0].format('YYYY-MM-DD'),
         toDate: values.dateRange[1].format('YYYY-MM-DD')
       };
-      const res = await reportService.getTrialBalance(filter);
-      
-      // Transform flat list to tree
-      const tree = buildAccountTree(res);
-      setData(tree);
-    } catch (error) {
-      message.error('Failed to load trial balance report');
+
+      // Fetch vector PDF
+      const pdfBlob = await reportService.getTrialBalancePdf(filter);
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+      const newUrl = URL.createObjectURL(pdfBlob);
+      setPdfUrl(newUrl);
+
+      // Also prefetch data lines for Excel/CSV exports
+      try {
+        const rawLines = await reportService.getTrialBalance(filter);
+        setTrialData(rawLines);
+      } catch (err) {
+        console.warn('Could not prefetch raw data lines for export', err);
+      }
+
+      message.success('Trial balance report generated');
+    } catch (error: any) {
+      console.error(error);
+      message.error(error?.response?.data?.message || 'Failed to generate trial balance report');
     } finally {
       setLoading(false);
     }
   };
 
-  const buildAccountTree = (items: TrialBalanceLine[]): any[] => {
-    const root: any = {};
+  const getExportFileName = (extension: string) => {
+    const values = form.getFieldsValue();
+    const fromStr = values.dateRange ? values.dateRange[0].format('YYYYMMDD') : dayjs().format('YYYYMMDD');
+    const toStr = values.dateRange ? values.dateRange[1].format('YYYYMMDD') : dayjs().format('YYYYMMDD');
+    return `TrialBalance_${fromStr}_${toStr}.${extension}`;
+  };
 
-    items.forEach(item => {
-      const path = [item.lvl1, item.lvl2, item.lvl3, item.lvl4].filter(Boolean);
-      let currentLevel = root;
+  const handleDownload = () => {
+    if (!pdfUrl) return;
+    const a = document.createElement('a');
+    a.href = pdfUrl;
+    a.download = getExportFileName('pdf');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
-      path.forEach((levelTitle, index) => {
-        if (!currentLevel[levelTitle]) {
-          currentLevel[levelTitle] = {
-            title: levelTitle,
-            priBal: 0,
-            dr: 0,
-            cr: 0,
-            curBal: 0,
-            children: {},
-            key: path.slice(0, index + 1).join(' > '),
-            isGroup: true
-          };
+  const handleDirectPrint = () => {
+    if (!pdfUrl) return;
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.src = pdfUrl;
+    document.body.appendChild(iframe);
+
+    iframe.onload = () => {
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch (e) {
+          console.error('Failed to print PDF', e);
+        } finally {
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+          }, 60000);
         }
-        
-        // Add totals to parent groups
-        currentLevel[levelTitle].priBal += item.priBal;
-        currentLevel[levelTitle].dr += item.dr;
-        currentLevel[levelTitle].cr += item.cr;
-        currentLevel[levelTitle].curBal += item.curBal;
-        
-        currentLevel = currentLevel[levelTitle].children;
-      });
+      }, 300);
+    };
+  };
 
-      // Add the leaf (detail account)
-      const leafKey = `${item.lvl4} > ${item.title}`;
-      currentLevel[item.title] = {
-        ...item,
-        key: leafKey,
-        isLeaf: true
-      };
+  const handleOpenInNewTab = () => {
+    if (!pdfUrl) return;
+    window.open(`${pdfUrl}#view=FitH`, '_blank');
+  };
+
+  const handleExportCsv = () => {
+    if (!trialData || trialData.length === 0) {
+      message.warning('No data available to export. Generate a report first.');
+      return;
+    }
+
+    const headers = ['Account Title / Head', 'Opening Balance', 'Period Debit', 'Period Credit', 'Closing Balance'];
+    let totalOpening = 0;
+    let totalDr = 0;
+    let totalCr = 0;
+    let totalClosing = 0;
+
+    const rows = trialData.map(line => {
+      totalOpening += line.priBal;
+      totalDr += line.dr;
+      totalCr += line.cr;
+      totalClosing += line.curBal;
+
+      return [
+        `"${(line.title || '').replace(/"/g, '""')}"`,
+        line.priBal.toFixed(2),
+        line.dr.toFixed(2),
+        line.cr.toFixed(2),
+        line.curBal.toFixed(2)
+      ];
     });
 
-    const convertToArray = (obj: any): any[] => {
-      return Object.values(obj).map((node: any) => {
-        if (node.children) {
-          node.children = convertToArray(node.children);
-          if (node.children.length === 0) delete node.children;
-        }
-        return node;
-      });
-    };
+    rows.push([
+      '"TOTAL SUMMARY & RECONCILIATION"',
+      totalOpening.toFixed(2),
+      totalDr.toFixed(2),
+      totalCr.toFixed(2),
+      totalClosing.toFixed(2)
+    ]);
 
-    return convertToArray(root);
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = getExportFileName('csv');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    message.success('Exported to CSV');
   };
 
-  const searchInTree = (nodes: any[], text: string): any[] => {
-    return nodes.reduce((acc, node) => {
-      const match = node.title.toLowerCase().includes(text.toLowerCase());
-      if (node.children) {
-        const filteredChildren = searchInTree(node.children, text);
-        if (filteredChildren.length > 0 || match) {
-          acc.push({ ...node, children: filteredChildren.length > 0 ? filteredChildren : undefined });
-        }
-      } else if (match) {
-        acc.push(node);
-      }
-      return acc;
-    }, [] as any[]);
-  };
-
-  const filteredData = searchText ? searchInTree(data, searchText) : data;
-
-  const columns = [
-    {
-      title: 'Account Title',
-      dataIndex: 'title',
-      key: 'title',
-      render: (text: string, record: any) => (
-        <span style={{ fontWeight: record.isGroup ? 'bold' : 'normal', color: record.isGroup ? '#16a34a' : 'inherit' }}>
-          {text}
-        </span>
-      )
-    },
-    {
-      title: 'Opening Balance',
-      dataIndex: 'priBal',
-      key: 'priBal',
-      align: 'right' as const,
-      width: 150,
-      render: (val: number) => (
-        <Text type={val >= 0 ? undefined : 'danger'}>
-          {Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2 })} {val >= 0 ? 'Dr' : 'Cr'}
-        </Text>
-      )
-    },
-    {
-      title: 'Debit (Period)',
-      dataIndex: 'dr',
-      key: 'dr',
-      align: 'right' as const,
-      width: 130,
-      render: (val: number) => val !== 0 ? val.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'
-    },
-    {
-      title: 'Credit (Period)',
-      dataIndex: 'cr',
-      key: 'cr',
-      align: 'right' as const,
-      width: 130,
-      render: (val: number) => val !== 0 ? val.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'
-    },
-    {
-      title: 'Closing Balance',
-      dataIndex: 'curBal',
-      key: 'curBal',
-      align: 'right' as const,
-      width: 150,
-      render: (val: number) => (
-        <Text strong type={val >= 0 ? 'success' : 'danger'}>
-          {Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2 })} {val >= 0 ? 'Dr' : 'Cr'}
-        </Text>
-      )
+  const handleExportExcel = () => {
+    if (!trialData || trialData.length === 0) {
+      message.warning('No data available to export. Generate a report first.');
+      return;
     }
-  ];
+
+    const values = form.getFieldsValue();
+    const periodStr = values.dateRange
+      ? `${values.dateRange[0].format('DD-MMM-YYYY')} to ${values.dateRange[1].format('DD-MMM-YYYY')}`
+      : dayjs().format('DD-MMM-YYYY');
+
+    let totalOpening = 0;
+    let totalDr = 0;
+    let totalCr = 0;
+    let totalClosing = 0;
+
+    let rowsHtml = '';
+    trialData.forEach((line, idx) => {
+      totalOpening += line.priBal;
+      totalDr += line.dr;
+      totalCr += line.cr;
+      totalClosing += line.curBal;
+
+      const bg = idx % 2 === 0 ? '#ffffff' : '#f9fafb';
+      rowsHtml += `
+        <tr style="background-color: ${bg};">
+          <td style="border: 1px solid #e5e7eb; padding: 6px; font-weight: 500;">${line.title}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${line.priBal !== 0 ? line.priBal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${line.dr > 0 ? line.dr.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${line.cr > 0 ? line.cr.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; font-weight: bold;">${line.curBal !== 0 ? line.curBal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+        </tr>
+      `;
+    });
+
+    const isBalanced = Math.abs(totalDr - totalCr) < 0.01;
+    const balanceStatus = isBalanced ? '✓ BALANCED' : `⚠ OUT OF BALANCE: ${Math.abs(totalDr - totalCr).toFixed(2)}`;
+
+    const excelHtml = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+          table { border-collapse: collapse; width: 100%; }
+          th { background-color: #1e293b; color: #ffffff; border: 1px solid #cbd5e1; padding: 8px; font-size: 11px; }
+          td { font-size: 11px; color: #1e293b; }
+          .header-title { font-size: 16px; font-weight: bold; color: #0f172a; margin-bottom: 4px; }
+          .sub-title { font-size: 12px; color: #64748b; margin-bottom: 12px; }
+          .total-row { background-color: #f1f5f9; font-weight: bold; }
+          .total-row td { border-top: 2px solid #0f172a; border-bottom: 2px solid #0f172a; padding: 8px; }
+        </style>
+      </head>
+      <body>
+        <div class="header-title">TRIAL BALANCE (GENERAL LEDGER)</div>
+        <div class="sub-title">Period: <b>${periodStr}</b> &nbsp;|&nbsp; Status: <b>${balanceStatus}</b></div>
+        <table>
+          <thead>
+            <tr>
+              <th>Account Title / Head</th>
+              <th style="width: 110px;">Opening Balance</th>
+              <th style="width: 110px;">Period Debit</th>
+              <th style="width: 110px;">Period Credit</th>
+              <th style="width: 120px;">Closing Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+            <tr class="total-row">
+              <td style="text-align: left; padding: 8px;">TOTAL SUMMARY & RECONCILIATION</td>
+              <td style="text-align: right; padding: 8px;">Rs. ${totalOpening.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="text-align: right; padding: 8px;">Rs. ${totalDr.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="text-align: right; padding: 8px;">Rs. ${totalCr.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="text-align: right; padding: 8px;">Rs. ${totalClosing.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            </tr>
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = getExportFileName('xls');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    message.success('Exported to Excel');
+  };
 
   return (
-    <Card className="shadow-sm border-gray-100 rounded-xl">
-      <style>{`
-        .ant-table-row-level-0 { background-color: #f9fafb; }
-        .ant-table-row-level-1 { background-color: #ffffff; }
-        @media print {
-          .no-print { display: none !important; }
-          .ant-card { border: none !important; box-shadow: none !important; }
-          .ant-table { font-size: 10pt !important; }
-        }
-      `}</style>
-      <div className="flex justify-between items-center mb-6 no-print">
-        <Space align="center">
-          <BarChartOutlined style={{ fontSize: 24, color: '#16a34a' }} />
+    <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
+      {/* Top Header Bar */}
+      <div style={{
+        padding: '10px 16px',
+        backgroundColor: '#ffffff',
+        borderBottom: '1px solid #f0f0f0',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexShrink: 0
+      }}>
+        <Space align="center" size="middle">
+          <Button
+            type="text"
+            icon={isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            style={{ fontSize: 16 }}
+            title={isCollapsed ? 'Show Parameters' : 'Hide Parameters'}
+          />
+          <BarChartOutlined style={{ fontSize: 20, color: '#2563eb' }} />
           <div>
-            <Title level={4} style={{ margin: 0 }}>Trial Balance Report</Title>
-            <Text type="secondary">Hierarchical view of Chart of Accounts with balances and movements</Text>
+            <Title level={5} style={{ margin: 0 }}>Trial Balance Report</Title>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              General Ledger opening, movement and closing balances
+            </Text>
           </div>
         </Space>
-        <Button icon={<PrinterOutlined />} disabled={data.length === 0} onClick={() => window.print()} className="no-print">Print Report</Button>
+
+        <Space>
+          {pdfUrl && (
+            <>
+              <Button icon={<PrinterOutlined />} onClick={handleDirectPrint} type="default">
+                Print
+              </Button>
+              <Button icon={<DownloadOutlined />} onClick={handleDownload} type="default">
+                Download PDF
+              </Button>
+              <Button icon={<FileExcelOutlined />} onClick={handleExportExcel} style={{ color: '#15803d' }}>
+                Export Excel
+              </Button>
+              <Button icon={<FileTextOutlined />} onClick={handleExportCsv} style={{ color: '#0284c7' }}>
+                Export CSV
+              </Button>
+              <Tooltip title="Open in New Tab">
+                <Button icon={<ExportOutlined />} onClick={handleOpenInNewTab} />
+              </Tooltip>
+            </>
+          )}
+        </Space>
       </div>
 
-      <Form
-        form={form}
-        layout="inline"
-        className="mb-8 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg no-print"
-        onFinish={handleSearch}
-        initialValues={{
-          dateRange: [dayjs().startOf('year'), dayjs()]
-        }}
-      >
-        <Form.Item name="dateRange" label="Date Range" rules={[{ required: true }]}>
-          <DatePicker.RangePicker format="DD-MMM-YYYY" presets={rangePresets} />
-        </Form.Item>
-        <Form.Item>
-          <Button type="primary" icon={<SearchOutlined />} htmlType="submit" loading={loading} style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}>
-            Show Report
-          </Button>
-        </Form.Item>
-        {data.length > 0 && (
-          <Form.Item style={{ marginLeft: 'auto', marginRight: 0 }}>
-            <Input 
-              placeholder="Search accounts..." 
-              prefix={<SearchOutlined />} 
-              onChange={e => setSearchText(e.target.value)}
-              style={{ width: 250 }}
-              allowClear
-            />
-          </Form.Item>
-        )}
-      </Form>
+      {/* Main Side-by-Side Workspace */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'row',
+        gap: '16px',
+        height: 'calc(100vh - 180px)',
+        width: '100%',
+        padding: '14px 16px 0 16px',
+        boxSizing: 'border-box',
+        overflow: 'hidden'
+      }}>
+        {/* Left: Fixed Collapsible Parameters Panel */}
+        {!isCollapsed && (
+          <div style={{
+            width: '320px',
+            minWidth: '320px',
+            maxWidth: '320px',
+            height: '100%',
+            overflowY: 'auto'
+          }}>
+            <Card
+              title={<span style={{ fontSize: 13, fontWeight: 600 }}>Report Parameters</span>}
+              size="small"
+              className="shadow-sm"
+              style={{ borderRadius: 8, height: '100%' }}
+            >
+              <Form
+                form={form}
+                layout="vertical"
+                onFinish={handleSearch}
+                initialValues={{
+                  dateRange: [dayjs().startOf('month'), dayjs()]
+                }}
+              >
+                <Form.Item
+                  name="dateRange"
+                  label={<span style={{ fontSize: 12, fontWeight: 500 }}>Accounting Period</span>}
+                  rules={[{ required: true, message: 'Please select period range' }]}
+                >
+                  <RangePicker
+                    presets={rangePresets}
+                    format="DD-MMM-YYYY"
+                    style={{ width: '100%' }}
+                  />
+                </Form.Item>
 
-      {data.length > 0 && (
-        <div id="printable-report">
-          <div className="text-center mb-6 print-only">
-            <Title level={3}>Trial Balance Report (Hierarchical)</Title>
-            <Space split={<Divider type="vertical" />}>
-              <span><CalendarOutlined /> {form.getFieldValue('dateRange')[0].format('DD-MMM-YYYY')} to {form.getFieldValue('dateRange')[1].format('DD-MMM-YYYY')}</span>
-            </Space>
+                <div style={{ marginTop: 24 }}>
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    icon={<SearchOutlined />}
+                    loading={loading}
+                    block
+                    style={{
+                      backgroundColor: '#2563eb',
+                      borderColor: '#2563eb',
+                      height: 38,
+                      fontWeight: 500
+                    }}
+                  >
+                    Generate Report
+                  </Button>
+                </div>
+              </Form>
+            </Card>
           </div>
+        )}
 
-          <Table
-            dataSource={filteredData}
-            columns={columns}
-            pagination={false}
-            loading={loading}
-            rowKey="key"
-            bordered
+        {/* Right: Full-Height PDF Preview Workspace */}
+        <div style={{
+          flex: 1,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          minWidth: 0
+        }}>
+          <Card
             size="small"
-            expandable={{
-              defaultExpandAllRows: true,
-              expandedRowKeys: undefined, // Let AntD handle it via defaultExpandAllRows
+            style={{
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              borderRadius: 8,
+              boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
+              overflow: 'hidden'
             }}
-            summary={pageData => {
-              // Calculate grand total from top level nodes only
-              let totalOpening = 0;
-              let totalDr = 0;
-              let totalCr = 0;
-              let totalClosing = 0;
-
-              pageData.forEach(node => {
-                totalOpening += node.priBal;
-                totalDr += node.dr;
-                totalCr += node.cr;
-                totalClosing += node.curBal;
-              });
-
-              return (
-                <Table.Summary fixed>
-                  <Table.Summary.Row className="bg-gray-100 font-bold">
-                    <Table.Summary.Cell index={0} align="right">Report Totals</Table.Summary.Cell>
-                    <Table.Summary.Cell index={1} align="right">
-                      <Text type={totalOpening >= 0 ? undefined : 'danger'}>
-                        {Math.abs(totalOpening).toLocaleString(undefined, { minimumFractionDigits: 2 })} {totalOpening >= 0 ? 'Dr' : 'Cr'}
-                      </Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={2} align="right">{totalDr.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Table.Summary.Cell>
-                    <Table.Summary.Cell index={3} align="right">{totalCr.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Table.Summary.Cell>
-                    <Table.Summary.Cell index={4} align="right">
-                      <Text type={totalClosing >= 0 ? 'success' : 'danger'}>
-                        {Math.abs(totalClosing).toLocaleString(undefined, { minimumFractionDigits: 2 })} {totalClosing >= 0 ? 'Dr' : 'Cr'}
-                      </Text>
-                    </Table.Summary.Cell>
-                  </Table.Summary.Row>
-                </Table.Summary>
-              );
+            bodyStyle={{
+              flex: 1,
+              padding: 0,
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              backgroundColor: '#525659'
             }}
-          />
+          >
+            {loading ? (
+              <div style={{
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#ffffff'
+              }}>
+                <Spin size="large" />
+                <Text type="secondary" style={{ marginTop: 16 }}>
+                  Generating vector PDF report...
+                </Text>
+              </div>
+            ) : pdfUrl ? (
+              <iframe
+                src={`${pdfUrl}#view=FitH`}
+                title="Trial Balance Report Preview"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                  display: 'block'
+                }}
+              />
+            ) : (
+              <div style={{
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#ffffff'
+              }}>
+                <Empty
+                  description={
+                    <div>
+                      <Text strong style={{ fontSize: 15, color: '#374151' }}>No Report Generated</Text>
+                      <br />
+                      <Text type="secondary" style={{ fontSize: 13 }}>
+                        Select the Accounting Period on the left and click "Generate Report"
+                      </Text>
+                    </div>
+                  }
+                />
+              </div>
+            )}
+          </Card>
         </div>
-      )}
-    </Card>
+      </div>
+    </div>
   );
 };

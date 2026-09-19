@@ -110,9 +110,25 @@ export const reportService = {
     return response.data.body as TrialBalanceLine[];
   },
 
+  async getTrialBalancePdf(params: { fromDate: string; toDate: string }): Promise<Blob> {
+    const response = await api.get('/api/reports/trial-balance/pdf', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data as Blob;
+  },
+
   async getBalanceDetail(params: { toDate: string; account: string }) {
     const response = await api.get('/api/reports/balance-detail', { params });
     return response.data.body as BalanceDetailLine[];
+  },
+
+  async getBalanceDetailPdf(params: { toDate: string; account: string }): Promise<Blob> {
+    const response = await api.get('/api/reports/balance-detail/pdf', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data as Blob;
   },
 
   async getAccountStatement(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }) {
@@ -146,9 +162,25 @@ export const reportService = {
     return response.data.body as StockBalanceLine[];
   },
 
+  async getStockBalancePdf(params: { fromDate: string; toDate: string; catagory?: string }): Promise<Blob> {
+    const response = await api.get('/api/reports/stock-balance/pdf', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data as Blob;
+  },
+
   async getStockLedger(params: { fromDate: string; toDate: string; fkItem: string }) {
     const response = await api.get('/api/reports/stock-ledger', { params });
     return response.data.body as StockLedgerLine[];
+  },
+
+  async getStockLedgerPdf(params: { fromDate: string; toDate: string; fkItem: string }): Promise<Blob> {
+    const response = await api.get('/api/reports/stock-ledger/pdf', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data as Blob;
   },
 
   async getBalanceSheet(params: { toDate: string }) {
@@ -156,9 +188,25 @@ export const reportService = {
     return response.data.body as BalanceSheetLine[];
   },
 
+  async getBalanceSheetPdf(params: { toDate: string }): Promise<Blob> {
+    const response = await api.get('/api/reports/balance-sheet/pdf', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data as Blob;
+  },
+
   async getIncomeSummary(params: { fromDate: string; toDate: string }) {
     const response = await api.get('/api/reports/income-summary', { params });
     return response.data.body as IncomeSummaryLine[];
+  },
+
+  async getIncomeSummaryPdf(params: { fromDate: string; toDate: string }): Promise<Blob> {
+    const response = await api.get('/api/reports/income-summary/pdf', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data as Blob;
   },
 
   async getCustomerBill(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }) {
@@ -166,9 +214,36 @@ export const reportService = {
     return response.data.body as CustomerBillResponse;
   },
 
+  async getCustomerBillPdf(params: {
+    fromDate: string;
+    toDate: string;
+    account: string;
+    dateBasis?: 'VoucherDate' | 'ClearingDate';
+    layout?: 'A4' | 'Thermal';
+    qrEnabled?: boolean;
+    qrAccountTitle?: string;
+    qrAccountNumber?: string;
+    qrBankName?: string;
+    thankyouLine?: string;
+  }): Promise<Blob> {
+    const response = await api.get('/api/reports/customer-bill/pdf', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data as Blob;
+  },
+
   async getPurchaseSupplyComparison(params: { fromDate: string; toDate: string; itemId?: string }) {
     const response = await api.get('/api/reports/purchase-supply-comparison', { params });
     return response.data.body as PurchaseSupplyComparisonResponse;
+  },
+
+  async getPurchaseSupplyComparisonPdf(params: { fromDate: string; toDate: string; itemId?: string }): Promise<Blob> {
+    const response = await api.get('/api/reports/purchase-supply-comparison/pdf', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data as Blob;
   },
 
   async getCustomerBalanceRecovery(params: {
@@ -180,6 +255,20 @@ export const reportService = {
   }) {
     const response = await api.get('/api/reports/customer-balance-recovery', { params });
     return response.data.body as CustomerBalanceRecoveryResponse;
+  },
+
+  async getCustomerBalanceRecoveryPdf(params: {
+    fromDate: string;
+    toDate: string;
+    customerAccountId?: string;
+    dateBasis?: 'ClearingDate' | 'VoucherDate';
+    balanceFilter?: 'All' | 'OutstandingOnly' | 'ClearedOnly' | 'UnpaidOnly';
+  }) {
+    const response = await api.get('/api/reports/customer-balance-recovery/pdf', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data as Blob;
   },
 };
 
