@@ -61,6 +61,7 @@ const MODULE_CATEGORIES: Record<string, string> = {
   EnvelopeReport: 'Analytics & Reports',
   BarcodeReport: 'Analytics & Reports',
   ShipmentLabelReport: 'Analytics & Reports',
+  MiscReports: 'Analytics & Reports',
 };
 
 const MODULE_DISPLAY_NAMES: Record<string, string> = {
@@ -78,6 +79,7 @@ const MODULE_DISPLAY_NAMES: Record<string, string> = {
   EnvelopeReport: 'Envelope Report',
   BarcodeReport: 'Barcode Report',
   ShipmentLabelReport: 'Shipment Label Report',
+  MiscReports: 'Misc Reports',
   POSSales: 'POS Touch Sales',
   ItemCategories: 'Item Categories',
   ChartOfAccounts: 'Chart Of Accounts',

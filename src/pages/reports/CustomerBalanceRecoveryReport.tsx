@@ -41,6 +41,29 @@ export const CustomerBalanceRecoveryReport: React.FC = () => {
   const [reportData, setReportData] = useState<CustomerBalanceRecoveryResponse | null>(null);
   const [searchText, setSearchText] = useState('');
   const [thermalPrinting, setThermalPrinting] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  // Synchronize print state so all rows render and pagination controls are disabled during printing
+  useEffect(() => {
+    const handleBeforePrint = () => setIsPrinting(true);
+    const handleAfterPrint = () => setIsPrinting(false);
+
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
+
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, []);
+
+  const handlePrintA4 = () => {
+    setIsPrinting(true);
+    setTimeout(() => {
+      window.print();
+      setIsPrinting(false);
+    }, 150);
+  };
 
   // Drawer for inspecting single customer ledger / statement
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -377,6 +400,7 @@ export const CustomerBalanceRecoveryReport: React.FC = () => {
     {
       title: 'Action',
       key: 'action',
+      className: 'no-print',
       align: 'center' as const,
       width: 90,
       render: (_: any, record: CustomerBalanceRecoveryLine) => (
@@ -396,7 +420,14 @@ export const CustomerBalanceRecoveryReport: React.FC = () => {
     <Card className="shadow-sm border-gray-100 rounded-xl">
       <style>{`
         @media print {
-          .no-print {
+          .no-print,
+          .ant-pagination,
+          .ant-table-pagination,
+          .ant-table-pagination-right {
+            display: none !important;
+          }
+          th.no-print,
+          td.no-print {
             display: none !important;
           }
           body {
@@ -441,7 +472,7 @@ export const CustomerBalanceRecoveryReport: React.FC = () => {
           <Button
             icon={<PrinterOutlined />}
             disabled={!reportData || filteredLines.length === 0}
-            onClick={() => window.print()}
+            onClick={handlePrintA4}
           >
             Print A4 Report
           </Button>
@@ -709,7 +740,7 @@ export const CustomerBalanceRecoveryReport: React.FC = () => {
           <Table
             dataSource={filteredLines}
             columns={columns}
-            pagination={{ pageSize: 50, showSizeChanger: true, pageSizeOptions: ['25', '50', '100', '500'] }}
+            pagination={isPrinting ? false : { pageSize: 50, showSizeChanger: true, pageSizeOptions: ['25', '50', '100', '500'] }}
             loading={loading}
             rowKey="customerAccountId"
             bordered
@@ -755,7 +786,7 @@ export const CustomerBalanceRecoveryReport: React.FC = () => {
                     <Table.Summary.Cell index={7} align="center">
                       -
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={8} align="center">
+                    <Table.Summary.Cell index={8} align="center" className="no-print">
                       -
                     </Table.Summary.Cell>
                   </Table.Summary.Row>

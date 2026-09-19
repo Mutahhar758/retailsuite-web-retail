@@ -179,13 +179,16 @@ html[data-theme='dark'] .bg-rose-50 { background-color: rgba(225, 29, 72, 0.1); 
     background: white !important;
   }
 
-  /* Hide navigation, sidebar, and headers */
+  /* Hide navigation, sidebar, headers, and pagination */
   .ant-layout-sider, 
   .ant-layout-header, 
   .ant-breadcrumb,
   .no-print,
   .ant-btn:not(.print-visible),
-  .ant-form {
+  .ant-form,
+  .ant-pagination,
+  .ant-table-pagination,
+  .ant-table-pagination-right {
     display: none !important;
   }
 
