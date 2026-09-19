@@ -133,6 +133,14 @@ export const reportService = {
     return response.data.body as AccountStatementWithDueLine[];
   },
 
+  async getAccountStatementWithDuePdf(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }): Promise<Blob> {
+    const response = await api.get('/api/reports/account-statement-with-due/pdf', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data as Blob;
+  },
+
   async getStockBalance(params: { fromDate: string; toDate: string; catagory?: string }) {
     const response = await api.get('/api/reports/stock-balance', { params });
     return response.data.body as StockBalanceLine[];
