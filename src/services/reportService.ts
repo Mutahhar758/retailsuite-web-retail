@@ -120,6 +120,14 @@ export const reportService = {
     return response.data.body as AccountStatementLine[];
   },
 
+  async getAccountStatementPdf(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }): Promise<Blob> {
+    const response = await api.get('/api/reports/account-statement/pdf', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data as Blob;
+  },
+
   async getAccountStatementWithDue(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }) {
     const response = await api.get('/api/reports/account-statement-with-due', { params });
     return response.data.body as AccountStatementWithDueLine[];
