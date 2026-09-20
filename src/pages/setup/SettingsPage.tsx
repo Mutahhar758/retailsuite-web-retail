@@ -26,7 +26,8 @@ import {
   InfoCircleOutlined,
   SmileOutlined,
   QrcodeOutlined,
-  BankOutlined
+  BankOutlined,
+  AppstoreOutlined
 } from '@ant-design/icons';
 import {
   useSettingsStore,
@@ -36,7 +37,8 @@ import {
   BILL_QR_ACCOUNT_TITLE,
   BILL_QR_ACCOUNT_NUMBER,
   BILL_QR_BANK_NAME,
-  BILL_QR_INCLUDE_AMOUNT
+  BILL_QR_INCLUDE_AMOUNT,
+  INVENTORY_ENABLE_SECONDARY_QTY_KEY
 } from '../../stores/useSettingsStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { PrinterSettings } from './PrinterSettings';
@@ -69,6 +71,11 @@ export const SettingsPage: React.FC = () => {
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const qrDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Local state for Inventory settings
+  const [secondaryQtyEnabled, setSecondaryQtyEnabled] = useState(false);
+  const [savingInventory, setSavingInventory] = useState(false);
+  const [inventoryLastSaved, setInventoryLastSaved] = useState<string | null>(null);
+
   // Initialize and load settings from API
   useEffect(() => {
     fetchSettings();
@@ -88,6 +95,7 @@ export const SettingsPage: React.FC = () => {
     setQrAccountNumber(getSetting(BILL_QR_ACCOUNT_NUMBER, ''));
     setQrBankName(getSetting(BILL_QR_BANK_NAME, ''));
     setQrIncludeAmount(getSetting(BILL_QR_INCLUDE_AMOUNT, 'false') === 'true');
+    setSecondaryQtyEnabled(getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, 'false') === 'true');
   }, [initialized, getSetting]);
 
   const handleSaveThankYou = async () => {
@@ -110,6 +118,24 @@ export const SettingsPage: React.FC = () => {
 
   const handleResetDefault = () => {
     setThankYouInput(BILL_THANK_YOU_DEFAULT);
+  };
+
+  const handleSaveInventory = async () => {
+    setSavingInventory(true);
+    try {
+      await updateSetting(
+        INVENTORY_ENABLE_SECONDARY_QTY_KEY,
+        secondaryQtyEnabled ? 'true' : 'false',
+        'Enable Secondary Quantity (Single & Pack Qty / Rate) in transactions',
+        'Inventory'
+      );
+      setInventoryLastSaved(new Date().toLocaleTimeString());
+      message.success('Inventory settings saved successfully!');
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to save inventory settings.');
+    } finally {
+      setSavingInventory(false);
+    }
   };
 
   // Live QR canvas preview — debounced 300 ms
@@ -627,6 +653,77 @@ export const SettingsPage: React.FC = () => {
                           style={{ fontSize: 11, borderRadius: 8, marginTop: 12 }}
                         />
                       )}
+                    </Card>
+                  </Col>
+                </Row>
+              </Spin>
+            )
+          },
+          {
+            key: 'inventory-settings',
+            label: (
+              <span>
+                <AppstoreOutlined style={{ marginRight: 8 }} />
+                Inventory Settings
+              </span>
+            ),
+            children: (
+              <Spin spinning={loading && !initialized}>
+                <Row gutter={[24, 24]}>
+                  <Col xs={24} lg={16}>
+                    <Card
+                      className="shadow-sm border-gray-100 rounded-xl"
+                      title={
+                        <Space>
+                          <AppstoreOutlined style={{ color: '#1677ff', fontSize: 18 }} />
+                          <span style={{ fontWeight: 600 }}>Inventory & Quantity Features</span>
+                        </Space>
+                      }
+                      extra={
+                        inventoryLastSaved && (
+                          <Tag icon={<CheckCircleOutlined />} color="success">
+                            Saved at {inventoryLastSaved}
+                          </Tag>
+                        )
+                      }
+                    >
+                      <Paragraph type="secondary" style={{ marginBottom: 20 }}>
+                        Configure quantity columns for transaction entry across Sales, Purchases, Supplies, and Stock Adjustments.
+                      </Paragraph>
+
+                      <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <Row align="middle" justify="space-between">
+                          <Col span={18}>
+                            <Text strong style={{ fontSize: 15, display: 'block' }}>
+                              Enable Secondary Quantity (Single & Pack Qty / Rate)
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                              When enabled, transactions display both Single Qty/Rate and Pack Qty/Rate columns. When disabled, only standard Quantity and Rate are shown. Unit selection is removed in both modes.
+                            </Text>
+                          </Col>
+                          <Col span={6} style={{ textAlign: 'right' }}>
+                            <Switch
+                              checked={secondaryQtyEnabled}
+                              onChange={setSecondaryQtyEnabled}
+                              checkedChildren="Enabled"
+                              unCheckedChildren="Disabled"
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+
+                      <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
+                        <Button
+                          type="primary"
+                          icon={<SaveOutlined />}
+                          size="large"
+                          loading={savingInventory}
+                          onClick={handleSaveInventory}
+                          style={{ fontWeight: 600, borderRadius: 8, paddingLeft: 24, paddingRight: 24 }}
+                        >
+                          Save Inventory Settings
+                        </Button>
+                      </div>
                     </Card>
                   </Col>
                 </Row>

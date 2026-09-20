@@ -10,9 +10,10 @@ import {
 import dayjs from 'dayjs';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppStore } from '../../stores/useAppStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 import { stockAdjustmentService } from '../../services/stockAdjustmentService';
-import { inventoryService, type Item, type Unit } from '../../services/inventoryService';
+import { inventoryService, type Item } from '../../services/inventoryService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 
 const { Title, Text } = Typography;
@@ -20,7 +21,9 @@ const { Title, Text } = Typography;
 export const StockAdjustmentForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
-  const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+  const { getSetting, fetchSettings } = useSettingsStore();
+  const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
+  const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
   const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
@@ -31,19 +34,17 @@ export const StockAdjustmentForm: React.FC = () => {
   
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const [units, setUnits] = useState<Unit[]>([]);
   const [adjustmentLines, setAdjustmentLines] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchLookups = async () => {
       try {
-        const [itemsRes, unitsRes, narrsRes] = await Promise.all([
+        fetchSettings('Inventory');
+        const [itemsRes, narrsRes] = await Promise.all([
           inventoryService.getItemsLookup(),
-          inventoryService.getUnitsLookup(),
           narrationService.getActiveNarrationsLookup()
         ]);
         setItems(itemsRes);
-        setUnits(unitsRes);
         setNarrations(narrsRes);
       } catch (error) {
         message.error('Failed to load lookups');
@@ -297,25 +298,6 @@ export const StockAdjustmentForm: React.FC = () => {
         </Select>
       )
     },
-    ...(!hasSecondaryQty ? [
-      {
-        title: 'Unit',
-        dataIndex: 'unit',
-        key: 'unit',
-        width: 120,
-        render: (text: string, record: any) => {
-          const item = items.find(i => i.id === record.itemId);
-          const filteredUnits = item ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit) : units;
-          return (
-            <Select style={{ width: '100%' }} value={text} disabled={!record.itemId} onChange={(val) => updateLine(record.key, 'unit', val)}>
-              {filteredUnits.map(u => (
-                <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
-              ))}
-            </Select>
-          );
-        }
-      }
-    ] : []),
     {
       title: hasVariablePackFeature ? 'Qty In (Kg)' : (hasSecondaryQty ? 'Single Qty In' : 'Qty In'),
       dataIndex: 'qtyIn',
@@ -401,25 +383,6 @@ export const StockAdjustmentForm: React.FC = () => {
         />
       )
     },
-    ...((hasSecondaryQty || hasVariablePackFeature) ? [
-      {
-        title: hasVariablePackFeature ? 'Bag Rate' : 'Pack Rate',
-        dataIndex: 'secRate',
-        key: 'secRate',
-        width: 120,
-        render: (val: number, record: any) => (
-          <InputNumber
-            style={{ width: '100%' }}
-            value={val}
-            min={0}
-            precision={4}
-            step={0.01}
-            formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-            onChange={(v) => updateLine(record.key, 'secRate', v)}
-          />
-        )
-      }
-    ] : []),
     ...(hasSecondaryQty && !hasVariablePackFeature ? [
       {
         title: 'Pack Qty In',
@@ -437,6 +400,25 @@ export const StockAdjustmentForm: React.FC = () => {
         width: 100,
         render: (val: number, record: any) => (
           <InputNumber style={{ width: '100%' }} value={val} step={0.001} precision={3} onChange={(v) => updateLine(record.key, 'secQtyOut', v)} />
+        )
+      }
+    ] : []),
+    ...((hasSecondaryQty || hasVariablePackFeature) ? [
+      {
+        title: hasVariablePackFeature ? 'Bag Rate' : 'Pack Rate',
+        dataIndex: 'secRate',
+        key: 'secRate',
+        width: 120,
+        render: (val: number, record: any) => (
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            precision={4}
+            step={0.01}
+            formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            onChange={(v) => updateLine(record.key, 'secRate', v)}
+          />
         )
       }
     ] : []),

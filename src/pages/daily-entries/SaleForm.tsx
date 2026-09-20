@@ -17,6 +17,7 @@ import type { NarrationDto } from '../../services/narrationService';
 import type { Item } from '../../services/inventoryService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useAppStore } from '../../stores/useAppStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 
 const { Title, Text } = Typography;
@@ -36,7 +37,9 @@ interface SaleTab {
 export const SaleForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
-  const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+  const { getSetting, fetchSettings } = useSettingsStore();
+  const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
+  const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
   const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
@@ -50,7 +53,6 @@ export const SaleForm: React.FC = () => {
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const [units, setUnits] = useState<{ code: string; title: string }[]>([]);
   const [saleLines, setSaleLines] = useState<any[]>([]);
   const [cacheMissError, setCacheMissError] = useState<string | null>(null);
   const prevTotalAmountRef = useRef(0);
@@ -325,16 +327,15 @@ export const SaleForm: React.FC = () => {
 
   const loadReferenceData = async () => {
     try {
-      const [customers, narrations, items, units] = await Promise.all([
+      const [customers, narrations, items] = await Promise.all([
         offlineCacheService.getCustomers(),
         offlineCacheService.getNarrations(),
         offlineCacheService.getItems(),
-        offlineCacheService.getUnits(),
       ]);
+      fetchSettings('Inventory');
       setCustomers(customers);
       setNarrations(narrations);
       setItems(items);
-      setUnits(units);
       setCacheMissError(null);
       focusCustomerSelect();
     } catch (err) {
@@ -702,33 +703,6 @@ export const SaleForm: React.FC = () => {
         </Select>
       )
     },
-    ...(!hasSecondaryQty ? [
-      {
-        title: 'Unit',
-        dataIndex: 'unit',
-        key: 'unit',
-        width: 100,
-        render: (text: string, record: any) => {
-          const item = items.find(i => String(i.id) === String(record.itemId));
-          const filteredUnits = item
-            ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit)
-            : units;
-
-          return (
-            <Select
-              style={{ width: '100%' }}
-              value={text}
-              disabled={!record.itemId}
-              onChange={(val) => updateLine(record.key, 'unit', val)}
-            >
-              {filteredUnits.map(u => (
-                <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
-              ))}
-            </Select>
-          );
-        }
-      }
-    ] : []),
     {
       title: hasVariablePackFeature ? 'Qty (Kg)' : (hasSecondaryQty ? 'Single Qty' : 'Qty'),
       dataIndex: 'qty',
@@ -810,6 +784,22 @@ export const SaleForm: React.FC = () => {
         />
       )
     },
+    ...(hasSecondaryQty && !hasVariablePackFeature ? [
+      {
+        title: 'Pack Qty',
+        dataIndex: 'secQty',
+        key: 'secQty',
+        width: 90,
+        render: (val: number, record: any) => (
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            onChange={(v) => updateLine(record.key, 'secQty', v)}
+          />
+        )
+      }
+    ] : []),
     ...((hasSecondaryQty || hasVariablePackFeature) ? [
       {
         title: hasVariablePackFeature ? 'Bag Rate' : 'Pack Rate',
@@ -827,22 +817,6 @@ export const SaleForm: React.FC = () => {
             parser={value => value?.replace(/[^0-9.]/g, '') as any}
             onChange={(v) => updateLine(record.key, 'secRate', v)}
             tabIndex={hasVariablePackFeature ? 0 : -1}
-          />
-        )
-      }
-    ] : []),
-    ...(hasSecondaryQty && !hasVariablePackFeature ? [
-      {
-        title: 'Pack Qty',
-        dataIndex: 'secQty',
-        key: 'secQty',
-        width: 90,
-        render: (val: number, record: any) => (
-          <InputNumber
-            style={{ width: '100%' }}
-            value={val}
-            min={0}
-            onChange={(v) => updateLine(record.key, 'secQty', v)}
           />
         )
       }

@@ -10,11 +10,12 @@ import {
 import dayjs from 'dayjs';
 import { useNavigate, useParams } from 'react-router-dom';
 import { purchaseReturnService } from '../../services/purchaseReturnService';
-import { inventoryService, type Item, type Unit } from '../../services/inventoryService';
+import { inventoryService, type Item } from '../../services/inventoryService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 
 import { useAppStore } from '../../stores/useAppStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 
 const { Title, Text } = Typography;
@@ -22,7 +23,9 @@ const { Title, Text } = Typography;
 export const PurchaseReturnForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
-  const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+  const { getSetting, fetchSettings } = useSettingsStore();
+  const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
+  const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
   const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
@@ -30,7 +33,6 @@ export const PurchaseReturnForm: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
-  const [units, setUnits] = useState<Unit[]>([]);
   const [vendors, setVendors] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [purchaseLines, setPurchaseLines] = useState<any[]>([]);
@@ -40,14 +42,13 @@ export const PurchaseReturnForm: React.FC = () => {
   useEffect(() => {
     const fetchLookups = async () => {
       try {
-        const [itemsRes, unitsRes, vendorsRes, narrsRes] = await Promise.all([
+        fetchSettings('Inventory');
+        const [itemsRes, vendorsRes, narrsRes] = await Promise.all([
           inventoryService.getItemsLookup(),
-          inventoryService.getUnitsLookup(),
           chartOfAccountService.getDetailAccounts(),
           narrationService.getActiveNarrationsLookup()
         ]);
         setItems(itemsRes);
-        setUnits(unitsRes);
         setVendors(vendorsRes);
         setNarrations(narrsRes);
       } catch (error) {
@@ -329,37 +330,10 @@ export const PurchaseReturnForm: React.FC = () => {
           value={text}
           style={{ width: '100%' }}
           onChange={(val) => updateRow(record.key, 'itemId', val)}
-          optionFilterProp="children"
-        >
-          {items.map(item => (
-            <Select.Option key={item.id} value={item.id}>{item.title}</Select.Option>
-          ))}
-        </Select>
+          options={items.map(item => ({ value: item.id, label: item.title }))}
+        />
       )
     },
-    ...(!hasSecondaryQty ? [
-      {
-        title: 'Unit',
-        dataIndex: 'unit',
-        width: 120,
-        render: (text: string, record: any) => {
-          const item = items.find(i => i.id === record.itemId);
-          const filteredUnits = units.filter(u => u.code === item?.primaryUnit || u.code === item?.secondaryUnit);
-          return (
-            <Select
-              value={text}
-              style={{ width: '100%' }}
-              onChange={(val) => updateRow(record.key, 'unit', val)}
-              disabled={!record.itemId}
-            >
-              {filteredUnits.map(u => (
-                <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
-              ))}
-            </Select>
-          );
-        }
-      }
-    ] : []),
     {
       title: hasVariablePackFeature ? 'Qty (Kg)' : (hasSecondaryQty ? 'Single Qty' : 'Qty'),
       dataIndex: 'qty',
@@ -410,6 +384,16 @@ export const PurchaseReturnForm: React.FC = () => {
         />
       )
     },
+    ...(hasSecondaryQty && !hasVariablePackFeature ? [
+      {
+        title: 'Pack Qty',
+        dataIndex: 'secQty',
+        width: 100,
+        render: (text: number, record: any) => (
+          <InputNumber value={text} style={{ width: '100%' }} onChange={(val) => updateRow(record.key, 'secQty', val)} min={0} />
+        )
+      }
+    ] : []),
     ...((hasSecondaryQty || hasVariablePackFeature) ? [
       {
         title: hasVariablePackFeature ? 'Bag Rate' : 'Pack Rate',
@@ -425,16 +409,6 @@ export const PurchaseReturnForm: React.FC = () => {
             step={0.01}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           />
-        )
-      }
-    ] : []),
-    ...(hasSecondaryQty && !hasVariablePackFeature ? [
-      {
-        title: 'Pack Qty',
-        dataIndex: 'secQty',
-        width: 100,
-        render: (text: number, record: any) => (
-          <InputNumber value={text} style={{ width: '100%' }} onChange={(val) => updateRow(record.key, 'secQty', val)} min={0} />
         )
       }
     ] : []),

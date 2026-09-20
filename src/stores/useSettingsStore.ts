@@ -22,6 +22,9 @@ export const BILL_QR_ACCOUNT_NUMBER = 'Bill.QrPayment.AccountNumber';
 export const BILL_QR_BANK_NAME      = 'Bill.QrPayment.BankName';
 export const BILL_QR_INCLUDE_AMOUNT = 'Bill.QrPayment.IncludeAmount';
 
+// Inventory setting keys
+export const INVENTORY_ENABLE_SECONDARY_QTY_KEY = 'Inventory.EnableSecondaryQty';
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({

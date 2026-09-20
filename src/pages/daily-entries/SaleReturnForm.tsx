@@ -11,6 +11,7 @@ import dayjs from 'dayjs';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppStore } from '../../stores/useAppStore';
 import { round } from '../../utils/numberUtils';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY } from '../../stores/useSettingsStore';
 import { saleReturnService } from '../../services/saleReturnService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
@@ -21,7 +22,9 @@ const { Title, Text } = Typography;
 export const SaleReturnForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
-  const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+  const { getSetting, fetchSettings } = useSettingsStore();
+  const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
+  const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
   const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
@@ -33,14 +36,13 @@ export const SaleReturnForm: React.FC = () => {
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const [units, setUnits] = useState<{ code: string; title: string }[]>([]);
   const [saleLines, setSaleLines] = useState<any[]>([]);
 
   useEffect(() => {
+    fetchSettings('Inventory');
     chartOfAccountService.getCustomerAccounts().then(setCustomers);
     narrationService.getActiveNarrationsLookup().then(setNarrations);
     inventoryService.getItemsLookup().then(setItems);
-    inventoryService.getUnitsLookup().then(setUnits);
 
     if (isEdit) {
       fetchDetail();
@@ -289,25 +291,6 @@ export const SaleReturnForm: React.FC = () => {
         </Select>
       )
     },
-    ...(!hasSecondaryQty ? [
-      {
-        title: 'Unit',
-        dataIndex: 'unit',
-        key: 'unit',
-        width: 120,
-        render: (text: string, record: any) => {
-          const item = items.find(i => i.id === record.itemId);
-          const filteredUnits = item ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit) : units;
-          return (
-            <Select style={{ width: '100%' }} value={text} disabled={!record.itemId} onChange={(val) => updateLine(record.key, 'unit', val)}>
-              {filteredUnits.map(u => (
-                <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
-              ))}
-            </Select>
-          );
-        }
-      }
-    ] : []),
     {
       title: hasVariablePackFeature ? 'Qty (Kg)' : (hasSecondaryQty ? 'Single Qty' : 'Qty'),
       dataIndex: 'qty',
@@ -363,6 +346,17 @@ export const SaleReturnForm: React.FC = () => {
         />
       )
     },
+    ...(hasSecondaryQty && !hasVariablePackFeature ? [
+      {
+        title: 'Pack Qty',
+        dataIndex: 'secQty',
+        key: 'secQty',
+        width: 100,
+        render: (val: number, record: any) => (
+          <InputNumber style={{ width: '100%' }} value={val} min={0} onChange={(v) => updateLine(record.key, 'secQty', v)} />
+        )
+      }
+    ] : []),
     ...((hasSecondaryQty || hasVariablePackFeature) ? [
       {
         title: hasVariablePackFeature ? 'Bag Rate' : 'Pack Rate',
@@ -379,17 +373,6 @@ export const SaleReturnForm: React.FC = () => {
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             onChange={(v) => updateLine(record.key, 'secRate', v)}
           />
-        )
-      }
-    ] : []),
-    ...(hasSecondaryQty && !hasVariablePackFeature ? [
-      {
-        title: 'Pack Qty',
-        dataIndex: 'secQty',
-        key: 'secQty',
-        width: 100,
-        render: (val: number, record: any) => (
-          <InputNumber style={{ width: '100%' }} value={val} min={0} onChange={(v) => updateLine(record.key, 'secQty', v)} />
         )
       }
     ] : []),

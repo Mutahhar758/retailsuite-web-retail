@@ -17,6 +17,7 @@ import { inventoryService, type Item } from '../../services/inventoryService';
 import { round } from '../../utils/numberUtils';
 import { rangePresets } from '../../utils/datePresets';
 import { useAppStore } from '../../stores/useAppStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY } from '../../stores/useSettingsStore';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -30,7 +31,9 @@ export const CustomerSupplyRegister: React.FC = () => {
   const location = useLocation();
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
-  const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+  const { getSetting, fetchSettings } = useSettingsStore();
+  const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
+  const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
   const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   const [form] = Form.useForm();
@@ -40,7 +43,6 @@ export const CustomerSupplyRegister: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const [units, setUnits] = useState<{ code: string; title: string }[]>([]);
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [lines, setLines] = useState<EditableLine[]>([]);
@@ -49,9 +51,12 @@ export const CustomerSupplyRegister: React.FC = () => {
 
   // Load lookups
   useEffect(() => {
-    chartOfAccountService.getCustomerAccounts().then(setCustomers).catch(console.error);
-    inventoryService.getItemsLookup().then(setItems).catch(console.error);
-    inventoryService.getUnitsLookup().then(setUnits).catch(console.error);
+    fetchSettings('Inventory');
+    const loadLookups = async () => {
+      chartOfAccountService.getCustomerAccounts().then(setCustomers).catch(console.error);
+      inventoryService.getItemsLookup().then(setItems).catch(console.error);
+    };
+    loadLookups();
 
     const state = location.state as { customerId?: string; fromDate?: string; toDate?: string } | null;
     const fromD = state?.fromDate ? dayjs(state.fromDate) : dayjs().startOf('month');
@@ -386,27 +391,6 @@ export const CustomerSupplyRegister: React.FC = () => {
             Code: {record.itemId}
           </Text>
         </Space>
-      ),
-    },
-    {
-      title: 'Unit',
-      dataIndex: 'unit',
-      key: 'unit',
-      width: 125,
-      render: (text: string, record: EditableLine) => (
-        <Select
-          size="middle"
-          style={{ width: '100%', fontSize: '14px' }}
-          value={text || undefined}
-          placeholder="Unit"
-          allowClear
-          optionFilterProp="children"
-          onChange={(val) => handleCellChange(`${record.voucherNo}-${record.seq}`, 'unit', val)}
-        >
-          {units.map(u => (
-            <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
-          ))}
-        </Select>
       ),
     },
     {
@@ -855,8 +839,7 @@ export const CustomerSupplyRegister: React.FC = () => {
                 const found = items.find(i => i.id === val);
                 if (found) {
                   addForm.setFieldsValue({
-                    rate: found.priRate || 0,
-                    unit: found.primaryUnit || null
+                    rate: found.priRate || 0
                   });
                 }
               }}
@@ -869,22 +852,9 @@ export const CustomerSupplyRegister: React.FC = () => {
             </Select>
           </Form.Item>
 
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="qty" label={<Text strong style={{ fontSize: '15px' }}>Quantity</Text>} rules={[{ required: true }]}>
-                <InputNumber size="large" min={0.01} precision={2} style={{ width: '100%', fontSize: '15px', fontWeight: 700 }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="unit" label={<Text strong style={{ fontSize: '15px' }}>Unit</Text>}>
-                <Select size="large" allowClear placeholder="Unit" optionFilterProp="children" style={{ width: '100%', fontSize: '15px' }}>
-                  {units.map(u => (
-                    <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
+          <Form.Item name="qty" label={<Text strong style={{ fontSize: '15px' }}>Quantity</Text>} rules={[{ required: true }]}>
+            <InputNumber size="large" min={0.01} precision={2} style={{ width: '100%', fontSize: '15px', fontWeight: 700 }} />
+          </Form.Item>
 
           <Row gutter={16}>
             <Col span={12}>

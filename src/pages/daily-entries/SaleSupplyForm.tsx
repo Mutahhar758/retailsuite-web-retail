@@ -10,6 +10,7 @@ import {
 import dayjs from 'dayjs';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAppStore } from '../../stores/useAppStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 import { saleSupplyService } from '../../services/saleSupplyService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
@@ -24,7 +25,9 @@ const { Title, Text } = Typography;
 export const SaleSupplyForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
-  const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+  const { getSetting, fetchSettings } = useSettingsStore();
+  const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
+  const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
   const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
@@ -37,7 +40,6 @@ export const SaleSupplyForm: React.FC = () => {
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const [units, setUnits] = useState<{ code: string; title: string }[]>([]);
   const [supplyLines, setSupplyLines] = useState<any[]>([]);
   const [supplyOrders, setSupplyOrders] = useState<SupplyOrder[]>([]);
 
@@ -148,12 +150,11 @@ export const SaleSupplyForm: React.FC = () => {
     setTimeout(() => datePickerRef.current?.focus(), 50);
   }, [form]);
 
-  // ── Data loading ───────────────────────────────────────────────────────────
   useEffect(() => {
+    fetchSettings('Inventory');
     chartOfAccountService.getCustomerAccounts().then(setCustomers);
     narrationService.getActiveNarrationsLookup().then(setNarrations);
     inventoryService.getItemsLookup().then(setItems);
-    inventoryService.getUnitsLookup().then(setUnits);
     supplyOrderService.getList().then(setSupplyOrders);
 
     if (isEdit) {
@@ -602,36 +603,6 @@ export const SaleSupplyForm: React.FC = () => {
         </Select>
       )
     },
-    ...(!hasSecondaryQty ? [
-      {
-        title: 'Unit',
-        dataIndex: 'unit',
-        key: 'unit',
-        width: 120,
-        render: (text: string, record: any, rowIdx: number) => {
-          const masterItemId = form.getFieldValue('itemId');
-          const item = items.find(i => i.id === masterItemId);
-          const filteredUnits = item
-            ? units.filter(u => u.code === item.primaryUnit || u.code === item.secondaryUnit)
-            : units;
-
-          return (
-            <Select
-              ref={getCellRef(rowIdx, 'unit')}
-              style={{ width: '100%' }}
-              value={text}
-              tabIndex={-1}
-              onChange={(val) => updateLine(record.key, 'unit', val)}
-              onKeyDown={(e) => handleCellKeyDown(rowIdx, 'unit', e)}
-            >
-              {filteredUnits.map(u => (
-                <Select.Option key={u.code} value={u.code}>{u.title}</Select.Option>
-              ))}
-            </Select>
-          );
-        }
-      }
-    ] : []),
     {
       title: hasVariablePackFeature ? 'Qty (Kg)' : (hasSecondaryQty ? 'Single Qty' : 'Qty'),
       dataIndex: 'qty',
@@ -733,6 +704,26 @@ export const SaleSupplyForm: React.FC = () => {
         />
       )
     },
+    ...(hasSecondaryQty && !hasVariablePackFeature ? [
+      {
+        title: 'Pack Qty',
+        dataIndex: 'secQty',
+        key: 'secQty',
+        width: 100,
+        render: (val: number, record: any, rowIdx: number) => (
+          <InputNumber
+            ref={getCellRef(rowIdx, 'secQty')}
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            keyboard={false}
+            controls={false}
+            onChange={(v) => updateLine(record.key, 'secQty', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secQty', e)}
+          />
+        )
+      }
+    ] : []),
     ...((hasSecondaryQty || hasVariablePackFeature) ? [
       {
         title: hasVariablePackFeature ? 'Bag Rate' : 'Pack Rate',
@@ -752,26 +743,6 @@ export const SaleSupplyForm: React.FC = () => {
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             onChange={(v) => updateLine(record.key, 'secRate', v)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secRate', e)}
-          />
-        )
-      }
-    ] : []),
-    ...(hasSecondaryQty && !hasVariablePackFeature ? [
-      {
-        title: 'Pack Qty',
-        dataIndex: 'secQty',
-        key: 'secQty',
-        width: 100,
-        render: (val: number, record: any, rowIdx: number) => (
-          <InputNumber
-            ref={getCellRef(rowIdx, 'secQty')}
-            style={{ width: '100%' }}
-            value={val}
-            min={0}
-            keyboard={false}
-            controls={false}
-            onChange={(v) => updateLine(record.key, 'secQty', v)}
-            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secQty', e)}
           />
         )
       }
