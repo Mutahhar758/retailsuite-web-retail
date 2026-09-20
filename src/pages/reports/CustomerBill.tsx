@@ -2,15 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Card, Typography, Form, DatePicker, Select, Button,
   Space, message, Spin, Empty, Tooltip, Segmented, Switch,
-  Checkbox, Input, Tag, Badge
+  Checkbox, Input
 } from 'antd';
 import {
   SearchOutlined, PrinterOutlined, DownloadOutlined,
   ReloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
   FileExcelOutlined, FileTextOutlined, ExportOutlined,
   ThunderboltOutlined, QrcodeOutlined, FilePdfOutlined,
-  UserOutlined, TeamOutlined, CheckSquareOutlined,
-  ClearOutlined, ShoppingCartOutlined
+  UserOutlined, TeamOutlined, ShoppingCartOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { reportService, type CustomerBillResponse } from '../../services/reportService';
@@ -24,8 +23,7 @@ import {
   BILL_QR_ENABLED_KEY,
   BILL_QR_ACCOUNT_TITLE,
   BILL_QR_ACCOUNT_NUMBER,
-  BILL_QR_BANK_NAME,
-  BILL_QR_INCLUDE_AMOUNT
+  BILL_QR_BANK_NAME
 } from '../../stores/useSettingsStore';
 import { useLocation } from 'react-router-dom';
 import { rangePresets } from '../../utils/datePresets';
