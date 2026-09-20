@@ -233,6 +233,25 @@ export const reportService = {
     return response.data as Blob;
   },
 
+  async getCustomerBillBatchPdf(data: {
+    fromDate: string;
+    toDate: string;
+    accounts: string[];
+    dateBasis?: 'VoucherDate' | 'ClearingDate';
+    layout?: 'A4' | 'Thermal';
+    qrEnabled?: boolean;
+    qrAccountTitle?: string;
+    qrAccountNumber?: string;
+    qrBankName?: string;
+    thankyouLine?: string;
+    onlyWithActivity?: boolean;
+  }): Promise<Blob> {
+    const response = await api.post('/api/reports/customer-bill/batch/pdf', data, {
+      responseType: 'blob'
+    });
+    return response.data as Blob;
+  },
+
   async getPurchaseSupplyComparison(params: { fromDate: string; toDate: string; itemId?: string }) {
     const response = await api.get('/api/reports/purchase-supply-comparison', { params });
     return response.data.body as PurchaseSupplyComparisonResponse;

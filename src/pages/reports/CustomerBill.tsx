@@ -1,29 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Card, Typography, Form, DatePicker, Select, Button,
-  Space, message, Spin, Empty, Tooltip, Segmented, Switch
+  Space, message, Spin, Empty, Tooltip, Segmented, Switch,
+  Checkbox, Input, Tag, Badge
 } from 'antd';
 import {
   SearchOutlined, PrinterOutlined, DownloadOutlined,
   ReloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
   FileExcelOutlined, FileTextOutlined, ExportOutlined,
-  ThunderboltOutlined, QrcodeOutlined, FilePdfOutlined
+  ThunderboltOutlined, QrcodeOutlined, FilePdfOutlined,
+  UserOutlined, TeamOutlined, CheckSquareOutlined,
+  ClearOutlined, ShoppingCartOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { reportService, type CustomerBillResponse } from '../../services/reportService';
+import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
 import api from '../../services/api';
-import {
-  printDirect,
-  padLine,
-  divider,
-  type ConnectionMethod,
-  ESC_ALIGN_LEFT,
-  ESC_ALIGN_CENTER,
-  ESC_BOLD_ON,
-  ESC_BOLD_OFF,
-  ESC_DOUBLE_ON,
-  ESC_DOUBLE_OFF
-} from '../../hooks/useThermalPrinter';
 import { useAppStore } from '../../stores/useAppStore';
 import {
   useSettingsStore,
@@ -36,121 +28,34 @@ import {
   BILL_QR_INCLUDE_AMOUNT
 } from '../../stores/useSettingsStore';
 import { useLocation } from 'react-router-dom';
-import { buildEmvCoPayload } from '../../utils/emvcoQr';
 import { rangePresets } from '../../utils/datePresets';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
-// Thermal printing ESC/POS generator function for Standard Customer Bill
-const generateStandardThermalLines = (
-  orgName: string,
-  customerTitle: string,
-  fromStr: string,
-  toStr: string,
-  data: CustomerBillResponse
-): string[] => {
-  const width = 48;
-  const lines: string[] = [];
-
-  const format6Columns = (c1: string, c2: string, c3: string, c4: string, c5: string, c6: string): string => {
-    const w1 = 5, w2 = 10, w3 = 9, w4 = 3, w5 = 7, w6 = 9;
-    let val1 = c1.trim().substring(0, w1).padEnd(w1, ' ');
-    let val2 = c2.trim().substring(0, w2).padEnd(w2, ' ');
-    let val3 = c3.trim().substring(0, w3).padEnd(w3, ' ');
-    let val4 = c4.trim().substring(0, w4).padStart(w4, ' ');
-    let val5 = c5.trim().substring(0, w5).padStart(w5, ' ');
-    let val6 = c6.trim().substring(0, w6).padStart(w6, ' ');
-    return `${val1} ${val2} ${val3} ${val4} ${val5} ${val6}`;
-  };
-
-  lines.push(ESC_ALIGN_CENTER + ESC_DOUBLE_ON + orgName.toUpperCase());
-  lines.push(ESC_DOUBLE_OFF + 'CUSTOMER STATEMENT / BILL');
-  lines.push(`Period: ${fromStr} to ${toStr}`);
-  lines.push(`Print Date: ${dayjs().format('DD-MMM-YYYY HH:mm')}`);
-  lines.push(ESC_ALIGN_LEFT + divider('-', width));
-
-  lines.push(`Customer: ${customerTitle}`);
-  lines.push(divider('-', width));
-
-  lines.push(format6Columns('Date', 'Voucher', 'Item', 'Qty', 'Rate', 'Amount'));
-  lines.push(divider('-', width));
-
-  let currentBillTotal = 0;
-  data.lines.forEach(line => {
-    currentBillTotal += line.amount;
-    const dateStr = dayjs(line.date).format('DD/MM');
-    const qtyStr = line.qty.toString();
-    const rateStr = Math.round(line.rate).toString();
-    const amountStr = line.amount.toFixed(2);
-    lines.push(format6Columns(dateStr, line.vNo, line.item, qtyStr, rateStr, amountStr));
-  });
-  lines.push(divider('-', width));
-
-  lines.push(padLine('Current Bill Total:', `Rs. ${currentBillTotal.toFixed(2)}`, width));
-  lines.push(padLine('Previous Balance:', `Rs. ${Math.abs(data.summary.previousBalance).toFixed(2)} ${data.summary.previousBalance >= 0 ? 'Dr' : 'Cr'}`, width));
-  lines.push(padLine('Payments Received:', `Rs. ${data.summary.payment.toFixed(2)}`, width));
-  lines.push(divider('=', width));
-  
-  lines.push(ESC_BOLD_ON + padLine('Net Balance Due:', `Rs. ${Math.abs(data.summary.balance).toFixed(2)} ${data.summary.balance >= 0 ? 'Dr' : 'Cr'}`, width));
-  lines.push(ESC_BOLD_OFF + divider('-', width));
-
-  lines.push('');
-  lines.push(padLine('Customer Signature', 'Authorized Signature', width));
-  lines.push('');
-  const thankYouMsg = useSettingsStore.getState().getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT);
-  if (thankYouMsg) {
-    lines.push(ESC_ALIGN_CENTER + thankYouMsg);
-  }
-
-  // QR Payment
-  const store = useSettingsStore.getState();
-  const qrEnabled = store.getSetting(BILL_QR_ENABLED_KEY, 'false') === 'true';
-  const qrAccountTitle = store.getSetting(BILL_QR_ACCOUNT_TITLE, '');
-  const qrAccountNum   = store.getSetting(BILL_QR_ACCOUNT_NUMBER, '');
-  const qrBankName     = store.getSetting(BILL_QR_BANK_NAME, '');
-  const qrIncludeAmount = store.getSetting(BILL_QR_INCLUDE_AMOUNT, 'false') === 'true';
-  if (qrEnabled && qrAccountNum.trim() && data.summary.balance > 0) {
-    const netBal = data.summary.balance;
-    const amt = (qrIncludeAmount && netBal > 0) ? netBal : 0;
-    const payload = buildEmvCoPayload(qrAccountTitle, qrAccountNum, amt, qrBankName);
-    lines.push(ESC_ALIGN_CENTER);
-    lines.push(divider('-', width));
-    lines.push('SCAN TO PAY (RAAST / IBFT)');
-    if (qrBankName) lines.push(qrBankName);
-    const enc = new TextEncoder();
-    const payloadBytes = enc.encode(payload);
-    const pL = payloadBytes.length & 0xff;
-    const pH = (payloadBytes.length >> 8) & 0xff;
-    const qrCmd = [
-      0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00,
-      0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31,
-      0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x04,
-      0x1d, 0x28, 0x6b, pL + 3, pH, 0x31, 0x50, 0x30, ...Array.from(payloadBytes),
-      0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30
-    ];
-    lines.push(String.fromCharCode(...qrCmd));
-    lines.push(ESC_ALIGN_LEFT);
-  }
-
-  lines.push(ESC_ALIGN_LEFT);
-  lines.push('');
-  lines.push('\n\n\n\x1d\x56\x00'); // Cut
-
-  return lines;
-};
-
 export const CustomerBill: React.FC = () => {
   const location = useLocation();
   const [form] = Form.useForm();
+  
+  // UI & Mode State
+  const [mode, setMode] = useState<'single' | 'bulk'>('single');
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+
+  // Single Mode Data
   const [customers, setCustomers] = useState<{ account: string; title: string }[]>([]);
   const [billData, setBillData] = useState<CustomerBillResponse | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<{ account: string; title: string } | null>(null);
-  const [thermalPrinting, setThermalPrinting] = useState(false);
+
+  // Bulk Mode Data
+  const [supplyOrders, setSupplyOrders] = useState<SupplyOrder[]>([]);
+  const [selectedSupplyOrderId, setSelectedSupplyOrderId] = useState<number | 'all' | null>(null);
+  const [customerSearch, setCustomerSearch] = useState<string>('');
+  const [selectedBulkAccounts, setSelectedBulkAccounts] = useState<string[]>([]);
+  const [onlyWithActivity, setOnlyWithActivity] = useState<boolean>(true);
+  const [batchCompiledCount, setBatchCompiledCount] = useState<number | null>(null);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { currentTenantIdentifier, licenses } = useAppStore();
@@ -171,7 +76,7 @@ export const CustomerBill: React.FC = () => {
     setQrEnabled(storeSetting || hasAcc);
   }, [getSetting]);
 
-  // Load customers
+  // Load Customers & Supply Orders
   useEffect(() => {
     api.get('/api/customers').then(res => {
       const cusList = res.data.body || [];
@@ -181,11 +86,14 @@ export const CustomerBill: React.FC = () => {
       if (state && state.customerId) {
         const fromD = state.fromDate ? dayjs(state.fromDate) : dayjs().startOf('month');
         const toD = state.toDate ? dayjs(state.toDate) : dayjs();
+
         form.setFieldsValue({
           account: state.customerId,
           dateRange: [fromD, toD],
-          dateBasis: 'ClearingDate'
+          dateBasis: 'ClearingDate',
+          layout: 'A4'
         });
+
         const matchedCus = cusList.find((c: any) => c.account === state.customerId);
         if (matchedCus) setSelectedCustomer(matchedCus);
 
@@ -194,6 +102,30 @@ export const CustomerBill: React.FC = () => {
           dateRange: [fromD, toD],
           dateBasis: 'ClearingDate'
         });
+      }
+    }).catch(console.error);
+
+    supplyOrderService.getList().then(async orders => {
+      if (!orders || orders.length === 0) {
+        setSupplyOrders([]);
+        return;
+      }
+      setSupplyOrders(orders);
+
+      // If the backend list endpoint didn't include details, fetch them in parallel
+      const hasDetails = orders.some(o => o.details && o.details.length > 0);
+      if (!hasDetails) {
+        const detailed = await Promise.all(
+          orders.map(async (so) => {
+            try {
+              const full = await supplyOrderService.getById(so.id);
+              return full || so;
+            } catch {
+              return so;
+            }
+          })
+        );
+        setSupplyOrders(detailed);
       }
     }).catch(console.error);
   }, [location.state]);
@@ -227,6 +159,7 @@ export const CustomerBill: React.FC = () => {
     };
   }, [layout, pdfBlobUrl]);
 
+  // Quick Presets Handler
   const handleQuickPreset = (preset: '1-10' | '1-15' | '1-20' | 'month' | 'last-month') => {
     let from = dayjs().startOf('month');
     let to = dayjs();
@@ -249,30 +182,59 @@ export const CustomerBill: React.FC = () => {
     }
 
     form.setFieldsValue({ dateRange: [from, to] });
-    if (form.getFieldValue('account')) {
+
+    if (mode === 'single' && form.getFieldValue('account')) {
       fetchBillDataAndPdf({
         dateRange: [from, to],
         account: form.getFieldValue('account'),
         dateBasis: form.getFieldValue('dateBasis')
       });
+    } else if (mode === 'bulk' && selectedBulkAccounts.length > 0) {
+      fetchBulkBatchPdf({
+        dateRange: [from, to],
+        dateBasis: form.getFieldValue('dateBasis')
+      });
     }
   };
 
+  // Layout switcher
   const handleLayoutChange = (newLayout: 'A4' | 'Thermal') => {
     setLayout(newLayout);
     form.setFieldsValue({ layout: newLayout });
-    if (form.getFieldValue('account')) {
-      fetchBillDataAndPdf({ layout: newLayout });
+    if (mode === 'single') {
+      if (form.getFieldValue('account')) {
+        fetchBillDataAndPdf({ layout: newLayout });
+      }
+    } else {
+      if (selectedBulkAccounts.length > 0) {
+        fetchBulkBatchPdf({ layout: newLayout });
+      }
     }
   };
 
   const handleQrToggle = (checked: boolean) => {
     setQrEnabled(checked);
-    if (form.getFieldValue('account')) {
+    if (mode === 'single' && form.getFieldValue('account')) {
       fetchBillDataAndPdf({ qrEnabled: checked });
+    } else if (mode === 'bulk' && selectedBulkAccounts.length > 0) {
+      fetchBulkBatchPdf({ qrEnabled: checked });
     }
   };
 
+  // Switch between Single Mode and Bulk Mode
+  const handleModeChange = (newMode: 'single' | 'bulk') => {
+    setMode(newMode);
+    if (pdfBlobUrl) {
+      URL.revokeObjectURL(pdfBlobUrl);
+      setPdfBlobUrl(null);
+    }
+    setBillData(null);
+    setBatchCompiledCount(null);
+  };
+
+  // ==========================================
+  // Single Customer Bill Generation
+  // ==========================================
   const fetchBillDataAndPdf = async (values?: any) => {
     const fValues = { ...form.getFieldsValue(), ...values };
     if (!fValues.account) {
@@ -336,13 +298,121 @@ export const CustomerBill: React.FC = () => {
     }
   };
 
+  // ==========================================
+  // Bulk Batch Customer Bills Generation
+  // ==========================================
+  const fetchBulkBatchPdf = async (values?: any) => {
+    const fValues = { ...form.getFieldsValue(), ...values };
+    if (selectedBulkAccounts.length === 0) {
+      message.warning('Please select at least one customer for bulk batch generation');
+      return;
+    }
+    if (!fValues.dateRange || fValues.dateRange.length < 2) {
+      message.warning('Please select a valid date range');
+      return;
+    }
+
+    const fromDate = fValues.dateRange[0].format('YYYY-MM-DD');
+    const toDate = fValues.dateRange[1].format('YYYY-MM-DD');
+    const dateBasis = fValues.dateBasis || 'ClearingDate';
+    const targetLayout = fValues.layout || layout || 'A4';
+    const isQrOn = fValues.qrEnabled !== undefined ? fValues.qrEnabled : qrEnabled;
+
+    setLoading(true);
+    setPdfLoading(true);
+
+    try {
+      const store = useSettingsStore.getState();
+      const qrAccountTitle = store.getSetting(BILL_QR_ACCOUNT_TITLE, '');
+      const qrAccountNumber = store.getSetting(BILL_QR_ACCOUNT_NUMBER, '');
+      const qrBankName = store.getSetting(BILL_QR_BANK_NAME, '');
+      const thankyouLine = store.getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT);
+
+      const blob = await reportService.getCustomerBillBatchPdf({
+        fromDate,
+        toDate,
+        accounts: selectedBulkAccounts,
+        dateBasis,
+        layout: targetLayout,
+        qrEnabled: isQrOn,
+        qrAccountTitle,
+        qrAccountNumber,
+        qrBankName,
+        thankyouLine,
+        onlyWithActivity
+      });
+
+      if (pdfBlobUrl) {
+        URL.revokeObjectURL(pdfBlobUrl);
+      }
+      const newBlobUrl = URL.createObjectURL(blob);
+      setPdfBlobUrl(newBlobUrl);
+      setBatchCompiledCount(selectedBulkAccounts.length);
+      message.success(`Batch bills compiled for ${selectedBulkAccounts.length} selected customers!`);
+    } catch (err: any) {
+      console.error(err);
+      message.error(err?.response?.data?.message || 'Failed to compile bulk customer bills');
+    } finally {
+      setLoading(false);
+      setPdfLoading(false);
+    }
+  };
+
+  // Bulk Supply Order Profile Filter Handler
+  const handleSupplyOrderFilter = async (val: number | 'all') => {
+    setSelectedSupplyOrderId(val);
+    if (val === 'all') {
+      setSelectedBulkAccounts(customers.map(c => c.account));
+    } else {
+      let order = supplyOrders.find(o => o.id === val);
+      if (!order?.details || order.details.length === 0) {
+        try {
+          const fetched = await supplyOrderService.getById(val);
+          if (fetched) {
+            order = fetched;
+            setSupplyOrders(prev => prev.map(o => o.id === val ? fetched : o));
+          }
+        } catch (err) {
+          console.error('Failed to fetch supply order profile details', err);
+        }
+      }
+
+      if (order && order.details && order.details.length > 0) {
+        const orderAccountIds = order.details
+          .map(d => d.customerId?.trim())
+          .filter((id): id is string => Boolean(id));
+        setSelectedBulkAccounts(orderAccountIds);
+      } else {
+        setSelectedBulkAccounts([]);
+      }
+    }
+  };
+
+  // Filtered customer list based on search
+  const filteredCustomers = customers.filter(c => {
+    if (!customerSearch.trim()) return true;
+    const q = customerSearch.toLowerCase();
+    return c.title.toLowerCase().includes(q) || c.account.toLowerCase().includes(q);
+  });
+
+  const handleSelectAllFiltered = () => {
+    const combined = Array.from(new Set([...selectedBulkAccounts, ...filteredCustomers.map(c => c.account)]));
+    setSelectedBulkAccounts(combined);
+  };
+
+  const handleClearAllSelected = () => {
+    setSelectedBulkAccounts([]);
+  };
+
+  // ==========================================
+  // Printing & Exports
+  // ==========================================
   const handlePrint = () => {
     if (!pdfBlobUrl) {
       message.warning('Please generate the bill first');
       return;
     }
 
-    // Clean up any previously injected style tags to prevent DOM pollution
     const old1 = document.getElementById('thermal-page-print-rules');
     if (old1) old1.remove();
     const old2 = document.getElementById('report-page-print-rules');
@@ -368,10 +438,15 @@ export const CustomerBill: React.FC = () => {
     const dates = form.getFieldValue('dateRange');
     const fromStr = dates?.[0]?.format('YYYYMMDD') || 'From';
     const toStr = dates?.[1]?.format('YYYYMMDD') || 'To';
-    const acc = form.getFieldValue('account') || 'Bill';
+
     const link = document.createElement('a');
     link.href = pdfBlobUrl;
-    link.download = `CustomerBill_${acc}_${fromStr}_${toStr}.pdf`;
+    if (mode === 'single') {
+      const acc = form.getFieldValue('account') || 'Bill';
+      link.download = `CustomerBill_${acc}_${fromStr}_${toStr}.pdf`;
+    } else {
+      link.download = `CustomerBillBatch_${selectedBulkAccounts.length}Cust_${fromStr}_${toStr}.pdf`;
+    }
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -385,7 +460,7 @@ export const CustomerBill: React.FC = () => {
     window.open(pdfBlobUrl, '_blank');
   };
 
-  // Export to Excel (.xls)
+  // Export to Excel (.xls) for Single Mode
   const handleExportExcel = () => {
     if (!billData || !billData.lines) {
       message.warning('No bill data available to export');
@@ -476,7 +551,7 @@ export const CustomerBill: React.FC = () => {
     message.success('Excel file exported successfully');
   };
 
-  // Export to CSV
+  // Export to CSV for Single Mode
   const handleExportCsv = () => {
     if (!billData || !billData.lines) {
       message.warning('No bill data available to export');
@@ -517,47 +592,15 @@ export const CustomerBill: React.FC = () => {
     message.success('CSV file exported successfully');
   };
 
-  // Thermal Print (80mm)
-  const handlePrintThermal = async () => {
-    if (!billData) {
-      message.warning('No bill data to print');
-      return;
-    }
-
-    setThermalPrinting(true);
-    try {
-      const dates = form.getFieldValue('dateRange');
-      const fromStr = dates ? dates[0].format('DD-MMM-YYYY') : '';
-      const toStr = dates ? dates[1].format('DD-MMM-YYYY') : '';
-      const custTitle = selectedCustomer?.title || 'Customer';
-      const lines = generateStandardThermalLines(
-        currentOrgName,
-        custTitle,
-        fromStr,
-        toStr,
-        billData
-      );
-
-      const savedMethod = (localStorage.getItem('pos_printer_method') || 'LOCAL_RELAY') as ConnectionMethod;
-      const savedPrinter = localStorage.getItem('pos_printer_name') || 'XP-80';
-
-      await printDirect(lines, savedMethod, { printerName: savedPrinter });
-      message.success('Bill receipt sent to printer');
-    } catch (err) {
-      console.error(err);
-      message.error('Thermal printing failed');
-    } finally {
-      setThermalPrinting(false);
-    }
-  };
+  const leftPanelWidth = isPanelCollapsed ? 48 : (mode === 'bulk' ? 360 : 320);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row', gap: '16px', height: 'calc(100vh - 180px)', width: '100%' }}>
       {/* Left Parameters Panel */}
       <Card
         style={{
-          width: isPanelCollapsed ? 48 : 320,
-          minWidth: isPanelCollapsed ? 48 : 320,
+          width: leftPanelWidth,
+          minWidth: leftPanelWidth,
           transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
           display: 'flex',
           flexDirection: 'column',
@@ -583,19 +626,20 @@ export const CustomerBill: React.FC = () => {
                 onClick={() => setIsPanelCollapsed(false)}
               />
             </Tooltip>
-            <Tooltip title="Regenerate Bill" placement="right">
+            <Tooltip title={mode === 'single' ? 'Regenerate Bill' : 'Regenerate Batch'} placement="right">
               <Button
                 type="primary"
                 shape="circle"
                 icon={<ReloadOutlined />}
                 loading={loading || pdfLoading}
-                onClick={() => fetchBillDataAndPdf()}
+                onClick={() => (mode === 'single' ? fetchBillDataAndPdf() : fetchBulkBatchPdf())}
               />
             </Tooltip>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            {/* Header & Mode Switcher */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <Title level={5} style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
                 Parameters
               </Title>
@@ -609,7 +653,19 @@ export const CustomerBill: React.FC = () => {
               </Tooltip>
             </div>
 
-            {/* Quick Presets */}
+            {/* Mode Switcher matching Desktop Form */}
+            <Segmented
+              block
+              value={mode}
+              onChange={(val) => handleModeChange(val as 'single' | 'bulk')}
+              options={[
+                { label: 'Single Customer', value: 'single', icon: <UserOutlined /> },
+                { label: 'Bulk Batch', value: 'bulk', icon: <TeamOutlined /> }
+              ]}
+              style={{ marginBottom: 14, backgroundColor: '#f1f5f9', fontWeight: 500 }}
+            />
+
+            {/* Quick Date Presets */}
             <div style={{ marginBottom: 14 }}>
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
                 Quick Presets:
@@ -626,42 +682,140 @@ export const CustomerBill: React.FC = () => {
             <Form
               form={form}
               layout="vertical"
-              onFinish={() => fetchBillDataAndPdf()}
+              onFinish={() => (mode === 'single' ? fetchBillDataAndPdf() : fetchBulkBatchPdf())}
               style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
             >
-              <Form.Item
-                label={<span style={{ fontSize: 12, fontWeight: 500 }}>Customer Account</span>}
-                name="account"
-                rules={[{ required: true, message: 'Please select a customer' }]}
-                style={{ marginBottom: 14 }}
-              >
-                <Select
-                  showSearch
-                  placeholder="Select Customer..."
-                  optionFilterProp="children"
-                  filterOption={(input, option) =>
-                    (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                  }
-                  options={customers.map(c => ({
-                    label: c.title,
-                    value: c.account
-                  }))}
-                />
-              </Form.Item>
+              {/* Single Mode: Customer Picker */}
+              {mode === 'single' && (
+                <Form.Item
+                  label={<span style={{ fontSize: 12, fontWeight: 500 }}>Customer Account</span>}
+                  name="account"
+                  rules={[{ required: true, message: 'Please select a customer' }]}
+                  style={{ marginBottom: 14 }}
+                >
+                  <Select
+                    showSearch
+                    placeholder="Select Customer..."
+                    optionFilterProp="children"
+                    filterOption={(input, option) =>
+                      (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                    }
+                    options={customers.map(c => ({
+                      label: c.title,
+                      value: c.account
+                    }))}
+                  />
+                </Form.Item>
+              )}
 
+              {/* Bulk Mode: Supply Order Profile Filter & Customer Multi-select Checklist */}
+              {mode === 'bulk' && (
+                <div style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 6,
+                  padding: '10px 12px',
+                  marginBottom: 14
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <ShoppingCartOutlined style={{ color: '#2563eb' }} />
+                    <span style={{ fontSize: 12, fontWeight: 600 }}>Filter by Supply Order Profile</span>
+                  </div>
+                  <Select
+                    style={{ width: '100%', marginBottom: 8 }}
+                    size="small"
+                    placeholder="--- Select Supply Profile ---"
+                    allowClear
+                    value={selectedSupplyOrderId}
+                    onChange={(val) => handleSupplyOrderFilter(val || 'all')}
+                    options={[
+                      { label: '--- All Customers ---', value: 'all' },
+                      ...supplyOrders.map(so => ({
+                        label: `SO-${so.id}: ${so.title} (${so.details?.length || 0} cust)`,
+                        value: so.id
+                      }))
+                    ]}
+                  />
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>
+                      Select Customers ({selectedBulkAccounts.length}/{customers.length}):
+                    </span>
+                    <Space size={4}>
+                      <Button size="small" type="link" style={{ padding: 0, fontSize: 11 }} onClick={handleSelectAllFiltered}>
+                        Select All
+                      </Button>
+                      <span style={{ color: '#cbd5e1' }}>|</span>
+                      <Button size="small" type="link" style={{ padding: 0, fontSize: 11 }} onClick={handleClearAllSelected}>
+                        Clear
+                      </Button>
+                    </Space>
+                  </div>
+
+                  <Input
+                    size="small"
+                    placeholder="Search customers..."
+                    prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                    value={customerSearch}
+                    onChange={e => setCustomerSearch(e.target.value)}
+                    style={{ marginBottom: 6 }}
+                  />
+
+                  {/* Scrollable Customer Checklist */}
+                  <div style={{
+                    maxHeight: 140,
+                    overflowY: 'auto',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 4,
+                    background: '#ffffff',
+                    padding: '4px 8px'
+                  }}>
+                    {filteredCustomers.length === 0 ? (
+                      <div style={{ fontSize: 11, color: '#94a3b8', padding: '6px 0', textAlign: 'center' }}>
+                        No customers found
+                      </div>
+                    ) : (
+                      filteredCustomers.map(c => {
+                        const isChecked = selectedBulkAccounts.includes(c.account);
+                        return (
+                          <div key={c.account} style={{ padding: '2px 0' }}>
+                            <Checkbox
+                              checked={isChecked}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setSelectedBulkAccounts(prev => [...prev, c.account]);
+                                } else {
+                                  setSelectedBulkAccounts(prev => prev.filter(a => a !== c.account));
+                                }
+                              }}
+                            >
+                              <span style={{ fontSize: 11.5, color: isChecked ? '#0f172a' : '#475569', fontWeight: isChecked ? 600 : 400 }}>
+                                {c.title}
+                              </span>
+                            </Checkbox>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Date Range Picker */}
               <Form.Item
                 label={<span style={{ fontSize: 12, fontWeight: 500 }}>Date Range</span>}
                 name="dateRange"
                 rules={[{ required: true, message: 'Please select dates' }]}
                 style={{ marginBottom: 14 }}
               >
-                <RangePicker 
-                  style={{ width: '100%' }} 
+                <RangePicker
+                  style={{ width: '100%' }}
                   format="DD-MMM-YYYY"
                   presets={rangePresets}
                 />
               </Form.Item>
 
+              {/* Date Basis */}
               <Form.Item
                 label={<span style={{ fontSize: 12, fontWeight: 500 }}>Date Basis</span>}
                 name="dateBasis"
@@ -675,6 +829,7 @@ export const CustomerBill: React.FC = () => {
                 />
               </Form.Item>
 
+              {/* Bill Format / Layout */}
               <Form.Item
                 label={<span style={{ fontSize: 12, fontWeight: 500 }}>Bill Format / Layout</span>}
                 name="layout"
@@ -691,6 +846,21 @@ export const CustomerBill: React.FC = () => {
                 />
               </Form.Item>
 
+              {/* Bulk Mode Option: Skip Inactive Accounts */}
+              {mode === 'bulk' && (
+                <div style={{ marginBottom: 14 }}>
+                  <Checkbox
+                    checked={onlyWithActivity}
+                    onChange={e => setOnlyWithActivity(e.target.checked)}
+                  >
+                    <span style={{ fontSize: 12, color: '#475569' }}>
+                      Skip zero balance & no activity accounts
+                    </span>
+                  </Checkbox>
+                </div>
+              )}
+
+              {/* Raast QR Code Embed Option */}
               <div style={{
                 background: '#f8fafc',
                 border: '1px solid #e2e8f0',
@@ -724,12 +894,12 @@ export const CustomerBill: React.FC = () => {
                 <Button
                   type="primary"
                   htmlType="submit"
-                  icon={<SearchOutlined />}
+                  icon={mode === 'single' ? <SearchOutlined /> : <TeamOutlined />}
                   loading={loading || pdfLoading}
                   block
                   style={{ height: 38, fontWeight: 500 }}
                 >
-                  Generate Bill
+                  {mode === 'single' ? 'Generate Bill' : `Generate Batch Bills (${selectedBulkAccounts.length})`}
                 </Button>
               </div>
             </Form>
@@ -769,10 +939,15 @@ export const CustomerBill: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div>
               <Title level={5} style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
-                Customer Bill & Statement
+                {mode === 'single' ? 'Customer Bill & Statement' : 'Bulk Batch Customer Bills'}
               </Title>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                {selectedCustomer ? selectedCustomer.title : 'Select a customer to generate bill'}
+                {mode === 'single'
+                  ? (selectedCustomer ? selectedCustomer.title : 'Select a customer to generate bill')
+                  : (batchCompiledCount !== null
+                      ? `Batch Compiled: ${batchCompiledCount} Customer(s) selected • ${onlyWithActivity ? 'Active accounts with transactions or balances included' : 'All accounts included'}`
+                      : 'Select customers on the left and click Generate Batch Bills')
+                }
               </Text>
             </div>
 
@@ -817,36 +992,29 @@ export const CustomerBill: React.FC = () => {
               />
             </Tooltip>
 
-            <Tooltip title="Export to Excel (.xls)">
-              <Button
-                icon={<FileExcelOutlined style={{ color: '#107c41' }} />}
-                disabled={!billData || billData.lines.length === 0}
-                onClick={handleExportExcel}
-              >
-                Excel
-              </Button>
-            </Tooltip>
+            {mode === 'single' && (
+              <>
+                <Tooltip title="Export to Excel (.xls)">
+                  <Button
+                    icon={<FileExcelOutlined style={{ color: '#107c41' }} />}
+                    disabled={!billData || billData.lines.length === 0}
+                    onClick={handleExportExcel}
+                  >
+                    Excel
+                  </Button>
+                </Tooltip>
 
-            <Tooltip title="Export to CSV">
-              <Button
-                icon={<FileTextOutlined />}
-                disabled={!billData || billData.lines.length === 0}
-                onClick={handleExportCsv}
-              >
-                CSV
-              </Button>
-            </Tooltip>
-
-            <Tooltip title="Print to 80mm Thermal Receipt Printer">
-              <Button
-                icon={<ThunderboltOutlined style={{ color: '#fa8c16' }} />}
-                loading={thermalPrinting}
-                disabled={!billData || billData.lines.length === 0}
-                onClick={handlePrintThermal}
-              >
-                Thermal
-              </Button>
-            </Tooltip>
+                <Tooltip title="Export to CSV">
+                  <Button
+                    icon={<FileTextOutlined />}
+                    disabled={!billData || billData.lines.length === 0}
+                    onClick={handleExportCsv}
+                  >
+                    CSV
+                  </Button>
+                </Tooltip>
+              </>
+            )}
           </Space>
         </div>
 
@@ -872,11 +1040,13 @@ export const CustomerBill: React.FC = () => {
               color: '#ffffff'
             }}>
               <Spin size="large" />
-              <Text style={{ color: '#ffffff', fontSize: 14 }}>Generating Vector PDF Bill...</Text>
+              <Text style={{ color: '#ffffff', fontSize: 14 }}>
+                {mode === 'single' ? 'Generating Vector PDF Bill...' : 'Compiling Multi-Customer Batch PDF Bills...'}
+              </Text>
             </div>
           ) : pdfBlobUrl ? (
             <iframe
-              key={layout}
+              key={`${mode}-${layout}`}
               ref={iframeRef}
               src={layout === 'Thermal' ? `${pdfBlobUrl}#view=Fit` : `${pdfBlobUrl}#view=FitH`}
               title="Customer Bill Preview"
@@ -891,8 +1061,14 @@ export const CustomerBill: React.FC = () => {
               }}
             />
           ) : (
-            <div style={{ backgroundColor: '#ffffff', padding: 40, borderRadius: 8 }}>
-              <Empty description="Please select a customer on the left and click 'Generate Bill'." />
+            <div style={{ backgroundColor: '#ffffff', padding: 40, borderRadius: 8, textAlign: 'center' }}>
+              <Empty
+                description={
+                  mode === 'single'
+                    ? "Please select a customer on the left and click 'Generate Bill'."
+                    : "Please select customer accounts on the left and click 'Generate Batch Bills'."
+                }
+              />
             </div>
           )}
         </div>
