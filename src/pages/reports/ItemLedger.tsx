@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Card, Typography, Form, DatePicker, Select, Button,
-  Space, message, Spin, Empty, Tooltip
+  Space, message, Spin, Empty, Tooltip, Checkbox
 } from 'antd';
 import {
   SearchOutlined, PrinterOutlined, DownloadOutlined,
@@ -24,6 +24,7 @@ export const ItemLedger: React.FC = () => {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedItemTitle, setSelectedItemTitle] = useState('');
+  const [showCostPrice, setShowCostPrice] = useState(false);
 
   useEffect(() => {
     api.get('/api/inventory/items').then(res => {
@@ -42,10 +43,14 @@ export const ItemLedger: React.FC = () => {
   const handleSearch = async (values: any) => {
     setLoading(true);
     try {
+      const isShowCost = !!values.showCostPrice;
+      setShowCostPrice(isShowCost);
+
       const filter = {
         fromDate: values.dateRange[0].format('YYYY-MM-DD'),
         toDate: values.dateRange[1].format('YYYY-MM-DD'),
-        fkItem: values.item
+        fkItem: values.item,
+        showCostPrice: isShowCost
       };
 
       const selectedItem = items.find(i => i.id === values.item);
@@ -138,7 +143,9 @@ export const ItemLedger: React.FC = () => {
       return;
     }
 
-    const headers = ['Date', 'Voucher #', 'Particular / Narrative', 'Rate', 'Inward (+)', 'Outward (-)', 'Balance'];
+    const headers = showCostPrice
+      ? ['Date', 'Voucher #', 'Particular / Narrative', 'Rate', 'Cost Price', 'Inward (+)', 'Outward (-)', 'Balance']
+      : ['Date', 'Voucher #', 'Particular / Narrative', 'Rate', 'Inward (+)', 'Outward (-)', 'Balance'];
     let totalIn = 0;
     let totalOut = 0;
 
@@ -148,19 +155,28 @@ export const ItemLedger: React.FC = () => {
         totalIn += line.qtyIn;
         totalOut += line.qtyOut;
       }
-      return [
+      const baseRow = [
         line.vdate,
         `"${(line.vno || '-').replace(/"/g, '""')}"`,
         `"${(line.particular || '').replace(/"/g, '""')}"`,
-        line.rate ? line.rate.toFixed(2) : '-',
+        line.rate ? line.rate.toFixed(2) : '-'
+      ];
+      if (showCostPrice) {
+        baseRow.push(line.costPrice != null ? line.costPrice.toFixed(2) : '-');
+      }
+      baseRow.push(
         line.qtyIn.toFixed(2),
         line.qtyOut.toFixed(2),
         line.balance.toFixed(2)
-      ];
+      );
+      return baseRow;
     });
 
     const finalBal = ledgerData.length > 0 ? ledgerData[ledgerData.length - 1].balance : 0;
-    rows.push(['', '', '"PERIOD MOVEMENT TOTALS"', '', totalIn.toFixed(2), totalOut.toFixed(2), finalBal.toFixed(2)]);
+    const totalsRow = showCostPrice
+      ? ['', '', '"PERIOD MOVEMENT TOTALS"', '', '', totalIn.toFixed(2), totalOut.toFixed(2), finalBal.toFixed(2)]
+      : ['', '', '"PERIOD MOVEMENT TOTALS"', '', totalIn.toFixed(2), totalOut.toFixed(2), finalBal.toFixed(2)];
+    rows.push(totalsRow);
 
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -204,6 +220,7 @@ export const ItemLedger: React.FC = () => {
           <td style="text-align: center; border: 1px solid #e5e7eb; padding: 6px; font-weight: bold;">${line.vno || '-'}</td>
           <td style="border: 1px solid #e5e7eb; padding: 6px;">${line.particular || ''}</td>
           <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${line.rate ? line.rate.toFixed(2) : '-'}</td>
+          ${showCostPrice ? `<td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: #4338ca;">${line.costPrice != null ? line.costPrice.toFixed(2) : '-'}</td>` : ''}
           <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: ${line.qtyIn > 0 ? '#15803d' : '#374151'};">${line.qtyIn > 0 ? line.qtyIn.toFixed(2) : '-'}</td>
           <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: ${line.qtyOut > 0 ? '#b91c1c' : '#374151'};">${line.qtyOut > 0 ? line.qtyOut.toFixed(2) : '-'}</td>
           <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; font-weight: bold;">${line.balance.toFixed(2)}</td>
@@ -238,6 +255,7 @@ export const ItemLedger: React.FC = () => {
               <th style="width: 100px;">Voucher #</th>
               <th>Particular / Narrative</th>
               <th style="width: 80px;">Rate</th>
+              ${showCostPrice ? '<th style="width: 80px;">Cost Price</th>' : ''}
               <th style="width: 90px;">Inward (+)</th>
               <th style="width: 90px;">Outward (-)</th>
               <th style="width: 100px;">Balance</th>
@@ -246,7 +264,7 @@ export const ItemLedger: React.FC = () => {
           <tbody>
             ${rowsHtml}
             <tr class="total-row">
-              <td colspan="4" style="text-align: left; padding: 8px;">PERIOD MOVEMENT TOTALS</td>
+              <td colspan="${showCostPrice ? 5 : 4}" style="text-align: left; padding: 8px;">PERIOD MOVEMENT TOTALS</td>
               <td style="text-align: right; padding: 8px; color: #15803d;">${totalIn.toFixed(2)}</td>
               <td style="text-align: right; padding: 8px; color: #b91c1c;">${totalOut.toFixed(2)}</td>
               <td style="text-align: right; padding: 8px;">${finalBal.toFixed(2)}</td>
@@ -352,7 +370,8 @@ export const ItemLedger: React.FC = () => {
                 layout="vertical"
                 onFinish={handleSearch}
                 initialValues={{
-                  dateRange: [dayjs().startOf('month'), dayjs()]
+                  dateRange: [dayjs().startOf('month'), dayjs()],
+                  showCostPrice: false
                 }}
               >
                 <Form.Item
@@ -384,6 +403,16 @@ export const ItemLedger: React.FC = () => {
                       </Select.Option>
                     ))}
                   </Select>
+                </Form.Item>
+
+                <Form.Item
+                  name="showCostPrice"
+                  valuePropName="checked"
+                  style={{ marginBottom: 16 }}
+                >
+                  <Checkbox>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>Show Cost Price</span>
+                  </Checkbox>
                 </Form.Item>
 
                 <div style={{ marginTop: 24 }}>

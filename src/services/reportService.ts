@@ -53,6 +53,8 @@ export interface StockLedgerLine {
   qtyIn: number;
   qtyOut: number;
   rate: number | null;
+  costPrice?: number | null;
+  costAmount?: number | null;
   secUnit?: string;
   secQtyIn?: number;
   secQtyOut?: number;
@@ -170,12 +172,12 @@ export const reportService = {
     return response.data as Blob;
   },
 
-  async getStockLedger(params: { fromDate: string; toDate: string; fkItem: string }) {
+  async getStockLedger(params: { fromDate: string; toDate: string; fkItem: string; showCostPrice?: boolean }) {
     const response = await api.get('/api/reports/stock-ledger', { params });
     return response.data.body as StockLedgerLine[];
   },
 
-  async getStockLedgerPdf(params: { fromDate: string; toDate: string; fkItem: string }): Promise<Blob> {
+  async getStockLedgerPdf(params: { fromDate: string; toDate: string; fkItem: string; showCostPrice?: boolean }): Promise<Blob> {
     const response = await api.get('/api/reports/stock-ledger/pdf', {
       params,
       responseType: 'blob'
