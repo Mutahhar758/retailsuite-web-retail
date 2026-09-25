@@ -159,12 +159,12 @@ export const reportService = {
     return response.data as Blob;
   },
 
-  async getStockBalance(params: { fromDate: string; toDate: string; catagory?: string }) {
+  async getStockBalance(params: { fromDate: string; toDate: string; catagory?: string; showStockValue?: boolean }) {
     const response = await api.get('/api/reports/stock-balance', { params });
     return response.data.body as StockBalanceLine[];
   },
 
-  async getStockBalancePdf(params: { fromDate: string; toDate: string; catagory?: string }): Promise<Blob> {
+  async getStockBalancePdf(params: { fromDate: string; toDate: string; catagory?: string; showStockValue?: boolean }): Promise<Blob> {
     const response = await api.get('/api/reports/stock-balance/pdf', {
       params,
       responseType: 'blob'

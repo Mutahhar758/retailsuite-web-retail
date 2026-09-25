@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Card, Typography, Form, DatePicker, Select, Button,
-  Space, message, Spin, Empty, Tooltip
+  Space, message, Spin, Empty, Tooltip, Checkbox
 } from 'antd';
 import {
   SearchOutlined, PrinterOutlined, DownloadOutlined,
@@ -24,6 +24,7 @@ export const StockBalance: React.FC = () => {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedCategoryTitle, setSelectedCategoryTitle] = useState('');
+  const [showStockValue, setShowStockValue] = useState(true);
 
   useEffect(() => {
     api.get('/api/itemcategories').then(res => {
@@ -43,7 +44,8 @@ export const StockBalance: React.FC = () => {
       const filter = {
         fromDate: values.dateRange[0].format('YYYY-MM-DD'),
         toDate: values.dateRange[1].format('YYYY-MM-DD'),
-        catagory: values.category
+        catagory: values.category,
+        showStockValue
       };
 
       const selectedCat = categories.find(c => c.code === values.category);
@@ -402,6 +404,19 @@ export const StockBalance: React.FC = () => {
                       </Select.Option>
                     ))}
                   </Select>
+                </Form.Item>
+
+                <Form.Item style={{ marginBottom: 8 }}>
+                  <Checkbox
+                    id="chk-show-stock-value"
+                    checked={showStockValue}
+                    onChange={e => setShowStockValue(e.target.checked)}
+                  >
+                    <span style={{ fontSize: 12, fontWeight: 500 }}>Show Stock Value</span>
+                  </Checkbox>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2, paddingLeft: 24 }}>
+                    Includes Rate &amp; Total Value columns in the report
+                  </div>
                 </Form.Item>
 
                 <div style={{ marginTop: 24 }}>
