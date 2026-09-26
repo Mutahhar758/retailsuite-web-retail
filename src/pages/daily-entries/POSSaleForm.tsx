@@ -4,6 +4,7 @@ import {
 } from 'antd';
 import {
   useThermalPrinter,
+  printDirect,
   padLine,
   divider,
   type ConnectionMethod,
@@ -654,7 +655,6 @@ export const POSSaleForm: React.FC = () => {
     lines.push('');
 
     try {
-      const { printDirect } = await import('../../hooks/useThermalPrinter');
       await printDirect(lines, connectionMethod, { printerName, cutPaper });
     } catch (err) {
       console.warn('Could not print thermal KOT', err);

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useSettingsStore } from './useSettingsStore';
 
 export interface OrganizationLicense {
   licenseKey: string;
@@ -45,10 +46,8 @@ export const useAppStore = create<AppState>()(
       }),
       setCurrentTenant: (tenantId) => {
         set({ currentTenantIdentifier: tenantId });
-        import('./useSettingsStore').then(({ useSettingsStore }) => {
-          useSettingsStore.getState().resetSettings();
-          useSettingsStore.getState().fetchSettings();
-        }).catch(() => {});
+        useSettingsStore.getState().resetSettings();
+        useSettingsStore.getState().fetchSettings();
       },
       removeLicense: (licenseKey) => set((state) => ({
         licenses: state.licenses.filter(l => l.licenseKey !== licenseKey),
