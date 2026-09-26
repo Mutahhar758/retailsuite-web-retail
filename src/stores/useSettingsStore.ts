@@ -1,6 +1,12 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { settingService, type SettingItem } from '../services/settingService';
+
+// Ensure any stale legacy persisted settings from previous multi-tenant runs are cleaned up
+try {
+  localStorage.removeItem('retail_app_settings');
+} catch {
+  // Ignore in SSR/restricted environments
+}
 
 interface SettingsState {
   settings: Record<string, string>;
@@ -8,6 +14,7 @@ interface SettingsState {
   loading: boolean;
   initialized: boolean;
   fetchSettings: (category?: string) => Promise<void>;
+  resetSettings: () => void;
   getSetting: (key: string, fallback?: string) => string;
   updateSetting: (key: string, value: string, description?: string, category?: string) => Promise<void>;
 }
@@ -25,87 +32,92 @@ export const BILL_QR_INCLUDE_AMOUNT = 'Bill.QrPayment.IncludeAmount';
 // Inventory setting keys
 export const INVENTORY_ENABLE_SECONDARY_QTY_KEY = 'Inventory.EnableSecondaryQty';
 
-export const useSettingsStore = create<SettingsState>()(
-  persist(
-    (set, get) => ({
+export const useSettingsStore = create<SettingsState>((set, get) => ({
+  settings: {
+    [BILL_THANK_YOU_KEY]: BILL_THANK_YOU_DEFAULT,
+  },
+  items: [],
+  loading: false,
+  initialized: false,
+
+  resetSettings: () => {
+    set({
       settings: {
         [BILL_THANK_YOU_KEY]: BILL_THANK_YOU_DEFAULT,
       },
       items: [],
       loading: false,
       initialized: false,
+    });
+  },
 
-      fetchSettings: async (category?: string) => {
-        set({ loading: true });
-        try {
-          const list = await settingService.getSettings(category);
-          const map: Record<string, string> = { ...get().settings };
-          
-          list.forEach(item => {
-            if (item.key && item.value !== undefined && item.value !== null) {
-              map[item.key] = item.value;
-            }
-          });
-
-          // Ensure default if missing
-          if (!map[BILL_THANK_YOU_KEY]) {
-            map[BILL_THANK_YOU_KEY] = BILL_THANK_YOU_DEFAULT;
-          }
-
-          set({ settings: map, items: list, loading: false, initialized: true });
-        } catch (error) {
-          console.error('Failed to load settings from server', error);
-          set({ loading: false });
+  fetchSettings: async (category?: string) => {
+    set({ loading: true });
+    try {
+      const list = await settingService.getSettings(category);
+      // When fetching all settings (no category filter), start with a clean map to prevent cross-tenant state bleed
+      const map: Record<string, string> = category ? { ...get().settings } : {};
+      
+      list.forEach(item => {
+        if (item.key && item.value !== undefined && item.value !== null) {
+          map[item.key] = item.value;
         }
+      });
+
+      // Ensure default if missing
+      if (!map[BILL_THANK_YOU_KEY]) {
+        map[BILL_THANK_YOU_KEY] = BILL_THANK_YOU_DEFAULT;
+      }
+
+      set({ settings: map, items: list, loading: false, initialized: true });
+    } catch (error) {
+      console.error('Failed to load settings from server', error);
+      set({ loading: false });
+    }
+  },
+
+  getSetting: (key: string, fallback: string = ''): string => {
+    const val = get().settings[key];
+    if (val !== undefined && val !== null && val !== '') {
+      return val;
+    }
+    if (key === BILL_THANK_YOU_KEY) {
+      return BILL_THANK_YOU_DEFAULT;
+    }
+    return fallback;
+  },
+
+  updateSetting: async (key: string, value: string, description?: string, category?: string) => {
+    // Optimistic update
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        [key]: value,
       },
+    }));
 
-      getSetting: (key: string, fallback: string = ''): string => {
-        const val = get().settings[key];
-        if (val !== undefined && val !== null && val !== '') {
-          return val;
+    try {
+      const saved = await settingService.saveSetting({ key, value, description, category });
+      // Update in items array
+      set((state) => {
+        const index = state.items.findIndex(i => i.key === key);
+        const nextItems = [...state.items];
+        if (index >= 0) {
+          nextItems[index] = saved;
+        } else {
+          nextItems.push(saved);
         }
-        if (key === BILL_THANK_YOU_KEY) {
-          return BILL_THANK_YOU_DEFAULT;
-        }
-        return fallback;
-      },
-
-      updateSetting: async (key: string, value: string, description?: string, category?: string) => {
-        // Optimistic update
-        set((state) => ({
+        return {
+          items: nextItems,
           settings: {
             ...state.settings,
-            [key]: value,
+            [key]: saved.value ?? value,
           },
-        }));
-
-        try {
-          const saved = await settingService.saveSetting({ key, value, description, category });
-          // Update in items array
-          set((state) => {
-            const index = state.items.findIndex(i => i.key === key);
-            const nextItems = [...state.items];
-            if (index >= 0) {
-              nextItems[index] = saved;
-            } else {
-              nextItems.push(saved);
-            }
-            return {
-              items: nextItems,
-              settings: {
-                ...state.settings,
-                [key]: saved.value ?? value,
-              },
-            };
-          });
-        } catch (error) {
-          console.error(`Failed to save setting ${key}`, error);
-          throw error;
-        }
-      },
-    }),
-    {
-      name: 'retail_app_settings',
+        };
+      });
+    } catch (error) {
+      console.error(`Failed to save setting ${key}`, error);
+      throw error;
     }
-  )
-);
+  },
+}));

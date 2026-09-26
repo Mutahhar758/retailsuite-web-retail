@@ -223,10 +223,7 @@ export const reportService = {
     dateBasis?: 'VoucherDate' | 'ClearingDate';
     layout?: 'A4' | 'Thermal';
     qrEnabled?: boolean;
-    qrAccountTitle?: string;
-    qrAccountNumber?: string;
-    qrBankName?: string;
-    thankyouLine?: string;
+    isWandaLayout?: boolean;
   }): Promise<Blob> {
     const response = await api.get('/api/reports/customer-bill/pdf', {
       params,
@@ -242,11 +239,8 @@ export const reportService = {
     dateBasis?: 'VoucherDate' | 'ClearingDate';
     layout?: 'A4' | 'Thermal';
     qrEnabled?: boolean;
-    qrAccountTitle?: string;
-    qrAccountNumber?: string;
-    qrBankName?: string;
-    thankyouLine?: string;
     onlyWithActivity?: boolean;
+    isWandaLayout?: boolean;
   }): Promise<Blob> {
     const response = await api.post('/api/reports/customer-bill/batch/pdf', data, {
       responseType: 'blob'

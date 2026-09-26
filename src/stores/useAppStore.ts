@@ -43,7 +43,13 @@ export const useAppStore = create<AppState>()(
           currentTenantIdentifier: state.licenses.length === 0 ? license.tenantIdentifier : state.currentTenantIdentifier
         };
       }),
-      setCurrentTenant: (tenantId) => set({ currentTenantIdentifier: tenantId }),
+      setCurrentTenant: (tenantId) => {
+        set({ currentTenantIdentifier: tenantId });
+        import('./useSettingsStore').then(({ useSettingsStore }) => {
+          useSettingsStore.getState().resetSettings();
+          useSettingsStore.getState().fetchSettings();
+        }).catch(() => {});
+      },
       removeLicense: (licenseKey) => set((state) => ({
         licenses: state.licenses.filter(l => l.licenseKey !== licenseKey),
         currentTenantIdentifier: state.currentTenantIdentifier && state.licenses.find(l => l.licenseKey === licenseKey)?.tenantIdentifier === state.currentTenantIdentifier 

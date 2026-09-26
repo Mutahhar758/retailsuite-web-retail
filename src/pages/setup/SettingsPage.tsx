@@ -48,7 +48,7 @@ import QRCode from 'qrcode';
 const { Title, Text, Paragraph } = Typography;
 
 export const SettingsPage: React.FC = () => {
-  const { fetchSettings, getSetting, updateSetting, loading, initialized } = useSettingsStore();
+  const { fetchSettings, getSetting, updateSetting, loading, initialized, settings } = useSettingsStore();
   const { licenses, currentTenantIdentifier } = useAppStore();
 
   const currentOrgName =
@@ -76,18 +76,19 @@ export const SettingsPage: React.FC = () => {
   const [savingInventory, setSavingInventory] = useState(false);
   const [inventoryLastSaved, setInventoryLastSaved] = useState<string | null>(null);
 
-  // Initialize and load settings from API
+  // Initialize and load settings from API when page mounts or tenant changes
   useEffect(() => {
     fetchSettings();
-  }, [fetchSettings]);
+  }, [fetchSettings, currentTenantIdentifier]);
 
-  // Sync Thank You state when store initialised
+  // Sync Thank You state when store initialized or settings change
   useEffect(() => {
+    if (!initialized) return;
     const currentVal = getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT);
     setThankYouInput(currentVal);
-  }, [initialized, getSetting]);
+  }, [initialized, settings, getSetting]);
 
-  // Sync QR payment state when store initialised
+  // Sync QR payment state when store initialized or settings change
   useEffect(() => {
     if (!initialized) return;
     setQrEnabled(getSetting(BILL_QR_ENABLED_KEY, 'false') === 'true');
@@ -96,7 +97,7 @@ export const SettingsPage: React.FC = () => {
     setQrBankName(getSetting(BILL_QR_BANK_NAME, ''));
     setQrIncludeAmount(getSetting(BILL_QR_INCLUDE_AMOUNT, 'false') === 'true');
     setSecondaryQtyEnabled(getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, 'false') === 'true');
-  }, [initialized, getSetting]);
+  }, [initialized, settings, getSetting]);
 
   const handleSaveThankYou = async () => {
     setSavingThankYou(true);

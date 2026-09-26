@@ -18,12 +18,8 @@ import api from '../../services/api';
 import { useAppStore } from '../../stores/useAppStore';
 import {
   useSettingsStore,
-  BILL_THANK_YOU_KEY,
-  BILL_THANK_YOU_DEFAULT,
   BILL_QR_ENABLED_KEY,
-  BILL_QR_ACCOUNT_TITLE,
-  BILL_QR_ACCOUNT_NUMBER,
-  BILL_QR_BANK_NAME
+  BILL_QR_ACCOUNT_NUMBER
 } from '../../stores/useSettingsStore';
 import { useLocation } from 'react-router-dom';
 import { rangePresets } from '../../utils/datePresets';
@@ -59,6 +55,7 @@ export const CustomerBill: React.FC = () => {
   const { currentTenantIdentifier, licenses } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const currentOrgName = currentOrg?.name || 'Retail Suite';
+  const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   const [layout, setLayout] = useState<'A4' | 'Thermal'>('A4');
   const [qrEnabled, setQrEnabled] = useState<boolean>(true);
@@ -258,12 +255,6 @@ export const CustomerBill: React.FC = () => {
     setPdfLoading(true);
 
     try {
-      const store = useSettingsStore.getState();
-      const qrAccountTitle = store.getSetting(BILL_QR_ACCOUNT_TITLE, '');
-      const qrAccountNumber = store.getSetting(BILL_QR_ACCOUNT_NUMBER, '');
-      const qrBankName = store.getSetting(BILL_QR_BANK_NAME, '');
-      const thankyouLine = store.getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT);
-
       const [dataRes, blob] = await Promise.all([
         reportService.getCustomerBill({ fromDate, toDate, account, dateBasis }),
         reportService.getCustomerBillPdf({
@@ -273,10 +264,7 @@ export const CustomerBill: React.FC = () => {
           dateBasis,
           layout: targetLayout,
           qrEnabled: isQrOn,
-          qrAccountTitle,
-          qrAccountNumber,
-          qrBankName,
-          thankyouLine
+          isWandaLayout: hasVariablePackFeature
         })
       ]);
 
@@ -320,12 +308,6 @@ export const CustomerBill: React.FC = () => {
     setPdfLoading(true);
 
     try {
-      const store = useSettingsStore.getState();
-      const qrAccountTitle = store.getSetting(BILL_QR_ACCOUNT_TITLE, '');
-      const qrAccountNumber = store.getSetting(BILL_QR_ACCOUNT_NUMBER, '');
-      const qrBankName = store.getSetting(BILL_QR_BANK_NAME, '');
-      const thankyouLine = store.getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT);
-
       const blob = await reportService.getCustomerBillBatchPdf({
         fromDate,
         toDate,
@@ -333,11 +315,8 @@ export const CustomerBill: React.FC = () => {
         dateBasis,
         layout: targetLayout,
         qrEnabled: isQrOn,
-        qrAccountTitle,
-        qrAccountNumber,
-        qrBankName,
-        thankyouLine,
-        onlyWithActivity
+        onlyWithActivity,
+        isWandaLayout: hasVariablePackFeature
       });
 
       if (pdfBlobUrl) {
@@ -489,49 +468,87 @@ export const CustomerBill: React.FC = () => {
         <table>
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Voucher</th>
-              <th>Item Description</th>
-              <th>Unit</th>
-              <th>Quantity</th>
-              <th>Rate</th>
-              <th>Amount</th>
+              ${hasVariablePackFeature ? `
+                <th>Date</th>
+                <th>Voucher No</th>
+                <th>Description</th>
+                <th>Weight (Kg)</th>
+                <th>Bags</th>
+                <th>Kg Rate</th>
+                <th>Bag Rate</th>
+                <th>Carriage</th>
+                <th>Amount</th>
+                <th>Receipt Date</th>
+                <th>Receipt Amount</th>
+              ` : `
+                <th>Date</th>
+                <th>Voucher</th>
+                <th>Item Description</th>
+                <th>Unit</th>
+                <th>Quantity</th>
+                <th>Rate</th>
+                <th>Amount</th>
+              `}
             </tr>
           </thead>
           <tbody>
     `;
 
     let totalQty = 0;
+    let totalBags = 0;
     let totalAmt = 0;
 
     billData.lines.forEach(l => {
+      const bagQty = l.secQty ?? (l.qtyInPack && l.qtyInPack > 0 ? Math.round(l.qty / l.qtyInPack) : 0);
+      const bagRate = l.secRate ?? (l.qtyInPack && l.qtyInPack > 0 ? l.rate * l.qtyInPack : (bagQty > 0 ? Math.round(l.amount / bagQty) : 0));
       totalQty += l.qty;
+      totalBags += bagQty;
       totalAmt += l.amount;
-      tableHtml += `
-        <tr>
-          <td>${dayjs(l.date).format('DD-MMM-YYYY')}</td>
-          <td>${l.vNo}</td>
-          <td>${l.item}</td>
-          <td class="center">${l.unitTitle || ''}</td>
-          <td class="num">${l.qty}</td>
-          <td class="num">${l.rate}</td>
-          <td class="num">${l.amount}</td>
-        </tr>
-      `;
+
+      if (hasVariablePackFeature) {
+        tableHtml += `
+          <tr>
+            <td class="center">${dayjs(l.date).format('DD/MM/YY')}</td>
+            <td class="center">${l.vNo}</td>
+            <td>${l.item}</td>
+            <td class="num">${l.qty.toLocaleString()}</td>
+            <td class="num">${bagQty > 0 ? bagQty.toLocaleString() : '-'}</td>
+            <td class="num">${l.rate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td class="num">${bagRate > 0 ? bagRate.toLocaleString() : '-'}</td>
+            <td class="num">${l.addLess || 0}</td>
+            <td class="num bold">${l.amount.toLocaleString()}</td>
+            <td class="center">${l.receiptDate ? dayjs(l.receiptDate).format('DD/MM/YY') : ''}</td>
+            <td class="num">${l.receiptAmount ? l.receiptAmount.toLocaleString() : ''}</td>
+          </tr>
+        `;
+      } else {
+        tableHtml += `
+          <tr>
+            <td>${dayjs(l.date).format('DD-MMM-YYYY')}</td>
+            <td>${l.vNo}</td>
+            <td>${l.item}</td>
+            <td class="center">${l.unitTitle || ''}</td>
+            <td class="num">${l.qty}</td>
+            <td class="num">${l.rate}</td>
+            <td class="num">${l.amount}</td>
+          </tr>
+        `;
+      }
     });
 
     tableHtml += `
         <tr class="bold">
-          <td colspan="4"><strong>Total (${billData.lines.length} Items)</strong></td>
-          <td class="num"><strong>${totalQty}</strong></td>
-          <td></td>
-          <td class="num"><strong>${totalAmt}</strong></td>
+          <td colspan="${hasVariablePackFeature ? 3 : 4}"><strong>Total (${billData.lines.length} Items)</strong></td>
+          <td class="num"><strong>${totalQty.toLocaleString()}</strong></td>
+          ${hasVariablePackFeature ? `<td class="num"><strong>${totalBags.toLocaleString()}</strong></td><td colspan="3"></td>` : `<td></td>`}
+          <td class="num"><strong>${totalAmt.toLocaleString()}</strong></td>
+          ${hasVariablePackFeature ? `<td></td><td></td>` : ''}
         </tr>
-        <tr><td colspan="7"></td></tr>
-        <tr class="bold"><td colspan="6">Previous Balance:</td><td class="num"><strong>${billData.summary.previousBalance}</strong></td></tr>
-        <tr class="bold"><td colspan="6">(+) Current Billing:</td><td class="num"><strong>${totalAmt}</strong></td></tr>
-        <tr class="bold"><td colspan="6">(-) Payments Received:</td><td class="num"><strong>${billData.summary.payment}</strong></td></tr>
-        <tr class="bold"><td colspan="6">Net Balance Due:</td><td class="num"><strong>${billData.summary.balance}</strong></td></tr>
+        <tr><td colspan="${hasVariablePackFeature ? 11 : 7}"></td></tr>
+        <tr class="bold"><td colspan="${hasVariablePackFeature ? 8 : 6}">Previous Balance:</td><td class="num"><strong>${billData.summary.previousBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></td></tr>
+        <tr class="bold"><td colspan="${hasVariablePackFeature ? 8 : 6}">(+) Current Billing:</td><td class="num"><strong>${totalAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></td></tr>
+        <tr class="bold"><td colspan="${hasVariablePackFeature ? 8 : 6}">(-) Payments Received:</td><td class="num"><strong>${billData.summary.payment.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></td></tr>
+        <tr class="bold"><td colspan="${hasVariablePackFeature ? 8 : 6}">Net Balance Due:</td><td class="num"><strong>${billData.summary.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></td></tr>
       </tbody>
     </table>
     </body>
@@ -556,7 +573,10 @@ export const CustomerBill: React.FC = () => {
       return;
     }
 
-    const headers = ['Date', 'Voucher', 'Item Description', 'Unit', 'Quantity', 'Rate', 'Amount'];
+    const headers = hasVariablePackFeature
+      ? ['Date', 'Voucher No', 'Description', 'Weight (Kg)', 'Bags', 'Kg Rate', 'Bag Rate', 'Carriage', 'Amount', 'Receipt Date', 'Receipt Amount']
+      : ['Date', 'Voucher', 'Item Description', 'Unit', 'Quantity', 'Rate', 'Amount'];
+
     const escapeCsv = (val: any) => {
       if (val === null || val === undefined) return '""';
       const str = String(val);
@@ -566,15 +586,34 @@ export const CustomerBill: React.FC = () => {
       return `"${str}"`;
     };
 
-    const rows = billData.lines.map(l => [
-      escapeCsv(dayjs(l.date).format('DD-MMM-YYYY')),
-      escapeCsv(l.vNo),
-      escapeCsv(l.item),
-      escapeCsv(l.unitTitle || ''),
-      l.qty,
-      l.rate,
-      l.amount
-    ].join(','));
+    const rows = billData.lines.map(l => {
+      if (hasVariablePackFeature) {
+        const bagQty = l.secQty ?? (l.qtyInPack && l.qtyInPack > 0 ? Math.round(l.qty / l.qtyInPack) : 0);
+        const bagRate = l.secRate ?? (l.qtyInPack && l.qtyInPack > 0 ? l.rate * l.qtyInPack : (bagQty > 0 ? Math.round(l.amount / bagQty) : 0));
+        return [
+          escapeCsv(dayjs(l.date).format('DD/MM/YY')),
+          escapeCsv(l.vNo),
+          escapeCsv(l.item),
+          l.qty,
+          bagQty > 0 ? bagQty : '',
+          l.rate,
+          bagRate > 0 ? bagRate : '',
+          l.addLess || 0,
+          l.amount,
+          escapeCsv(l.receiptDate ? dayjs(l.receiptDate).format('DD/MM/YY') : ''),
+          l.receiptAmount || ''
+        ].join(',');
+      }
+      return [
+        escapeCsv(dayjs(l.date).format('DD-MMM-YYYY')),
+        escapeCsv(l.vNo),
+        escapeCsv(l.item),
+        escapeCsv(l.unitTitle || ''),
+        l.qty,
+        l.rate,
+        l.amount
+      ].join(',');
+    });
 
     const csvContent = '\uFEFF' + [headers.map(h => `"${h}"`).join(','), ...rows].join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
