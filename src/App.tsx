@@ -41,6 +41,8 @@ import { BalanceSheet } from './pages/reports/BalanceSheet';
 import { CustomerBill } from './pages/reports/CustomerBill';
 import { MilkComparisonReport } from './pages/reports/MilkComparisonReport';
 import { CustomerBalanceRecoveryReport } from './pages/reports/CustomerBalanceRecoveryReport';
+import { ProfitByCustomer } from './pages/reports/ProfitByCustomer';
+import { ProfitByItem } from './pages/reports/ProfitByItem';
 import { NarrationList } from './pages/setup/NarrationList';
 import { UnitList } from './pages/setup/UnitList';
 import { ItemCategoryList } from './pages/setup/ItemCategoryList';
@@ -180,6 +182,8 @@ function App() {
             <Route path="reports/customer-bill" element={<CustomerBill />} />
             <Route path="reports/milk-comparison" element={<MilkComparisonReport />} />
             <Route path="reports/customer-balance-recovery" element={<CustomerBalanceRecoveryReport />} />
+            <Route path="reports/profit-by-customer" element={<ProfitByCustomer />} />
+            <Route path="reports/profit-by-item" element={<ProfitByItem />} />
             <Route path="profile" element={<Profile />} />
             
             {/* Setup */}

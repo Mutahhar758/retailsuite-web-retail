@@ -19,7 +19,9 @@ import { useAppStore } from '../../stores/useAppStore';
 import {
   useSettingsStore,
   BILL_QR_ENABLED_KEY,
-  BILL_QR_ACCOUNT_NUMBER
+  BILL_QR_ACCOUNT_NUMBER,
+  BILL_QR_BANK_NAME,
+  BILL_QR_ACCOUNT_TITLE
 } from '../../stores/useSettingsStore';
 import { useLocation } from 'react-router-dom';
 import { rangePresets } from '../../utils/datePresets';
