@@ -1,21 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Card, Typography, Form, DatePicker, Select, Button,
-  Space, message, Spin, Empty, Table, Tag, Statistic, Row, Col, Tabs
+  Card, Typography, Form, DatePicker, Button,
+  Space, message, Spin, Empty, Tooltip
 } from 'antd';
 import {
   SearchOutlined, PrinterOutlined, DownloadOutlined,
-  FileExcelOutlined,
-  DollarOutlined, AppstoreOutlined
+  ExportOutlined, FileExcelOutlined, FileTextOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined, RiseOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
   reportService,
-  type ProfitByItemResponse,
-  type ProfitByItemLine
+  type ProfitByItemResponse
 } from '../../services/reportService';
-import { inventoryService, type Item } from '../../services/inventoryService';
-import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCategoryService';
 import { rangePresets } from '../../utils/datePresets';
 
 const { Title, Text } = Typography;
@@ -24,102 +21,75 @@ const { RangePicker } = DatePicker;
 export const ProfitByItem: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [pdfLoading, setPdfLoading] = useState(false);
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
-  const [categories, setCategories] = useState<ItemCategoryDto[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
   const [reportData, setReportData] = useState<ProfitByItemResponse | null>(null);
-  const [activeTab, setActiveTab] = useState<'grid' | 'pdf'>('grid');
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
-    itemCategoryService.getActiveItemCategoriesLookup()
-      .then(res => setCategories(res || []))
-      .catch(console.error);
+    return () => {
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+    };
+  }, [pdfUrl]);
 
-    loadItems();
-  }, []);
-
-  const loadItems = (catCode?: string) => {
-    inventoryService.getItemsLookup(catCode)
-      .then(res => setItems(res || []))
-      .catch(console.error);
-  };
-
+  // Initial load
   useEffect(() => {
     const startOfMonth = dayjs().startOf('month');
     const today = dayjs();
     form.setFieldsValue({
-      dateRange: [startOfMonth, today],
-      categoryId: undefined,
-      itemId: undefined
+      dateRange: [startOfMonth, today]
     });
-    fetchReport({
-      dateRange: [startOfMonth, today],
-      categoryId: undefined,
-      itemId: undefined
-    });
+    handleSearch({ dateRange: [startOfMonth, today] });
   }, [form]);
 
-  useEffect(() => {
-    return () => {
-      if (pdfBlobUrl) {
-        URL.revokeObjectURL(pdfBlobUrl);
-      }
-    };
-  }, [pdfBlobUrl]);
-
-  const handleCategoryChange = (val: string | undefined) => {
-    form.setFieldsValue({ itemId: undefined });
-    loadItems(val);
-  };
-
-  const fetchReport = async (values: any) => {
+  const handleSearch = async (values: any) => {
     setLoading(true);
     try {
       const fromDate = values.dateRange[0].format('YYYY-MM-DD');
       const toDate = values.dateRange[1].format('YYYY-MM-DD');
-      const categoryId = values.categoryId || undefined;
-      const itemId = values.itemId || undefined;
 
-      const data = await reportService.getProfitByItem({
-        fromDate,
-        toDate,
-        categoryId,
-        itemId
-      });
-      setReportData(data);
+      // Fetch vector PDF and structured summary data
+      const [pdfBlob, rawData] = await Promise.all([
+        reportService.getProfitByItemPdf({ fromDate, toDate }),
+        reportService.getProfitByItem({ fromDate, toDate })
+      ]);
 
-      // Also trigger PDF generation in background
-      setPdfLoading(true);
-      reportService.getProfitByItemPdf({ fromDate, toDate, categoryId, itemId })
-        .then(blob => {
-          if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
-          setPdfBlobUrl(URL.createObjectURL(blob));
-        })
-        .catch(console.error)
-        .finally(() => setPdfLoading(false));
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+      const newUrl = URL.createObjectURL(pdfBlob);
+      setPdfUrl(newUrl);
+      setReportData(rawData);
 
-      message.success('Profit by Item report updated');
-    } catch (err: any) {
-      console.error(err);
-      message.error(err?.response?.data?.message || 'Failed to load Profit by Item report');
+      message.success('Profit by Item report generated');
+    } catch (error: any) {
+      console.error('Failed to generate Profit by Item report', error);
+      message.error(error?.response?.data?.message || 'Failed to generate report');
     } finally {
       setLoading(false);
     }
   };
 
+  const getExportFileName = (extension: string) => {
+    const values = form.getFieldsValue();
+    const fromStr = values.dateRange ? values.dateRange[0].format('YYYYMMDD') : dayjs().format('YYYYMMDD');
+    const toStr = values.dateRange ? values.dateRange[1].format('YYYYMMDD') : dayjs().format('YYYYMMDD');
+    return `ProfitByItem_${fromStr}_${toStr}.${extension}`;
+  };
+
   const handleDownloadPdf = () => {
-    if (!pdfBlobUrl) return;
+    if (!pdfUrl) return;
     const a = document.createElement('a');
-    a.href = pdfBlobUrl;
-    a.download = `ProfitByItem_${dayjs().format('YYYYMMDD_HHmm')}.pdf`;
+    a.href = pdfUrl;
+    a.download = getExportFileName('pdf');
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
   };
 
-  const handlePrintPdf = () => {
-    if (!pdfBlobUrl) return;
+  const handleDirectPrint = () => {
+    if (!pdfUrl) return;
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.right = '0';
@@ -127,33 +97,62 @@ export const ProfitByItem: React.FC = () => {
     iframe.style.width = '0';
     iframe.style.height = '0';
     iframe.style.border = '0';
-    iframe.src = pdfBlobUrl;
+    iframe.src = pdfUrl;
     document.body.appendChild(iframe);
+
     iframe.onload = () => {
       setTimeout(() => {
         try {
           iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
         } catch (e) {
-          console.error(e);
+          console.error('Direct print failed', e);
+          window.open(pdfUrl, '_blank');
+        } finally {
+          setTimeout(() => {
+            if (document.body.contains(iframe)) {
+              document.body.removeChild(iframe);
+            }
+          }, 1000);
         }
-      }, 300);
+      }, 200);
     };
   };
 
+  const handleOpenInNewTab = () => {
+    if (pdfUrl) {
+      window.open(pdfUrl, '_blank');
+    }
+  };
+
   const handleExportCsv = () => {
-    if (!reportData || !reportData.lines.length) {
-      message.warning('No data to export');
+    if (!reportData || !reportData.lines || reportData.lines.length === 0) {
+      message.warning('No data available to export.');
       return;
     }
 
-    const headers = ['Item Code', 'Description', 'Category', 'Unit', 'Qty Sold', 'Avg Sale Rate', 'Sales (Rs.)', 'Avg Cost Rate', 'Cost Amount (Rs.)', 'Gross Profit (Rs.)', 'Margin %'];
-    const rows = reportData.lines.map(l => [
-      `"${l.itemId}"`,
-      `"${l.itemTitle.replace(/"/g, '""')}"`,
+    const headers = [
+      '#',
+      'Item Code',
+      'Item Title',
+      'Category',
+      'Unit',
+      'Qty Sold',
+      'Avg Sale Rate',
+      'Sales Amount',
+      'Avg Cost Rate',
+      'Cost Amount',
+      'Gross Profit',
+      'Margin %'
+    ];
+
+    const rows = reportData.lines.map((l, index) => [
+      index + 1,
+      `"${(l.itemId || '').replace(/"/g, '""')}"`,
+      `"${(l.itemTitle || '').replace(/"/g, '""')}"`,
       `"${(l.category || '').replace(/"/g, '""')}"`,
-      `"${l.unit || ''}"`,
-      l.totalQty,
+      `"${(l.unit || '').replace(/"/g, '""')}"`,
+      l.totalQty.toFixed(2),
       l.avgSaleRate.toFixed(2),
       l.totalSales.toFixed(2),
       l.avgCostRate.toFixed(2),
@@ -162,264 +161,330 @@ export const ProfitByItem: React.FC = () => {
       `${l.grossMarginPct.toFixed(1)}%`
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `ProfitByItem_${dayjs().format('YYYYMMDD_HHmm')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Summary total row
+    rows.push([
+      'TOTAL',
+      '',
+      `"${reportData.itemCount} Items"`,
+      '',
+      '',
+      reportData.totalQtySold.toFixed(2),
+      '',
+      reportData.totalSales.toFixed(2),
+      '',
+      reportData.totalCost.toFixed(2),
+      reportData.grossProfit.toFixed(2),
+      `${reportData.grossMarginPct.toFixed(1)}%`
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = getExportFileName('csv');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    message.success('Exported to CSV');
   };
 
-  const columns = [
-    {
-      title: 'Item Code',
-      dataIndex: 'itemId',
-      key: 'itemId',
-      width: 100,
-      render: (text: string) => <Text code>{text}</Text>
-    },
-    {
-      title: 'Product Title',
-      dataIndex: 'itemTitle',
-      key: 'itemTitle',
-      render: (text: string, row: ProfitByItemLine) => (
-        <div>
-          <Text strong>{text}</Text>
-          {row.category && <div style={{ fontSize: '11px', color: '#8c8c8c' }}>{row.category}</div>}
-        </div>
-      )
-    },
-    {
-      title: 'Unit',
-      dataIndex: 'unit',
-      key: 'unit',
-      width: 80,
-      render: (val: string) => val || '-'
-    },
-    {
-      title: 'Qty Sold',
-      dataIndex: 'totalQty',
-      key: 'totalQty',
-      align: 'right' as const,
-      width: 100,
-      render: (val: number) => val.toLocaleString(undefined, { maximumFractionDigits: 2 })
-    },
-    {
-      title: 'Avg Sale Rate',
-      dataIndex: 'avgSaleRate',
-      key: 'avgSaleRate',
-      align: 'right' as const,
-      width: 110,
-      render: (val: number) => val.toFixed(2)
-    },
-    {
-      title: 'Sales (Rs.)',
-      dataIndex: 'totalSales',
-      key: 'totalSales',
-      align: 'right' as const,
-      width: 130,
-      render: (val: number) => (
-        <Text strong style={{ color: '#0958d9' }}>
-          {val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </Text>
-      )
-    },
-    {
-      title: 'Avg Cost Rate',
-      dataIndex: 'avgCostRate',
-      key: 'avgCostRate',
-      align: 'right' as const,
-      width: 110,
-      render: (val: number) => val.toFixed(2)
-    },
-    {
-      title: 'Cost Amount (Rs.)',
-      dataIndex: 'totalCost',
-      key: 'totalCost',
-      align: 'right' as const,
-      width: 130,
-      render: (val: number) => val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    },
-    {
-      title: 'Gross Profit (Rs.)',
-      dataIndex: 'grossProfit',
-      key: 'grossProfit',
-      align: 'right' as const,
-      width: 140,
-      render: (val: number) => {
-        const isPos = val >= 0;
-        return (
-          <Text strong style={{ color: isPos ? '#389e0d' : '#cf1322' }}>
-            {isPos ? '' : '('}
-            {Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            {isPos ? '' : ')'}
-          </Text>
-        );
-      }
-    },
-    {
-      title: 'Margin %',
-      dataIndex: 'grossMarginPct',
-      key: 'grossMarginPct',
-      align: 'right' as const,
-      width: 100,
-      render: (val: number) => (
-        <Tag color={val >= 25 ? 'green' : val >= 12 ? 'blue' : val > 0 ? 'orange' : 'red'}>
-          {val.toFixed(1)}%
-        </Tag>
-      )
+  const handleExportExcel = () => {
+    if (!reportData || !reportData.lines || reportData.lines.length === 0) {
+      message.warning('No data available to export.');
+      return;
     }
-  ];
+
+    const values = form.getFieldsValue();
+    const periodStr = values.dateRange
+      ? `${values.dateRange[0].format('DD-MMM-YYYY')} to ${values.dateRange[1].format('DD-MMM-YYYY')}`
+      : dayjs().format('DD-MMM-YYYY');
+
+    let rowsHtml = '';
+    reportData.lines.forEach((l, idx) => {
+      const bg = idx % 2 === 0 ? '#ffffff' : '#f9fafb';
+      const profitColor = l.grossProfit >= 0 ? '#15803d' : '#b91c1c';
+      rowsHtml += `
+        <tr style="background-color: ${bg};">
+          <td style="border: 1px solid #e5e7eb; padding: 6px; text-align: center;">${idx + 1}</td>
+          <td style="border: 1px solid #e5e7eb; padding: 6px;">${l.itemId}</td>
+          <td style="border: 1px solid #e5e7eb; padding: 6px; font-weight: 500;">${l.itemTitle}</td>
+          <td style="border: 1px solid #e5e7eb; padding: 6px;">${l.category || '-'}</td>
+          <td style="border: 1px solid #e5e7eb; padding: 6px; text-align: center;">${l.unit || '-'}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${l.totalQty.toFixed(2)}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${l.avgSaleRate.toFixed(2)}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${l.totalSales.toFixed(2)}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${l.avgCostRate.toFixed(2)}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${l.totalCost.toFixed(2)}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; font-weight: bold; color: ${profitColor};">${l.grossProfit.toFixed(2)}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${l.grossMarginPct.toFixed(1)}%</td>
+        </tr>
+      `;
+    });
+
+    const profitColor = reportData.grossProfit >= 0 ? '#15803d' : '#b91c1c';
+
+    const excelHtml = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+          table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
+          th { background-color: #1e293b; color: #ffffff; border: 1px solid #cbd5e1; padding: 8px; font-size: 11px; }
+          td { font-size: 11px; color: #1e293b; }
+          .header-title { font-size: 16px; font-weight: bold; color: #0f172a; margin-bottom: 4px; }
+          .sub-title { font-size: 12px; color: #64748b; margin-bottom: 12px; }
+          .total-row { background-color: #f1f5f9; font-weight: bold; }
+          .total-row td { border-top: 2px solid #0f172a; border-bottom: 2px solid #0f172a; padding: 8px; }
+        </style>
+      </head>
+      <body>
+        <div class="header-title">PROFIT BY ITEM REPORT</div>
+        <div class="sub-title">Period: <b>${periodStr}</b> &nbsp;|&nbsp; Total Items: <b>${reportData.itemCount}</b></div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 40px;">#</th>
+              <th style="width: 80px;">Item Code</th>
+              <th>Item Title</th>
+              <th style="width: 110px;">Category</th>
+              <th style="width: 60px;">Unit</th>
+              <th style="width: 80px;">Qty Sold</th>
+              <th style="width: 90px;">Avg Sale Rate</th>
+              <th style="width: 110px;">Sales (Rs.)</th>
+              <th style="width: 90px;">Avg Cost Rate</th>
+              <th style="width: 110px;">Cost (Rs.)</th>
+              <th style="width: 110px;">Profit (Rs.)</th>
+              <th style="width: 70px;">Margin %</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+            <tr class="total-row">
+              <td colspan="5" style="text-align: left; padding: 8px;">GRAND TOTALS</td>
+              <td style="text-align: right; padding: 8px;">${reportData.totalQtySold.toFixed(2)}</td>
+              <td style="text-align: right; padding: 8px;">-</td>
+              <td style="text-align: right; padding: 8px;">Rs. ${reportData.totalSales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="text-align: right; padding: 8px;">-</td>
+              <td style="text-align: right; padding: 8px;">Rs. ${reportData.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="text-align: right; padding: 8px; color: ${profitColor};">Rs. ${reportData.grossProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="text-align: right; padding: 8px;">${reportData.grossMarginPct.toFixed(1)}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = getExportFileName('xls');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    message.success('Exported to Excel');
+  };
 
   return (
-    <div style={{ padding: '16px 24px' }}>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <Title level={3} style={{ margin: 0 }}>Profit by Item</Title>
-          <Text type="secondary">Unit sales margins and item cost breakdown</Text>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc' }}>
+      {/* Top Header Bar */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '12px 20px',
+        background: '#ffffff',
+        borderBottom: '1px solid #e5e7eb'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <RiseOutlined style={{ fontSize: 24, color: '#10b981' }} />
+          <div>
+            <Title level={4} style={{ margin: 0, fontWeight: 700, color: '#0f172a' }}>
+              Profit by Item
+            </Title>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Item-wise sales revenue, cost of goods sold, and profitability margin
+            </Text>
+          </div>
         </div>
-        <Space>
-          <Button icon={<FileExcelOutlined />} onClick={handleExportCsv}>Export CSV</Button>
-          <Button icon={<PrinterOutlined />} onClick={handlePrintPdf} disabled={!pdfBlobUrl}>Print</Button>
-          <Button type="primary" icon={<DownloadOutlined />} onClick={handleDownloadPdf} disabled={!pdfBlobUrl}>Download PDF</Button>
+
+        <Space wrap>
+          <Tooltip title={isCollapsed ? 'Show Parameters' : 'Hide Parameters'}>
+            <Button
+              icon={isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={() => setIsCollapsed(!isCollapsed)}
+            />
+          </Tooltip>
+
+          {pdfUrl && (
+            <>
+              <Tooltip title="Direct 1-click print">
+                <Button icon={<PrinterOutlined />} onClick={handleDirectPrint}>
+                  Print PDF
+                </Button>
+              </Tooltip>
+              <Button type="primary" icon={<DownloadOutlined />} onClick={handleDownloadPdf}>
+                Download PDF
+              </Button>
+              <Button icon={<FileExcelOutlined />} onClick={handleExportExcel} style={{ color: '#15803d' }}>
+                Export Excel
+              </Button>
+              <Button icon={<FileTextOutlined />} onClick={handleExportCsv} style={{ color: '#0284c7' }}>
+                Export CSV
+              </Button>
+              <Tooltip title="Open in New Tab">
+                <Button icon={<ExportOutlined />} onClick={handleOpenInNewTab} />
+              </Tooltip>
+            </>
+          )}
         </Space>
       </div>
 
-      {/* Filter Card */}
-      <Card size="small" style={{ marginBottom: 16 }}>
-        <Form form={form} layout="inline" onFinish={fetchReport} style={{ gap: '12px', alignItems: 'center' }}>
-          <Form.Item name="categoryId" label="Category" style={{ minWidth: 180 }}>
-            <Select
-              allowClear
-              placeholder="All Categories"
-              onChange={handleCategoryChange}
-              options={categories.map(c => ({
-                value: c.code,
-                label: c.title
-              }))}
-            />
-          </Form.Item>
+      {/* Main Side-by-Side Workspace */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'row',
+        gap: '16px',
+        height: 'calc(100vh - 180px)',
+        width: '100%',
+        padding: '14px 16px 0 16px',
+        boxSizing: 'border-box',
+        overflow: 'hidden'
+      }}>
+        {/* Left: Fixed Collapsible Parameters Panel */}
+        {!isCollapsed && (
+          <div style={{
+            width: '320px',
+            minWidth: '320px',
+            maxWidth: '320px',
+            height: '100%',
+            overflowY: 'auto'
+          }}>
+            <Card
+              title={<span style={{ fontSize: 13, fontWeight: 600 }}>Report Parameters</span>}
+              size="small"
+              className="shadow-sm"
+              style={{ borderRadius: 8, height: '100%' }}
+            >
+              <Form
+                form={form}
+                layout="vertical"
+                onFinish={handleSearch}
+                initialValues={{
+                  dateRange: [dayjs().startOf('month'), dayjs()]
+                }}
+              >
+                <Form.Item
+                  name="dateRange"
+                  label={<span style={{ fontSize: 12, fontWeight: 500 }}>Accounting Period</span>}
+                  rules={[{ required: true, message: 'Please select period range' }]}
+                >
+                  <RangePicker
+                    presets={rangePresets}
+                    format="DD-MMM-YYYY"
+                    style={{ width: '100%' }}
+                  />
+                </Form.Item>
 
-          <Form.Item name="itemId" label="Item / Product" style={{ minWidth: 240 }}>
-            <Select
-              allowClear
-              showSearch
-              placeholder="All Items"
-              optionFilterProp="children"
-              filterOption={(input, option) =>
-                ((option?.label ?? '') as string).toLowerCase().includes(input.toLowerCase())
+                <div style={{ marginTop: 24 }}>
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    icon={<SearchOutlined />}
+                    loading={loading}
+                    block
+                    style={{
+                      backgroundColor: '#16a34a',
+                      borderColor: '#16a34a',
+                      height: 38,
+                      fontWeight: 500
+                    }}
+                  >
+                    Generate Report
+                  </Button>
+                </div>
+              </Form>
+            </Card>
+          </div>
+        )}
+
+        {/* Right: Full-Height PDF Preview Workspace */}
+        <div style={{
+          flex: 1,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          minWidth: 0
+        }}>
+          <Card
+            size="small"
+            style={{
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              borderRadius: 8,
+              boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
+              overflow: 'hidden'
+            }}
+            styles={{
+              body: {
+                flex: 1,
+                padding: 0,
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                backgroundColor: '#525659'
               }
-              options={items.map(i => ({
-                value: i.id,
-                label: `${i.title} (${i.id})`
-              }))}
-            />
-          </Form.Item>
-
-          <Form.Item name="dateRange" label="Date Range" rules={[{ required: true, message: 'Please select dates' }]}>
-            <RangePicker presets={rangePresets} format="DD-MMM-YYYY" allowClear={false} />
-          </Form.Item>
-
-          <Form.Item>
-            <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
-              Generate
-            </Button>
-          </Form.Item>
-        </Form>
-      </Card>
-
-      {/* KPI Cards */}
-      {reportData && (
-        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          <Col xs={24} sm={12} md={6}>
-            <Card size="small" style={{ borderLeft: '4px solid #52c41a' }}>
-              <Statistic
-                title="Gross Profit"
-                value={reportData.grossProfit}
-                precision={2}
-                prefix={<DollarOutlined />}
-                suffix={<span style={{ fontSize: '14px', marginLeft: 8 }}>({reportData.grossMarginPct.toFixed(1)}%)</span>}
-                valueStyle={{ color: reportData.grossProfit >= 0 ? '#3f8600' : '#cf1322' }}
+            }}
+          >
+            {loading ? (
+              <div style={{
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#f8fafc'
+              }}>
+                <Spin size="large" />
+                <Text style={{ marginTop: 16, color: '#64748b' }}>Generating Profit by Item report...</Text>
+              </div>
+            ) : pdfUrl ? (
+              <iframe
+                src={pdfUrl}
+                title="Profit by Item Preview"
+                width="100%"
+                height="100%"
+                style={{ border: 'none', display: 'block' }}
               />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
-            <Card size="small" style={{ borderLeft: '4px solid #1677ff' }}>
-              <Statistic
-                title="Total Revenue (Sales)"
-                value={reportData.totalSales}
-                precision={2}
-                prefix="Rs."
-                valueStyle={{ color: '#0958d9' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
-            <Card size="small" style={{ borderLeft: '4px solid #faad14' }}>
-              <Statistic
-                title="Total Cost of Sales"
-                value={reportData.totalCost}
-                precision={2}
-                prefix="Rs."
-                valueStyle={{ color: '#d46b08' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
-            <Card size="small" style={{ borderLeft: '4px solid #722ed1' }}>
-              <Statistic
-                title="Products / Qty Sold"
-                value={reportData.itemCount}
-                prefix={<AppstoreOutlined />}
-                suffix={<span style={{ fontSize: '14px' }}>| {reportData.totalQtySold.toLocaleString()} units</span>}
-              />
-            </Card>
-          </Col>
-        </Row>
-      )}
-
-      {/* Main Tabs (Table Grid vs PDF Preview) */}
-      <Tabs
-        activeKey={activeTab}
-        onChange={(k) => setActiveTab(k as any)}
-        items={[
-          {
-            key: 'grid',
-            label: 'Interactive Grid',
-            children: (
-              <Card bodyStyle={{ padding: 0 }}>
-                <Table
-                  dataSource={reportData?.lines || []}
-                  columns={columns}
-                  rowKey="itemId"
-                  loading={loading}
-                  pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `Total ${t} items` }}
-                  locale={{ emptyText: <Empty description="No profit data for the selected period" /> }}
+            ) : (
+              <div style={{
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#f8fafc'
+              }}>
+                <Empty
+                  description={
+                    <span style={{ color: '#64748b' }}>
+                      Select period and click <b>Generate Report</b> to view document.
+                    </span>
+                  }
                 />
-              </Card>
-            )
-          },
-          {
-            key: 'pdf',
-            label: 'PDF Document Preview',
-            children: (
-              <Card bodyStyle={{ padding: 0, height: '750px' }}>
-                {pdfLoading ? (
-                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                    <Spin size="large" tip="Generating PDF report..." />
-                  </div>
-                ) : pdfBlobUrl ? (
-                  <iframe src={pdfBlobUrl} style={{ width: '100%', height: '750px', border: 'none' }} title="Profit By Item PDF" />
-                ) : (
-                  <Empty description="No PDF generated" />
-                )}
-              </Card>
-            )
-          }
-        ]}
-      />
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
     </div>
   );
 };
+
+export default ProfitByItem;
