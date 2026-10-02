@@ -258,7 +258,7 @@ export const CustomerBill: React.FC = () => {
 
     try {
       const [dataRes, blob] = await Promise.all([
-        reportService.getCustomerBill({ fromDate, toDate, account, dateBasis }),
+        reportService.getCustomerBill({ fromDate, toDate, account, dateBasis, isWandaLayout: hasVariablePackFeature }),
         reportService.getCustomerBillPdf({
           fromDate,
           toDate,

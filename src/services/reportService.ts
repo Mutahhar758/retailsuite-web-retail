@@ -211,7 +211,7 @@ export const reportService = {
     return response.data as Blob;
   },
 
-  async getCustomerBill(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }) {
+  async getCustomerBill(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate'; isWandaLayout?: boolean }) {
     const response = await api.get('/api/reports/customer-bill', { params });
     return response.data.body as CustomerBillResponse;
   },
