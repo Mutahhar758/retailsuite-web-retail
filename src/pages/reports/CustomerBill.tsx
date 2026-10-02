@@ -258,7 +258,7 @@ export const CustomerBill: React.FC = () => {
 
     try {
       const [dataRes, blob] = await Promise.all([
-        reportService.getCustomerBill({ fromDate, toDate, account, dateBasis, isWandaLayout: hasVariablePackFeature }),
+        reportService.getCustomerBill({ fromDate, toDate, account, dateBasis }),
         reportService.getCustomerBillPdf({
           fromDate,
           toDate,
@@ -266,7 +266,6 @@ export const CustomerBill: React.FC = () => {
           dateBasis,
           layout: targetLayout,
           qrEnabled: isQrOn,
-          isWandaLayout: hasVariablePackFeature
         })
       ]);
 
@@ -318,7 +317,6 @@ export const CustomerBill: React.FC = () => {
         layout: targetLayout,
         qrEnabled: isQrOn,
         onlyWithActivity,
-        isWandaLayout: hasVariablePackFeature
       });
 
       if (pdfBlobUrl) {
