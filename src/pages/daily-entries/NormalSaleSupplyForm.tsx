@@ -1,0 +1,949 @@
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import {
+  Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
+  Table, Space, message, InputNumber, Popconfirm, Tooltip
+} from 'antd';
+import {
+  PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
+  TruckOutlined, AppstoreOutlined, CopyOutlined
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useAppStore } from '../../stores/useAppStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY } from '../../stores/useSettingsStore';
+import { round } from '../../utils/numberUtils';
+import { saleSupplyService } from '../../services/saleSupplyService';
+import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
+import { narrationService, type NarrationDto } from '../../services/narrationService';
+import { inventoryService, type Item } from '../../services/inventoryService';
+import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
+import { customerService } from '../../services/customerService';
+import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+
+const { Title, Text } = Typography;
+
+export const NormalSaleSupplyForm: React.FC = () => {
+  const { licenses, currentTenantIdentifier } = useAppStore();
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
+  const { getSetting, fetchSettings } = useSettingsStore();
+  const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
+  const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
+
+  const { voucherNo } = useParams<{ voucherNo: string }>();
+  const isEdit = !!voucherNo && voucherNo !== 'new';
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+
+  const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
+  const [narrations, setNarrations] = useState<NarrationDto[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  const [supplyLines, setSupplyLines] = useState<any[]>([]);
+  const [supplyOrders, setSupplyOrders] = useState<SupplyOrder[]>([]);
+
+  // ── Calculated Totals ──────────────────────────────────────────────────────
+  const totals = useMemo(() => {
+    let totalQty = 0;
+    let totalSecQty = 0;
+    let totalDiscount = 0;
+    let totalAddLess = 0;
+    let totalAmount = 0;
+    let validCustomers = 0;
+
+    supplyLines.forEach(l => {
+      const q = Number(l.qty) || 0;
+      const sq = Number(l.secQty) || 0;
+      const disc = Number(l.discount) || 0;
+      const al = Number(l.addLess) || 0;
+      const amt = Number(l.amount) || 0;
+
+      totalQty += q;
+      totalSecQty += sq;
+      totalDiscount += disc;
+      totalAddLess += al;
+      totalAmount += amt;
+
+      if (l.customerId) {
+        validCustomers += 1;
+      }
+    });
+
+    return {
+      totalQty: round(totalQty, 2),
+      totalSecQty: round(totalSecQty, 2),
+      totalDiscount: round(totalDiscount, 2),
+      totalAddLess: round(totalAddLess, 2),
+      totalAmount: round(totalAmount, 2),
+      customerCount: validCustomers,
+      rowCount: supplyLines.length
+    };
+  }, [supplyLines]);
+
+  // ── Keyboard navigation ────────────────────────────────────────────────────
+  const pendingFocusRef = useRef<{ rowIdx: number; colKey: 'customerId' } | null>(null);
+
+  const handleAddRow = useCallback(() => {
+    setSupplyLines(prev => {
+      const newSeq = prev.length > 0 ? Math.max(...prev.map(l => l.seq)) + 1 : 1;
+      return [
+        ...prev,
+        { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0, secQty: 0, secRate: 0 }
+      ];
+    });
+  }, []);
+
+  const { getCellRef, handleCellKeyDown, focusCell } = useGridKeyboard({
+    rowCount: supplyLines.length,
+    hasSecondaryQty,
+    hasVariablePackFeature: false,
+    onAddRow: handleAddRow,
+    pendingFocusRef,
+  });
+
+  // Header field refs
+  const datePickerRef = useRef<any>(null);
+  const itemSelectRef = useRef<any>(null);
+  const supplyOrderSelectRef = useRef<any>(null);
+
+  // Form wrapper ref — receives global key events
+  const formWrapperRef = useRef<HTMLDivElement>(null);
+
+  // ── Global shortcut keys ───────────────────────────────────────────────────
+  const handleFormKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    switch (e.key) {
+      case 'F1':
+        e.preventDefault();
+        handleNew();
+        break;
+      case 'F2':
+        e.preventDefault();
+        itemSelectRef.current?.focus();
+        break;
+      case 'F5':
+        e.preventDefault();
+        handleSave();
+        break;
+      case 'Insert':
+        e.preventDefault();
+        pendingFocusRef.current = { rowIdx: supplyLines.length, colKey: 'customerId' };
+        handleAddRow();
+        break;
+      default:
+        break;
+    }
+  }, [supplyLines.length, handleAddRow]);
+
+  const handleNew = useCallback(() => {
+    form.resetFields();
+    form.setFieldsValue({ date: dayjs() });
+    setSupplyLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0, secQty: 0, secRate: 0 }]);
+    setTimeout(() => datePickerRef.current?.focus(), 50);
+  }, [form]);
+
+  useEffect(() => {
+    fetchSettings('Inventory');
+    chartOfAccountService.getCustomerAccounts().then(setCustomers);
+    narrationService.getActiveNarrationsLookup().then(setNarrations);
+    inventoryService.getItemsLookup().then(setItems);
+    supplyOrderService.getList().then(setSupplyOrders);
+
+    if (isEdit) {
+      fetchDetail();
+    } else {
+      const copyFrom = (location.state as any)?.copyFrom;
+      if (copyFrom) {
+        form.setFieldsValue({
+          date: dayjs(),
+          itemId: copyFrom.itemId,
+          narration: copyFrom.narration,
+          description: copyFrom.description,
+          supplyOrderMasterId: copyFrom.supplyOrderMasterId
+        });
+        setSupplyLines((copyFrom.lines || []).map((l: any) => ({
+          ...l,
+          key: Date.now() + l.seq,
+          secQty: l.secQty || 0,
+          secRate: l.secRate || 0,
+          secUnit: l.secUnit || null
+        })));
+      } else {
+        setSupplyLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0, secQty: 0, secRate: 0 }]);
+        form.setFieldsValue({ date: dayjs() });
+      }
+    }
+  }, [isEdit, voucherNo]);
+
+  const fetchDetail = async () => {
+    setLoading(true);
+    try {
+      const details = await saleSupplyService.getDetail(voucherNo!);
+      if (details.length > 0) {
+        const first = details[0];
+        form.setFieldsValue({
+          date: dayjs(first.date),
+          itemId: first.itemId,
+          narration: first.narrationId,
+          description: first.description,
+          supplyOrderMasterId: first.supplyOrderMasterId ?? undefined
+        });
+
+        setSupplyLines(details.map(d => ({
+          ...d,
+          key: d.seq,
+          customerId: d.customerId,
+          addLess: d.addLess,
+          secQty: d.secQty,
+          secRate: d.secRate,
+          secUnit: d.secUnit
+        })));
+      }
+    } catch {
+      message.error('Failed to fetch supply details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoadFromSupplyOrder = async (orderId: number) => {
+    if (!orderId || isEdit) return;
+    const masterItemId = form.getFieldValue('itemId');
+    const item = items.find(i => i.id === masterItemId);
+
+    setLoading(true);
+    try {
+      const [order, customSupplyItems] = await Promise.all([
+        supplyOrderService.getById(orderId),
+        masterItemId ? customerService.getSupplyItems({ itemId: masterItemId }) : Promise.resolve([])
+      ]);
+
+      const customerQtyMap = new Map<string, { qty: number; secQty?: number; rate?: number; addLess?: number; discount?: number }>();
+      if (customSupplyItems && Array.isArray(customSupplyItems)) {
+        customSupplyItems.forEach(ci => {
+          if (ci.customerAccountId) {
+            customerQtyMap.set(ci.customerAccountId, {
+              qty: ci.qty,
+              secQty: ci.secQty,
+              rate: ci.rate,
+              addLess: ci.addLess,
+              discount: ci.discount
+            });
+          }
+        });
+      }
+
+      if (order && order.details) {
+        const isSec = item?.defaultUnit === item?.secondaryUnit;
+        const rate = isSec ? (item?.secRate || 0) : (item?.priRate || 0);
+        const secRate = item?.secRate || 0;
+
+        const newLines = order.details.map((d, index) => {
+          const setting = customerQtyMap.get(d.customerId);
+          const qty = setting ? setting.qty : 1;
+          const secQty = setting ? (setting.secQty || 0) : 0;
+          const lineRate = setting?.rate != null ? setting.rate : rate;
+          const lineDiscount = setting?.discount != null ? setting.discount : 0;
+          const lineAddLess = setting?.addLess != null ? setting.addLess : 0;
+          const amount = round((qty * (lineRate - lineDiscount)) + lineAddLess + (secQty * secRate), 2);
+
+          return {
+            key: Date.now() + index,
+            seq: index + 1,
+            customerId: d.customerId,
+            unit: item?.defaultUnit || '',
+            qty: qty,
+            rate: lineRate,
+            discount: lineDiscount,
+            addLess: lineAddLess,
+            amount: amount,
+            secQty: secQty,
+            secRate: secRate,
+            secUnit: item?.secondaryUnit || ''
+          };
+        });
+        setSupplyLines(newLines);
+        message.success(`Loaded ${newLines.length} customers from ${order.title}`);
+      }
+    } catch {
+      message.error('Failed to load supply order');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleItemChange = async (newItemId: string) => {
+    const item = items.find(i => i.id === newItemId);
+    if (!item) return;
+
+    try {
+      const customSupplyItems = await customerService.getSupplyItems({ itemId: newItemId });
+      const customerQtyMap = new Map<string, { qty: number; secQty?: number; rate?: number; addLess?: number; discount?: number }>();
+      if (customSupplyItems && Array.isArray(customSupplyItems)) {
+        customSupplyItems.forEach(ci => {
+          if (ci.customerAccountId) {
+            customerQtyMap.set(ci.customerAccountId, {
+              qty: ci.qty,
+              secQty: ci.secQty,
+              rate: ci.rate,
+              addLess: ci.addLess,
+              discount: ci.discount
+            });
+          }
+        });
+      }
+
+      const isSec = item?.defaultUnit === item?.secondaryUnit;
+      const rate = isSec ? (item?.secRate || 0) : (item?.priRate || 0);
+      const secRate = item?.secRate || 0;
+
+      setSupplyLines(prev => prev.map(line => {
+        if (!line.customerId) return line;
+        const setting = customerQtyMap.get(line.customerId);
+        const qty = setting ? setting.qty : (line.qty || 1);
+        const secQty = setting ? (setting.secQty || 0) : (line.secQty || 0);
+        const lineRate = setting?.rate != null ? setting.rate : rate;
+        const lineDiscount = setting?.discount != null ? setting.discount : (line.discount || 0);
+        const lineAddLess = setting?.addLess != null ? setting.addLess : (line.addLess || 0);
+        const amount = round(qty * (lineRate - lineDiscount) + lineAddLess + (secQty * secRate), 2);
+
+        return {
+          ...line,
+          unit: item?.defaultUnit || line.unit,
+          qty,
+          secQty,
+          rate: lineRate,
+          discount: lineDiscount,
+          addLess: lineAddLess,
+          secRate,
+          secUnit: item?.secondaryUnit || line.secUnit,
+          amount
+        };
+      }));
+    } catch (err) {
+      console.error('Failed to load item default customer quantities', err);
+    }
+  };
+
+  const handleDatePickerKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      setTimeout(() => itemSelectRef.current?.focus(), 50);
+    }
+  }, []);
+
+  const handleItemSelectKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      setTimeout(() => supplyOrderSelectRef.current?.focus(), 50);
+    }
+  }, []);
+
+  const handleSupplyOrderKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      setTimeout(() => focusCell(0, 'customerId'), 50);
+    }
+  }, [focusCell]);
+
+  const handleRemoveRow = async (key: number, seq: number) => {
+    if (isEdit && typeof key === 'number' && key < 1000000000) {
+      try {
+        await saleSupplyService.deleteLine(voucherNo!, seq);
+      } catch {
+        message.error('Failed to delete line from server');
+        return;
+      }
+    }
+    setSupplyLines(supplyLines.filter(l => l.key !== key));
+  };
+
+  const updateLine = (key: number, field: string, value: any) => {
+    const newLines = supplyLines.map(l => {
+      if (l.key === key) {
+        const updated = { ...l, [field]: value };
+        const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
+        const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
+
+        if (field === 'discPercent') {
+          const rate = updated.rate || 0;
+          updated.discount = rate > 0 ? round(rate * (numVal / 100), 2) : 0;
+          updated.discPercent = numVal;
+        } else if (field === 'discount') {
+          const rate = updated.rate || 0;
+          updated.discount = numVal;
+          updated.discPercent = rate > 0 ? round((numVal / rate) * 100, 2) : 0;
+        } else if (field === 'rate') {
+          const rate = updated.rate || 0;
+          const disc = updated.discount || 0;
+          updated.discPercent = rate > 0 ? round((disc / rate) * 100, 2) : 0;
+        }
+
+        const qty = updated.qty || 0;
+        const rate = updated.rate || 0;
+        const disc = updated.discount || 0;
+        const addLess = updated.addLess || 0;
+        const secQty = updated.secQty || 0;
+        const secRate = updated.secRate || 0;
+        updated.amount = round(((qty * (rate - disc)) + addLess + (secQty * secRate)), 2);
+        return updated;
+      }
+      return l;
+    });
+    setSupplyLines(newLines);
+  };
+
+  const handleSave = async () => {
+    try {
+      const values = await form.validateFields();
+      const validLines = supplyLines.filter(l => l.customerId && l.qty > 0);
+
+      if (validLines.length === 0) {
+        message.error('Please add at least one customer');
+        return;
+      }
+
+      setLoading(true);
+      const request = {
+        ...values,
+        date: values.date.format('YYYY-MM-DD'),
+        supplyOrderMasterId: values.supplyOrderMasterId,
+        lines: validLines.map(l => {
+          const masterItemId = form.getFieldValue('itemId') || values.itemId;
+          const item = items.find(i => i.id === masterItemId);
+          return {
+            seq: l.seq,
+            customerId: l.customerId,
+            unit: item?.itemType === 'Service' ? null : (l.unit || null),
+            qty: l.qty,
+            rate: l.rate,
+            discount: l.discount,
+            addLess: l.addLess,
+            secUnit: l.secUnit || null,
+            secQty: l.secQty || 0,
+            secRate: l.secRate || 0
+          };
+        })
+      };
+
+      if (isEdit) {
+        await saleSupplyService.update(voucherNo!, request);
+        message.success('Sale supply updated successfully');
+      } else {
+        const newVno = await saleSupplyService.create(request);
+        message.success('Sale supply created successfully');
+        navigate(`/daily-entries/sale-supply/${newVno}`);
+      }
+    } catch {
+      message.error('Failed to save sale supply');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setLoading(true);
+    try {
+      await saleSupplyService.delete(voucherNo!);
+      message.success('Sale supply deleted successfully');
+      navigate('/daily-entries/sale-supply');
+    } catch {
+      message.error('Failed to delete sale supply');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCustomerChange = async (key: number, customerId: string) => {
+    const masterItemId = form.getFieldValue('itemId');
+    const item = items.find(i => i.id === masterItemId);
+    const isSec = item?.defaultUnit === item?.secondaryUnit;
+    const rate = isSec ? (item?.secRate || 0) : (item?.priRate || 0);
+    const secRate = item?.secRate || 0;
+
+    let defQty = 1;
+    let defSecQty = 0;
+
+    if (masterItemId && customerId) {
+      try {
+        const customItems = await customerService.getSupplyItems({ customerId, itemId: masterItemId });
+        if (customItems && customItems.length > 0) {
+          defQty = customItems[0].qty > 0 ? customItems[0].qty : 1;
+          defSecQty = customItems[0].secQty || 0;
+        }
+      } catch (err) {
+        console.error('Failed to get customer supply item default', err);
+      }
+    }
+
+    setSupplyLines(prev => prev.map(l => {
+      if (l.key === key) {
+        const amount = round(defQty * (rate - (l.discount || 0)) + (l.addLess || 0) + (defSecQty * secRate), 2);
+        return {
+          ...l,
+          customerId,
+          qty: defQty,
+          secQty: defSecQty,
+          rate,
+          secRate,
+          amount
+        };
+      }
+      return l;
+    }));
+  };
+
+  // ── Table columns ──────────────────────────────────────────────────────────
+  const columns = [
+    {
+      title: 'Customer',
+      dataIndex: 'customerId',
+      key: 'customerId',
+      render: (text: string, record: any, rowIdx: number) => (
+        <Select
+          ref={getCellRef(rowIdx, 'customerId')}
+          showSearch
+          style={{ width: '100%' }}
+          placeholder="Select Customer"
+          optionFilterProp="children"
+          value={text}
+          onChange={(val) => handleCustomerChange(record.key, val)}
+          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'customerId', e)}
+        >
+          {customers.map(c => (
+            <Select.Option key={c.account} value={c.account}>{c.title}</Select.Option>
+          ))}
+        </Select>
+      )
+    },
+    {
+      title: hasSecondaryQty ? 'Single Qty' : 'Qty',
+      dataIndex: 'qty',
+      key: 'qty',
+      width: 100,
+      render: (val: number, record: any, rowIdx: number) => (
+        <InputNumber
+          ref={getCellRef(rowIdx, 'qty')}
+          style={{ width: '100%' }}
+          value={val}
+          min={0}
+          precision={2}
+          keyboard={false}
+          controls={false}
+          onChange={(v) => updateLine(record.key, 'qty', v)}
+          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'qty', e)}
+        />
+      )
+    },
+    {
+      title: hasSecondaryQty ? 'Single Rate' : 'Rate',
+      dataIndex: 'rate',
+      key: 'rate',
+      width: 120,
+      render: (val: number, record: any, rowIdx: number) => (
+        <InputNumber
+          ref={getCellRef(rowIdx, 'rate')}
+          style={{ width: '100%' }}
+          value={val}
+          min={0}
+          precision={4}
+          step={0.01}
+          tabIndex={-1}
+          keyboard={false}
+          controls={false}
+          formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+          onChange={(v) => updateLine(record.key, 'rate', v)}
+          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'rate', e)}
+        />
+      )
+    },
+    ...(hasSecondaryQty ? [
+      {
+        title: 'Pack Qty',
+        dataIndex: 'secQty',
+        key: 'secQty',
+        width: 100,
+        render: (val: number, record: any, rowIdx: number) => (
+          <InputNumber
+            ref={getCellRef(rowIdx, 'secQty')}
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            keyboard={false}
+            controls={false}
+            onChange={(v) => updateLine(record.key, 'secQty', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secQty', e)}
+          />
+        )
+      },
+      {
+        title: 'Pack Rate',
+        dataIndex: 'secRate',
+        key: 'secRate',
+        width: 120,
+        render: (val: number, record: any, rowIdx: number) => (
+          <InputNumber
+            ref={getCellRef(rowIdx, 'secRate')}
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            precision={4}
+            step={0.01}
+            keyboard={false}
+            controls={false}
+            formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            onChange={(v) => updateLine(record.key, 'secRate', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secRate', e)}
+          />
+        )
+      }
+    ] : []),
+    {
+      title: 'Disc',
+      dataIndex: 'discount',
+      key: 'discount',
+      width: 100,
+      render: (val: number, record: any) => (
+        <InputNumber
+          ref={getCellRef(supplyLines.findIndex(l => l.key === record.key), 'discount')}
+          style={{ width: '100%' }}
+          value={val}
+          min={0}
+          tabIndex={-1}
+          keyboard={false}
+          controls={false}
+          onChange={(v) => updateLine(record.key, 'discount', v)}
+          onKeyDown={(e) => {
+            const rowIdx = supplyLines.findIndex(l => l.key === record.key);
+            handleCellKeyDown(rowIdx, 'discount', e);
+          }}
+        />
+      )
+    },
+    {
+      title: 'Disc (%)',
+      dataIndex: 'discPercent',
+      key: 'discPercent',
+      width: 100,
+      render: (val: number, record: any) => (
+        <InputNumber
+          style={{ width: '100%' }}
+          value={val != null ? val : (record.rate > 0 && record.discount > 0 ? round((record.discount / record.rate) * 100, 2) : 0)}
+          min={0}
+          max={100}
+          tabIndex={-1}
+          keyboard={false}
+          controls={false}
+          formatter={value => `${value}%`}
+          parser={value => value ? Number(value.replace('%', '')) : 0}
+          onChange={(v) => updateLine(record.key, 'discPercent', v)}
+        />
+      )
+    },
+    {
+      title: 'Add/Less',
+      dataIndex: 'addLess',
+      key: 'addLess',
+      width: 100,
+      render: (val: number, record: any, rowIdx: number) => (
+        <InputNumber
+          ref={getCellRef(rowIdx, 'addLess')}
+          style={{ width: '100%' }}
+          value={val}
+          tabIndex={-1}
+          keyboard={false}
+          controls={false}
+          onChange={(v) => updateLine(record.key, 'addLess', v)}
+          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'addLess', e)}
+        />
+      )
+    },
+    {
+      title: 'Amount',
+      dataIndex: 'amount',
+      key: 'amount',
+      width: 150,
+      align: 'right' as const,
+      render: (val: number) => <Text strong>{(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+    },
+    {
+      title: '',
+      key: 'actions',
+      width: 60,
+      render: (_: any, record: any) => (
+        <Button
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
+          onClick={() => handleRemoveRow(record.key, record.seq)}
+          disabled={supplyLines.length === 1}
+          tabIndex={-1}
+        />
+      )
+    }
+  ];
+
+  return (
+    <div
+      ref={formWrapperRef}
+      onKeyDown={handleFormKeyDown}
+      tabIndex={-1}
+      style={{ outline: 'none' }}
+    >
+      <Card className="shadow-sm border-gray-100 rounded-xl">
+        <div className="flex justify-between items-center mb-6">
+          <Space align="center">
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/daily-entries/sale-supply')} type="text" />
+            <TruckOutlined style={{ fontSize: 24, color: '#0ea5e9' }} />
+            <div>
+              <Title level={4} style={{ margin: 0 }}>
+                {isEdit ? `Edit Sale Supply: ${voucherNo}` : 'New Sale Supply'}
+              </Title>
+              <Text type="secondary">
+                {isEdit ? 'Modify multi-customer supply sheet' : 'Create a single-item, multi-customer supply sheet'}
+              </Text>
+            </div>
+          </Space>
+          <Space>
+            {isEdit && (
+              <Popconfirm title="Delete this sale supply?" onConfirm={handleDelete}>
+                <Button danger icon={<DeleteOutlined />}>Delete</Button>
+              </Popconfirm>
+            )}
+            {isEdit && (
+              <Button
+                icon={<CopyOutlined />}
+                onClick={() => {
+                  const values = form.getFieldsValue();
+                  navigate('/daily-entries/sale-supply/new', {
+                    state: {
+                      copyFrom: {
+                        itemId: values.itemId,
+                        narration: values.narration,
+                        description: values.description,
+                        supplyOrderMasterId: values.supplyOrderMasterId,
+                        lines: supplyLines
+                      }
+                    }
+                  });
+                }}
+              >
+                Copy as New
+              </Button>
+            )}
+            <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={loading}>
+              Save Supply
+            </Button>
+          </Space>
+        </div>
+
+        <Form form={form} layout="vertical">
+          <Row gutter={16}>
+            <Col xs={24} sm={8} lg={4}>
+              <Form.Item label="Voucher #" name="voucherNo">
+                <Input value={isEdit ? voucherNo : ''} readOnly style={{ backgroundColor: '#f5f5f5' }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={8} lg={4}>
+              <Form.Item label="Date" name="date" rules={[{ required: true }]}>
+                <DatePicker
+                  ref={datePickerRef}
+                  style={{ width: '100%' }}
+                  format="DD-MMM-YYYY"
+                  onKeyDown={handleDatePickerKeyDown}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={8} lg={6}>
+              <Form.Item label="Item (Master Item for all customers)" name="itemId" rules={[{ required: true }]}>
+                <Select
+                  ref={itemSelectRef}
+                  showSearch
+                  placeholder="Select Item"
+                  optionFilterProp="children"
+                  onChange={handleItemChange}
+                  onKeyDown={handleItemSelectKeyDown}
+                >
+                  {items.map(i => (
+                    <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} lg={5}>
+              <Form.Item label="Supply Order (Pre-fill)" name="supplyOrderMasterId">
+                <Select
+                  ref={supplyOrderSelectRef}
+                  showSearch
+                  placeholder="Select Order"
+                  optionFilterProp="children"
+                  onChange={handleLoadFromSupplyOrder}
+                  disabled={isEdit}
+                  allowClear
+                  onKeyDown={handleSupplyOrderKeyDown}
+                >
+                  {supplyOrders.map(o => (
+                    <Select.Option key={o.id} value={o.id}>{o.title}</Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} lg={5}>
+              <Form.Item label="Narration" name="narration">
+                <Select showSearch placeholder="Select Narration" optionFilterProp="children" allowClear>
+                  {narrations.map(n => (
+                    <Select.Option key={n.code} value={n.code}>{n.title}</Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={24}>
+              <Form.Item label="Description / Remarks" name="description">
+                <Input.TextArea rows={1} placeholder="Optional delivery or vehicle remarks" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Space>
+              <Text strong style={{ fontSize: 16 }}>Customer Delivery Lines</Text>
+              <Tooltip title="Each line represents delivery of the master item to a customer">
+                <AppstoreOutlined style={{ color: '#8c8c8c' }} />
+              </Tooltip>
+            </Space>
+            <Button
+              type="dashed"
+              onClick={() => {
+                pendingFocusRef.current = { rowIdx: supplyLines.length, colKey: 'customerId' };
+                handleAddRow();
+              }}
+              icon={<PlusOutlined />}
+            >
+              Add Customer
+            </Button>
+          </div>
+
+          <Table
+            dataSource={supplyLines}
+            columns={columns}
+            pagination={false}
+            rowKey="key"
+            size="small"
+            bordered
+            summary={() => {
+              let cellIndex = 0;
+              return (
+                <Table.Summary fixed="bottom">
+                  <Table.Summary.Row style={{ backgroundColor: '#f8fafc', fontWeight: 600 }}>
+                    <Table.Summary.Cell index={cellIndex++}>
+                      <Space>
+                        <Text strong>Total:</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          ({totals.customerCount} {totals.customerCount === 1 ? 'Customer' : 'Customers'})
+                        </Text>
+                      </Space>
+                    </Table.Summary.Cell>
+
+                    <Table.Summary.Cell index={cellIndex++} align="right">
+                      <Text strong style={{ color: '#0369a1' }}>
+                        {totals.totalQty.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                    </Table.Summary.Cell>
+
+                    <Table.Summary.Cell index={cellIndex++} />
+
+                    {hasSecondaryQty && (
+                      <>
+                        <Table.Summary.Cell index={cellIndex++} align="right">
+                          <Text strong>
+                            {totals.totalSecQty.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </Text>
+                        </Table.Summary.Cell>
+                        <Table.Summary.Cell index={cellIndex++} />
+                      </>
+                    )}
+
+                    <Table.Summary.Cell index={cellIndex++} align="right">
+                      <Text strong>
+                        {totals.totalDiscount > 0
+                          ? totals.totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                          : '-'}
+                      </Text>
+                    </Table.Summary.Cell>
+
+                    <Table.Summary.Cell index={cellIndex++} />
+
+                    <Table.Summary.Cell index={cellIndex++} align="right">
+                      <Text
+                        strong
+                        style={{
+                          color: totals.totalAddLess < 0 ? '#ef4444' : totals.totalAddLess > 0 ? '#10b981' : undefined
+                        }}
+                      >
+                        {totals.totalAddLess > 0
+                          ? `+${totals.totalAddLess.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : totals.totalAddLess.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                    </Table.Summary.Cell>
+
+                    <Table.Summary.Cell index={cellIndex++} align="right">
+                      <Text strong style={{ color: '#d97706', fontSize: 14 }}>
+                        {totals.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                    </Table.Summary.Cell>
+
+                    <Table.Summary.Cell index={cellIndex++} />
+                  </Table.Summary.Row>
+                </Table.Summary>
+              );
+            }}
+          />
+        </Form>
+
+        <div
+          style={{
+            marginTop: 8,
+            padding: '6px 12px',
+            background: '#fafafa',
+            border: '1px solid #f0f0f0',
+            borderRadius: 6,
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '12px',
+            alignItems: 'center',
+          }}
+        >
+          <span style={{ color: '#aaa', fontSize: 14 }}>⌨️</span>
+          {[
+            ['F1', 'New'],
+            ['F2', 'Item'],
+            ['F5', 'Save'],
+            ['Ins', 'Add Row'],
+            ['Enter', 'Next Field'],
+            ['↑↓←→', 'Navigate'],
+            ['Esc', 'Cancel Edit'],
+          ].map(([key, label]) => (
+            <span key={key} style={{ fontSize: 12, color: '#666', whiteSpace: 'nowrap' }}>
+              <kbd
+                style={{
+                  display: 'inline-block',
+                  padding: '1px 5px',
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                  background: '#fff',
+                  border: '1px solid #d9d9d9',
+                  borderRadius: 3,
+                  boxShadow: '0 1px 0 rgba(0,0,0,.1)',
+                  marginRight: 4,
+                }}
+              >
+                {key}
+              </kbd>
+              {label}
+            </span>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+};

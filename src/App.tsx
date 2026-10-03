@@ -13,22 +13,28 @@ import { ReceiptVoucherForm } from './pages/daily-entries/ReceiptVoucherForm';
 import { JournalVoucherList } from './pages/daily-entries/JournalVoucherList';
 import { JournalVoucherForm } from './pages/daily-entries/JournalVoucherForm';
 import { PurchaseList } from './pages/daily-entries/PurchaseList';
-import { PurchaseForm } from './pages/daily-entries/PurchaseForm';
+import { NormalPurchaseForm } from './pages/daily-entries/NormalPurchaseForm';
+import { WandaPurchaseForm } from './pages/daily-entries/WandaPurchaseForm';
 import { SaleList } from './pages/daily-entries/SaleList';
-import { SaleForm } from './pages/daily-entries/SaleForm';
+import { NormalSaleForm } from './pages/daily-entries/NormalSaleForm';
+import { WandaSaleForm } from './pages/daily-entries/WandaSaleForm';
 import { POSSaleForm } from './pages/daily-entries/POSSaleForm';
 import { SaleSupplyList } from './pages/daily-entries/SaleSupplyList';
-import { SaleSupplyForm } from './pages/daily-entries/SaleSupplyForm';
+import { NormalSaleSupplyForm } from './pages/daily-entries/NormalSaleSupplyForm';
+import { WandaSaleSupplyForm } from './pages/daily-entries/WandaSaleSupplyForm';
 import { NormalSupplyRegister } from './pages/daily-entries/NormalSupplyRegister';
 import { WandaSupplyRegister } from './pages/daily-entries/WandaSupplyRegister';
 import { SupplyOrderList } from './pages/daily-entries/SupplyOrderList';
 import { SupplyOrderForm } from './pages/daily-entries/SupplyOrderForm';
 import { SaleReturnList } from './pages/daily-entries/SaleReturnList';
-import { SaleReturnForm } from './pages/daily-entries/SaleReturnForm';
+import { NormalSaleReturnForm } from './pages/daily-entries/NormalSaleReturnForm';
+import { WandaSaleReturnForm } from './pages/daily-entries/WandaSaleReturnForm';
 import { PurchaseReturnList } from './pages/daily-entries/PurchaseReturnList';
-import { PurchaseReturnForm } from './pages/daily-entries/PurchaseReturnForm';
+import { NormalPurchaseReturnForm } from './pages/daily-entries/NormalPurchaseReturnForm';
+import { WandaPurchaseReturnForm } from './pages/daily-entries/WandaPurchaseReturnForm';
 import { StockAdjustmentList } from './pages/daily-entries/StockAdjustmentList';
-import { StockAdjustmentForm } from './pages/daily-entries/StockAdjustmentForm';
+import { NormalStockAdjustmentForm } from './pages/daily-entries/NormalStockAdjustmentForm';
+import { WandaStockAdjustmentForm } from './pages/daily-entries/WandaStockAdjustmentForm';
 import { BankReconciliation } from './pages/daily-entries/BankReconciliation';
 import { KitchenDisplay } from './pages/daily-entries/KitchenDisplay';
 import { AccountStatement } from './pages/reports/AccountStatement';
@@ -147,30 +153,30 @@ function App() {
             <Route path="daily-entries/journal-voucher/:voucherNo" element={<JournalVoucherForm />} />
             
             <Route path="daily-entries/purchase" element={<PurchaseList />} />
-            <Route path="daily-entries/purchase/new" element={<PurchaseForm />} />
-            <Route path="daily-entries/purchase/:voucherNo" element={<PurchaseForm />} />
+            <Route path="daily-entries/purchase/new" element={IsWandaFeature ? <WandaPurchaseForm /> : <NormalPurchaseForm />} />
+            <Route path="daily-entries/purchase/:voucherNo" element={IsWandaFeature ? <WandaPurchaseForm /> : <NormalPurchaseForm />} />
             
             <Route path="daily-entries/sale" element={<SaleList />} />
-            <Route path="daily-entries/sale/new" element={<SaleForm />} />
-            <Route path="daily-entries/sale/:voucherNo" element={<SaleForm />} />
+            <Route path="daily-entries/sale/new" element={IsWandaFeature ? <WandaSaleForm /> : <NormalSaleForm />} />
+            <Route path="daily-entries/sale/:voucherNo" element={IsWandaFeature ? <WandaSaleForm /> : <NormalSaleForm />} />
             <Route path="daily-entries/pos-sale" element={<POSSaleForm />} />
 
              <Route path="daily-entries/sale-supply" element={<SaleSupplyList />} />
-             <Route path="daily-entries/sale-supply/new" element={<SaleSupplyForm />} />
-             <Route path="daily-entries/sale-supply/:voucherNo" element={<SaleSupplyForm />} />
+             <Route path="daily-entries/sale-supply/new" element={IsWandaFeature ? <WandaSaleSupplyForm /> : <NormalSaleSupplyForm />} />
+             <Route path="daily-entries/sale-supply/:voucherNo" element={IsWandaFeature ? <WandaSaleSupplyForm /> : <NormalSaleSupplyForm />} />
              <Route path="daily-entries/customer-supply" element={IsWandaFeature ? <WandaSupplyRegister /> : <NormalSupplyRegister />} />
 
             <Route path="daily-entries/sale-return" element={<SaleReturnList />} />
-            <Route path="daily-entries/sale-return/new" element={<SaleReturnForm />} />
-            <Route path="daily-entries/sale-return/:voucherNo" element={<SaleReturnForm />} />
+            <Route path="daily-entries/sale-return/new" element={IsWandaFeature ? <WandaSaleReturnForm /> : <NormalSaleReturnForm />} />
+            <Route path="daily-entries/sale-return/:voucherNo" element={IsWandaFeature ? <WandaSaleReturnForm /> : <NormalSaleReturnForm />} />
 
             <Route path="daily-entries/purchase-return" element={<PurchaseReturnList />} />
-            <Route path="daily-entries/purchase-return/new" element={<PurchaseReturnForm />} />
-            <Route path="daily-entries/purchase-return/:voucherNo" element={<PurchaseReturnForm />} />
+            <Route path="daily-entries/purchase-return/new" element={IsWandaFeature ? <WandaPurchaseReturnForm /> : <NormalPurchaseReturnForm />} />
+            <Route path="daily-entries/purchase-return/:voucherNo" element={IsWandaFeature ? <WandaPurchaseReturnForm /> : <NormalPurchaseReturnForm />} />
 
             <Route path="daily-entries/stock-adjustment" element={<StockAdjustmentList />} />
-            <Route path="daily-entries/stock-adjustment/new" element={<StockAdjustmentForm />} />
-            <Route path="daily-entries/stock-adjustment/:voucherNo" element={<StockAdjustmentForm />} />
+            <Route path="daily-entries/stock-adjustment/new" element={IsWandaFeature ? <WandaStockAdjustmentForm /> : <NormalStockAdjustmentForm />} />
+            <Route path="daily-entries/stock-adjustment/:voucherNo" element={IsWandaFeature ? <WandaStockAdjustmentForm /> : <NormalStockAdjustmentForm />} />
             
             <Route path="daily-entries/bank-reconciliation" element={<BankReconciliation />} />
             <Route path="daily-entries/kitchen-display" element={<KitchenDisplay />} />
