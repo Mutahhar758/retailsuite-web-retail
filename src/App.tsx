@@ -19,7 +19,8 @@ import { SaleForm } from './pages/daily-entries/SaleForm';
 import { POSSaleForm } from './pages/daily-entries/POSSaleForm';
 import { SaleSupplyList } from './pages/daily-entries/SaleSupplyList';
 import { SaleSupplyForm } from './pages/daily-entries/SaleSupplyForm';
-import { CustomerSupplyRegister } from './pages/daily-entries/CustomerSupplyRegister';
+import { NormalSupplyRegister } from './pages/daily-entries/NormalSupplyRegister';
+import { WandaSupplyRegister } from './pages/daily-entries/WandaSupplyRegister';
 import { SupplyOrderList } from './pages/daily-entries/SupplyOrderList';
 import { SupplyOrderForm } from './pages/daily-entries/SupplyOrderForm';
 import { SaleReturnList } from './pages/daily-entries/SaleReturnList';
@@ -38,7 +39,8 @@ import { StockBalance } from './pages/reports/StockBalance';
 import { ItemLedger } from './pages/reports/ItemLedger';
 import { IncomeSummary } from './pages/reports/IncomeSummary';
 import { BalanceSheet } from './pages/reports/BalanceSheet';
-import { CustomerBill } from './pages/reports/CustomerBill';
+import { NormalCustomerBill } from './pages/reports/NormalCustomerBill';
+import { WandaCustomerBill } from './pages/reports/WandaCustomerBill';
 import { MilkComparisonReport } from './pages/reports/MilkComparisonReport';
 import { CustomerBalanceRecoveryReport } from './pages/reports/CustomerBalanceRecoveryReport';
 import { ProfitByCustomer } from './pages/reports/ProfitByCustomer';
@@ -83,8 +85,11 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
-  const { theme, currentTenantIdentifier } = useAppStore();
+  const { theme, currentTenantIdentifier, licenses } = useAppStore();
   const { setDeviceId, setPendingCount } = useOfflineStore();
+
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
+  const IsWandaFeature = currentOrg?.hasVariablePackFeature ?? false;
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -153,7 +158,7 @@ function App() {
              <Route path="daily-entries/sale-supply" element={<SaleSupplyList />} />
              <Route path="daily-entries/sale-supply/new" element={<SaleSupplyForm />} />
              <Route path="daily-entries/sale-supply/:voucherNo" element={<SaleSupplyForm />} />
-             <Route path="daily-entries/customer-supply" element={<CustomerSupplyRegister />} />
+             <Route path="daily-entries/customer-supply" element={IsWandaFeature ? <WandaSupplyRegister /> : <NormalSupplyRegister />} />
 
             <Route path="daily-entries/sale-return" element={<SaleReturnList />} />
             <Route path="daily-entries/sale-return/new" element={<SaleReturnForm />} />
@@ -179,7 +184,7 @@ function App() {
             <Route path="reports/item-ledger" element={<ItemLedger />} />
             <Route path="reports/income-summary" element={<IncomeSummary />} />
             <Route path="reports/balance-sheet" element={<BalanceSheet />} />
-            <Route path="reports/customer-bill" element={<CustomerBill />} />
+            <Route path="reports/customer-bill" element={IsWandaFeature ? <WandaCustomerBill /> : <NormalCustomerBill />} />
             <Route path="reports/milk-comparison" element={<MilkComparisonReport />} />
             <Route path="reports/customer-balance-recovery" element={<CustomerBalanceRecoveryReport />} />
             <Route path="reports/profit-by-customer" element={<ProfitByCustomer />} />
