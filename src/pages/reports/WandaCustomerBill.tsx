@@ -34,7 +34,7 @@ import dayjs from 'dayjs';
 import api from '../../services/api';
 import { reportService, type CustomerBillResponse } from '../../services/reportService';
 import { useAppStore } from '../../stores/useAppStore';
-import { useSettingsStore, BILL_QR_ENABLED_KEY, BILL_QR_ACCOUNT_NUMBER } from '../../stores/useSettingsStore';
+import { useSettingsStore, BILL_QR_ENABLED_KEY, BILL_QR_ACCOUNT_NUMBER, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 import { rangePresets } from '../../utils/datePresets';
 
 const { Title, Text } = Typography;
@@ -314,6 +314,9 @@ export const WandaCustomerBill: React.FC = () => {
     const toStr = dates?.[1]?.format('DD-MMM-YYYY') || '';
     const custTitle = selectedCustomer?.title || form.getFieldValue('account');
 
+    const enableCarriage = billData?.header?.enableCarriage ?? (getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true');
+    const colSpan = enableCarriage ? 9 : 8;
+
     let tableHtml = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
       <head>
@@ -340,7 +343,8 @@ export const WandaCustomerBill: React.FC = () => {
               <th>Bags</th>
               <th>Kg Rate</th>
               <th>Bag Rate</th>
-              <th>Carriage</th>
+              ${enableCarriage ? '<th>Carriage</th>' : ''}
+              <th>Add/Less</th>
               <th>Amount</th>
               <th>Receipt Date</th>
               <th>Receipt Amount</th>
@@ -359,6 +363,7 @@ export const WandaCustomerBill: React.FC = () => {
           <td class="num">${l.secQty || ''}</td>
           <td class="num">${l.rate || ''}</td>
           <td class="num">${l.secRate || ''}</td>
+          ${enableCarriage ? `<td class="num">${l.carriage || 0}</td>` : ''}
           <td class="num">${l.addLess || ''}</td>
           <td class="num bold">${l.amount || ''}</td>
           <td class="center">${l.receiptDate ? dayjs(l.receiptDate).format('DD/MM/YYYY') : ''}</td>
@@ -371,23 +376,23 @@ export const WandaCustomerBill: React.FC = () => {
           </tbody>
           <tfoot>
             <tr class="bold">
-              <td colspan="8" style="text-align: right;">Total Current Billed:</td>
+              <td colspan="${colSpan}" style="text-align: right;">Total Current Billed:</td>
               <td class="num">${billData.lines.reduce((acc, l) => acc + (l.amount || 0), 0)}</td>
               <td></td>
               <td class="num">${billData.lines.reduce((acc, l) => acc + (l.receiptAmount || 0), 0)}</td>
             </tr>
             <tr class="bold">
-              <td colspan="8" style="text-align: right;">Previous Balance (B/F):</td>
+              <td colspan="${colSpan}" style="text-align: right;">Previous Balance (B/F):</td>
               <td class="num">${billData.summary?.previousBalance || 0}</td>
               <td colspan="2"></td>
             </tr>
             <tr class="bold">
-              <td colspan="8" style="text-align: right;">Total Payments Received:</td>
+              <td colspan="${colSpan}" style="text-align: right;">Total Payments Received:</td>
               <td class="num">(${billData.summary?.payment || 0})</td>
               <td colspan="2"></td>
             </tr>
             <tr class="bold" style="font-size: 11pt;">
-              <td colspan="8" style="text-align: right;">NET DUE BALANCE:</td>
+              <td colspan="${colSpan}" style="text-align: right;">NET DUE BALANCE:</td>
               <td class="num" style="color: #b91c1c;">${billData.summary?.balance || 0}</td>
               <td colspan="2"></td>
             </tr>
@@ -406,27 +411,39 @@ export const WandaCustomerBill: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  // Export to CSV for Single Mode (11 Columns)
+  // Export to CSV for Single Mode
   const handleExportCsv = () => {
     if (!billData || !billData.lines) {
       message.warning('No bill data available to export');
       return;
     }
 
-    const headers = ['Date', 'VoucherNo', 'Description', 'Weight(Kg)', 'Bags', 'KgRate', 'BagRate', 'Carriage', 'Amount', 'ReceiptDate', 'ReceiptAmount'];
-    const rows = billData.lines.map(l => [
-      `"${dayjs(l.date).format('YYYY-MM-DD')}"`,
-      `"${l.vNo || ''}"`,
-      `"${(l.item || '').replace(/"/g, '""')}"`,
-      l.qty || '',
-      l.secQty || '',
-      l.rate || '',
-      l.secRate || '',
-      l.addLess || '',
-      l.amount || '',
-      l.receiptDate ? `"${dayjs(l.receiptDate).format('YYYY-MM-DD')}"` : '',
-      l.receiptAmount || ''
-    ]);
+    const enableCarriage = billData?.header?.enableCarriage ?? (getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true');
+    const headers = enableCarriage
+      ? ['Date', 'VoucherNo', 'Description', 'Weight(Kg)', 'Bags', 'KgRate', 'BagRate', 'Carriage', 'AddLess', 'Amount', 'ReceiptDate', 'ReceiptAmount']
+      : ['Date', 'VoucherNo', 'Description', 'Weight(Kg)', 'Bags', 'KgRate', 'BagRate', 'AddLess', 'Amount', 'ReceiptDate', 'ReceiptAmount'];
+
+    const rows = billData.lines.map(l => {
+      const baseRow: (string | number)[] = [
+        `"${dayjs(l.date).format('YYYY-MM-DD')}"`,
+        `"${l.vNo || ''}"`,
+        `"${(l.item || '').replace(/"/g, '""')}"`,
+        l.qty || '',
+        l.secQty || '',
+        l.rate || '',
+        l.secRate || ''
+      ];
+      if (enableCarriage) {
+        baseRow.push(l.carriage || 0);
+      }
+      baseRow.push(
+        l.addLess || '',
+        l.amount || '',
+        l.receiptDate ? `"${dayjs(l.receiptDate).format('YYYY-MM-DD')}"` : '',
+        l.receiptAmount || ''
+      );
+      return baseRow;
+    });
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);

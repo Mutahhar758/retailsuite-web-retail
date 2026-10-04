@@ -35,6 +35,7 @@ export interface SaleLine {
   qty: number;
   rate: number;
   discount: number;
+  carriage?: number;
   amount: number;
   cashReceipt: number;
   cashBack: number;
@@ -54,6 +55,7 @@ export interface SaleLineRequest {
   qty: number;
   rate: number;
   discount: number;
+  carriage?: number;
   secQty?: number;
   secRate?: number;
   secUnit?: string | null;

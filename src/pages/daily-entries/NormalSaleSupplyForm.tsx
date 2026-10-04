@@ -10,7 +10,7 @@ import {
 import dayjs from 'dayjs';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAppStore } from '../../stores/useAppStore';
-import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 import { saleSupplyService } from '../../services/saleSupplyService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
@@ -28,6 +28,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
   const { getSetting, fetchSettings } = useSettingsStore();
   const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
   const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
+  const enableCarriage = getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true';
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
@@ -48,6 +49,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
     let totalSecQty = 0;
     let totalDiscount = 0;
     let totalAddLess = 0;
+    let totalCarriage = 0;
     let totalAmount = 0;
     let validCustomers = 0;
 
@@ -56,12 +58,14 @@ export const NormalSaleSupplyForm: React.FC = () => {
       const sq = Number(l.secQty) || 0;
       const disc = Number(l.discount) || 0;
       const al = Number(l.addLess) || 0;
+      const c = Number(l.carriage) || 0;
       const amt = Number(l.amount) || 0;
 
       totalQty += q;
       totalSecQty += sq;
       totalDiscount += disc;
       totalAddLess += al;
+      totalCarriage += c;
       totalAmount += amt;
 
       if (l.customerId) {
@@ -74,6 +78,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
       totalSecQty: round(totalSecQty, 2),
       totalDiscount: round(totalDiscount, 2),
       totalAddLess: round(totalAddLess, 2),
+      totalCarriage: round(totalCarriage, 2),
       totalAmount: round(totalAmount, 2),
       customerCount: validCustomers,
       rowCount: supplyLines.length
@@ -88,7 +93,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
       const newSeq = prev.length > 0 ? Math.max(...prev.map(l => l.seq)) + 1 : 1;
       return [
         ...prev,
-        { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0, secQty: 0, secRate: 0 }
+        { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, addLess: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0 }
       ];
     });
   }, []);
@@ -193,6 +198,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
           key: d.seq,
           customerId: d.customerId,
           addLess: d.addLess,
+          carriage: d.carriage || 0,
           secQty: d.secQty,
           secRate: d.secRate,
           secUnit: d.secUnit
@@ -217,7 +223,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
         masterItemId ? customerService.getSupplyItems({ itemId: masterItemId }) : Promise.resolve([])
       ]);
 
-      const customerQtyMap = new Map<string, { qty: number; secQty?: number; rate?: number; addLess?: number; discount?: number }>();
+      const customerQtyMap = new Map<string, { qty: number; secQty?: number; rate?: number; addLess?: number; carriage?: number; discount?: number }>();
       if (customSupplyItems && Array.isArray(customSupplyItems)) {
         customSupplyItems.forEach(ci => {
           if (ci.customerAccountId) {
@@ -226,6 +232,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
               secQty: ci.secQty,
               rate: ci.rate,
               addLess: ci.addLess,
+              carriage: ci.carriage,
               discount: ci.discount
             });
           }
@@ -244,7 +251,8 @@ export const NormalSaleSupplyForm: React.FC = () => {
           const lineRate = setting?.rate != null ? setting.rate : rate;
           const lineDiscount = setting?.discount != null ? setting.discount : 0;
           const lineAddLess = setting?.addLess != null ? setting.addLess : 0;
-          const amount = round((qty * (lineRate - lineDiscount)) + lineAddLess + (secQty * secRate), 2);
+          const lineCarriage = setting?.carriage != null ? setting.carriage : 0;
+          const amount = round((qty * (lineRate - lineDiscount)) + lineCarriage + lineAddLess + (secQty * secRate), 2);
 
           return {
             key: Date.now() + index,
@@ -255,6 +263,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
             rate: lineRate,
             discount: lineDiscount,
             addLess: lineAddLess,
+            carriage: lineCarriage,
             amount: amount,
             secQty: secQty,
             secRate: secRate,
@@ -277,7 +286,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
 
     try {
       const customSupplyItems = await customerService.getSupplyItems({ itemId: newItemId });
-      const customerQtyMap = new Map<string, { qty: number; secQty?: number; rate?: number; addLess?: number; discount?: number }>();
+      const customerQtyMap = new Map<string, { qty: number; secQty?: number; rate?: number; addLess?: number; carriage?: number; discount?: number }>();
       if (customSupplyItems && Array.isArray(customSupplyItems)) {
         customSupplyItems.forEach(ci => {
           if (ci.customerAccountId) {
@@ -286,6 +295,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
               secQty: ci.secQty,
               rate: ci.rate,
               addLess: ci.addLess,
+              carriage: ci.carriage,
               discount: ci.discount
             });
           }
@@ -304,7 +314,8 @@ export const NormalSaleSupplyForm: React.FC = () => {
         const lineRate = setting?.rate != null ? setting.rate : rate;
         const lineDiscount = setting?.discount != null ? setting.discount : (line.discount || 0);
         const lineAddLess = setting?.addLess != null ? setting.addLess : (line.addLess || 0);
-        const amount = round(qty * (lineRate - lineDiscount) + lineAddLess + (secQty * secRate), 2);
+        const lineCarriage = setting?.carriage != null ? setting.carriage : (line.carriage || 0);
+        const amount = round(qty * (lineRate - lineDiscount) + lineCarriage + lineAddLess + (secQty * secRate), 2);
 
         return {
           ...line,
@@ -314,6 +325,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
           rate: lineRate,
           discount: lineDiscount,
           addLess: lineAddLess,
+          carriage: lineCarriage,
           secRate,
           secUnit: item?.secondaryUnit || line.secUnit,
           amount
@@ -380,9 +392,10 @@ export const NormalSaleSupplyForm: React.FC = () => {
         const rate = updated.rate || 0;
         const disc = updated.discount || 0;
         const addLess = updated.addLess || 0;
+        const carriage = updated.carriage || 0;
         const secQty = updated.secQty || 0;
         const secRate = updated.secRate || 0;
-        updated.amount = round(((qty * (rate - disc)) + addLess + (secQty * secRate)), 2);
+        updated.amount = round(((qty * (rate - disc)) + carriage + addLess + (secQty * secRate)), 2);
         return updated;
       }
       return l;
@@ -416,6 +429,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
             rate: l.rate,
             discount: l.discount,
             addLess: l.addLess,
+            carriage: l.carriage || 0,
             secUnit: l.secUnit || null,
             secQty: l.secQty || 0,
             secRate: l.secRate || 0
@@ -460,6 +474,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
 
     let defQty = 1;
     let defSecQty = 0;
+    let defCarriage = 0;
 
     if (masterItemId && customerId) {
       try {
@@ -467,6 +482,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
         if (customItems && customItems.length > 0) {
           defQty = customItems[0].qty > 0 ? customItems[0].qty : 1;
           defSecQty = customItems[0].secQty || 0;
+          if (customItems[0].carriage != null) defCarriage = customItems[0].carriage;
         }
       } catch (err) {
         console.error('Failed to get customer supply item default', err);
@@ -475,7 +491,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
 
     setSupplyLines(prev => prev.map(l => {
       if (l.key === key) {
-        const amount = round(defQty * (rate - (l.discount || 0)) + (l.addLess || 0) + (defSecQty * secRate), 2);
+        const amount = round(defQty * (rate - (l.discount || 0)) + defCarriage + (l.addLess || 0) + (defSecQty * secRate), 2);
         return {
           ...l,
           customerId,
@@ -483,6 +499,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
           secQty: defSecQty,
           rate,
           secRate,
+          carriage: defCarriage,
           amount
         };
       }
@@ -655,6 +672,26 @@ export const NormalSaleSupplyForm: React.FC = () => {
         />
       )
     },
+    ...(enableCarriage ? [
+      {
+        title: 'Carriage',
+        dataIndex: 'carriage',
+        key: 'carriage',
+        width: 100,
+        render: (val: number, record: any, rowIdx: number) => (
+          <InputNumber
+            ref={getCellRef(rowIdx, 'carriage')}
+            style={{ width: '100%' }}
+            value={val}
+            tabIndex={-1}
+            keyboard={false}
+            controls={false}
+            onChange={(v) => updateLine(record.key, 'carriage', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'carriage', e)}
+          />
+        )
+      }
+    ] : []),
     {
       title: 'Amount',
       dataIndex: 'amount',
@@ -885,6 +922,16 @@ export const NormalSaleSupplyForm: React.FC = () => {
                           : totals.totalAddLess.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </Text>
                     </Table.Summary.Cell>
+
+                    {enableCarriage && (
+                      <Table.Summary.Cell index={cellIndex++} align="right">
+                        <Text strong>
+                          {totals.totalCarriage > 0
+                            ? totals.totalCarriage.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            : '-'}
+                        </Text>
+                      </Table.Summary.Cell>
+                    )}
 
                     <Table.Summary.Cell index={cellIndex++} align="right">
                       <Text strong style={{ color: '#d97706', fontSize: 14 }}>

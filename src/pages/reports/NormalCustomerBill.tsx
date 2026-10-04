@@ -34,7 +34,7 @@ import dayjs from 'dayjs';
 import api from '../../services/api';
 import { reportService, type CustomerBillResponse } from '../../services/reportService';
 import { useAppStore } from '../../stores/useAppStore';
-import { useSettingsStore, BILL_QR_ENABLED_KEY, BILL_QR_ACCOUNT_NUMBER } from '../../stores/useSettingsStore';
+import { useSettingsStore, BILL_QR_ENABLED_KEY, BILL_QR_ACCOUNT_NUMBER, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 import { rangePresets } from '../../utils/datePresets';
 
 const { Title, Text } = Typography;
@@ -314,6 +314,9 @@ export const NormalCustomerBill: React.FC = () => {
     const toStr = dates?.[1]?.format('DD-MMM-YYYY') || '';
     const custTitle = selectedCustomer?.title || form.getFieldValue('account');
 
+    const enableCarriage = billData?.header?.enableCarriage ?? (getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true');
+    const colSpan = enableCarriage ? 9 : 8;
+
     let tableHtml = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
       <head>
@@ -340,6 +343,7 @@ export const NormalCustomerBill: React.FC = () => {
               <th>Unit</th>
               <th>Quantity</th>
               <th>Rate</th>
+              ${enableCarriage ? '<th>Carriage</th>' : ''}
               <th>Adj/Less</th>
               <th>Amount</th>
             </tr>
@@ -357,6 +361,7 @@ export const NormalCustomerBill: React.FC = () => {
           <td class="center">${l.unitTitle || ''}</td>
           <td class="num">${l.qty || 0}</td>
           <td class="num">${l.rate || 0}</td>
+          ${enableCarriage ? `<td class="num">${l.carriage || 0}</td>` : ''}
           <td class="num">${l.addLess || 0}</td>
           <td class="num bold">${l.amount || 0}</td>
         </tr>
@@ -367,19 +372,19 @@ export const NormalCustomerBill: React.FC = () => {
           </tbody>
           <tfoot>
             <tr class="bold">
-              <td colspan="8" style="text-align: right;">Total Current Billed:</td>
+              <td colspan="${colSpan}" style="text-align: right;">Total Current Billed:</td>
               <td class="num">${billData.lines.reduce((acc, l) => acc + (l.amount || 0), 0)}</td>
             </tr>
             <tr class="bold">
-              <td colspan="8" style="text-align: right;">Previous Balance (B/F):</td>
+              <td colspan="${colSpan}" style="text-align: right;">Previous Balance (B/F):</td>
               <td class="num">${billData.summary?.previousBalance || 0}</td>
             </tr>
             <tr class="bold">
-              <td colspan="8" style="text-align: right;">Payments Received:</td>
+              <td colspan="${colSpan}" style="text-align: right;">Payments Received:</td>
               <td class="num">(${billData.summary?.payment || 0})</td>
             </tr>
             <tr class="bold" style="font-size: 11pt;">
-              <td colspan="8" style="text-align: right;">NET DUE BALANCE:</td>
+              <td colspan="${colSpan}" style="text-align: right;">NET DUE BALANCE:</td>
               <td class="num" style="color: #b91c1c;">${billData.summary?.balance || 0}</td>
             </tr>
           </tfoot>
@@ -404,18 +409,28 @@ export const NormalCustomerBill: React.FC = () => {
       return;
     }
 
-    const headers = ['#', 'Date', 'VoucherNo', 'Item', 'Unit', 'Qty', 'Rate', 'AdjLess', 'Amount'];
-    const rows = billData.lines.map((l, idx) => [
-      idx + 1,
-      `"${dayjs(l.date).format('YYYY-MM-DD')}"`,
-      `"${l.vNo || ''}"`,
-      `"${(l.item || '').replace(/"/g, '""')}"`,
-      `"${l.unitTitle || ''}"`,
-      l.qty || 0,
-      l.rate || 0,
-      l.addLess || 0,
-      l.amount || 0
-    ]);
+    const enableCarriage = billData?.header?.enableCarriage ?? (getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true');
+    const headers = enableCarriage
+      ? ['#', 'Date', 'VoucherNo', 'Item', 'Unit', 'Qty', 'Rate', 'Carriage', 'AdjLess', 'Amount']
+      : ['#', 'Date', 'VoucherNo', 'Item', 'Unit', 'Qty', 'Rate', 'AdjLess', 'Amount'];
+
+    const rows = billData.lines.map((l, idx) => {
+      const baseRow = [
+        idx + 1,
+        `"${dayjs(l.date).format('YYYY-MM-DD')}"`,
+        `"${l.vNo || ''}"`,
+        `"${(l.item || '').replace(/"/g, '""')}"`,
+        `"${l.unitTitle || ''}"`,
+        l.qty || 0,
+        l.rate || 0
+      ];
+      if (enableCarriage) {
+        baseRow.push(l.carriage || 0);
+      }
+      baseRow.push(l.addLess || 0);
+      baseRow.push(l.amount || 0);
+      return baseRow;
+    });
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);

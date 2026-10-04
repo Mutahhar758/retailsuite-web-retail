@@ -88,6 +88,7 @@ export interface CustomerBillLine {
   qty: number;
   rate: number;
   addLess: number;
+  carriage?: number;
   amount: number;
   secQty?: number;
   secRate?: number;
@@ -98,6 +99,15 @@ export interface CustomerBillLine {
 }
 
 export interface CustomerBillResponse {
+  header?: {
+    account: string;
+    title: string;
+    address?: string;
+    phone?: string;
+    fromDate: string;
+    toDate: string;
+    enableCarriage?: boolean;
+  };
   lines: CustomerBillLine[];
   summary: {
     previousBalance: number;

@@ -41,7 +41,8 @@ import {
   BILL_QR_INCLUDE_AMOUNT,
   INVENTORY_ENABLE_SECONDARY_QTY_KEY,
   RESTAURANT_ENABLE_KOT_KEY,
-  SUPPLY_ENABLE_KEY
+  SUPPLY_ENABLE_KEY,
+  TRANSACTION_ENABLE_CARRIAGE_KEY
 } from '../../stores/useSettingsStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { PrinterSettings } from './PrinterSettings';
@@ -77,6 +78,7 @@ export const SettingsPage: React.FC = () => {
   // Local state for Inventory settings
   const [secondaryQtyEnabled, setSecondaryQtyEnabled] = useState(false);
   const [supplyEnabled, setSupplyEnabled] = useState(false);
+  const [carriageEnabled, setCarriageEnabled] = useState(false);
   const [savingInventory, setSavingInventory] = useState(false);
   const [inventoryLastSaved, setInventoryLastSaved] = useState<string | null>(null);
 
@@ -109,6 +111,7 @@ export const SettingsPage: React.FC = () => {
     const supplySetting = getSetting(SUPPLY_ENABLE_KEY, '');
     const orgSupply = licenses.find((l) => l.tenantIdentifier === currentTenantIdentifier)?.hasSupplyFeature ?? false;
     setSupplyEnabled(supplySetting !== '' ? supplySetting === 'true' : orgSupply);
+    setCarriageEnabled(getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true');
     setKotEnabled(getSetting(RESTAURANT_ENABLE_KOT_KEY, 'false') === 'true');
   }, [initialized, settings, getSetting]);
 
@@ -149,10 +152,16 @@ export const SettingsPage: React.FC = () => {
         'Enable Supply Orders, Sale Supply, and Customer Supply Register',
         'Supply'
       );
+      await updateSetting(
+        TRANSACTION_ENABLE_CARRIAGE_KEY,
+        carriageEnabled ? 'true' : 'false',
+        'Enable Carriage / Rent column in Sale Supplies, Customer Presets, and Reports',
+        'Transaction'
+      );
       setInventoryLastSaved(new Date().toLocaleTimeString());
-      message.success('Inventory settings saved successfully!');
+      message.success('Settings saved successfully!');
     } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Failed to save inventory settings.');
+      message.error(err?.response?.data?.message || 'Failed to save settings.');
     } finally {
       setSavingInventory(false);
     }
@@ -764,6 +773,27 @@ export const SettingsPage: React.FC = () => {
                             <Switch
                               checked={supplyEnabled}
                               onChange={setSupplyEnabled}
+                              checkedChildren="Enabled"
+                              unCheckedChildren="Disabled"
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+
+                      <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <Row align="middle" justify="space-between">
+                          <Col span={18}>
+                            <Text strong style={{ fontSize: 15, display: 'block' }}>
+                              Enable Carriage / Rent Field
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                              When enabled, a Carriage / Rent column is displayed in Normal and Wanda Sale Supply transactions, Customer Supply preset configuration, and Customer Bills.
+                            </Text>
+                          </Col>
+                          <Col span={6} style={{ textAlign: 'right' }}>
+                            <Switch
+                              checked={carriageEnabled}
+                              onChange={setCarriageEnabled}
                               checkedChildren="Enabled"
                               unCheckedChildren="Disabled"
                             />

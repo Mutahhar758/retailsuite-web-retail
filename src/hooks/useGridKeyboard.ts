@@ -16,7 +16,7 @@ export type GridColKey =
   | 'packing'
   | 'secRate';
 
-export type ArrowColKey = GridColKey | 'unit' | 'rate' | 'discount' | 'addLess';
+export type ArrowColKey = GridColKey | 'unit' | 'rate' | 'discount' | 'addLess' | 'carriage';
 
 interface UseGridKeyboardOptions {
   rowCount: number;
@@ -101,7 +101,7 @@ function buildArrowColumns(
     cols.push('secRate');
   }
 
-  cols.push('discount', 'addLess');
+  cols.push('discount', 'addLess', 'carriage');
   return cols;
 }
 

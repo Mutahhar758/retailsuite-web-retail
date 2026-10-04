@@ -13,6 +13,7 @@ import axios from 'axios';
 import { customerService, type CustomerCreateRequest, type CustomerUpdateRequest, type CustomerSupplyItemDto } from '../../services/customerService';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { useAppStore } from '../../stores/useAppStore';
+import { useSettingsStore, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 
 
 const { Title, Text } = Typography;
@@ -24,6 +25,7 @@ interface SupplyLineRow {
   secQty?: number;
   rate?: number | null;
   addLess?: number;
+  carriage?: number;
   discount?: number;
   discPercent?: number | null;
 }
@@ -37,6 +39,8 @@ export const CustomerForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const hasSecondaryQty = currentOrg?.hasSecondaryQty ?? false;
+  const { getSetting } = useSettingsStore();
+  const enableCarriage = getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true';
 
   const [loading, setLoading] = useState(false);
   const [customerTitle, setCustomerTitle] = useState<string>('');
@@ -94,6 +98,7 @@ export const CustomerForm: React.FC = () => {
                 secQty: si.secQty,
                 rate: si.rate,
                 addLess: si.addLess,
+                carriage: si.carriage != null ? Number(si.carriage) : 0,
                 discount: si.discount,
                 discPercent
               };
@@ -118,7 +123,7 @@ export const CustomerForm: React.FC = () => {
   const handleAddSupplyRow = () => {
     setSupplyLines([
       ...supplyLines,
-      { key: Date.now(), itemId: '', qty: 1, secQty: 0, rate: null, addLess: 0, discount: 0, discPercent: null }
+      { key: Date.now(), itemId: '', qty: 1, secQty: 0, rate: null, addLess: 0, carriage: 0, discount: 0, discPercent: null }
     ]);
   };
 
@@ -160,6 +165,7 @@ export const CustomerForm: React.FC = () => {
           secQty: l.secQty || 0,
           rate: l.rate != null && l.rate !== undefined ? l.rate : undefined,
           addLess: l.addLess || 0,
+          carriage: l.carriage || 0,
           discount: l.discount || 0
         }));
 
@@ -334,6 +340,20 @@ export const CustomerForm: React.FC = () => {
         />
       )
     },
+    ...(enableCarriage ? [{
+      title: 'Carriage',
+      dataIndex: 'carriage',
+      key: 'carriage',
+      width: 120,
+      render: (val: number, record: SupplyLineRow) => (
+        <InputNumber
+          style={{ width: '100%' }}
+          value={val}
+          precision={2}
+          onChange={(newVal) => updateSupplyRow(record.key, 'carriage', newVal || 0)}
+        />
+      )
+    }] : []),
     {
       title: 'Discount',
       dataIndex: 'discount',

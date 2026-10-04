@@ -16,6 +16,7 @@ import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../service
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { round } from '../../utils/numberUtils';
 import { rangePresets } from '../../utils/datePresets';
+import { useSettingsStore, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -25,6 +26,9 @@ interface EditableLine extends SaleSupplyLine {
 }
 
 export const NormalSupplyRegister: React.FC = () => {
+  const { getSetting } = useSettingsStore();
+  const enableCarriage = getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true';
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -109,14 +113,17 @@ export const NormalSupplyRegister: React.FC = () => {
           updated.discount = round(numVal, 2);
         } else if (field === 'addLess') {
           updated.addLess = round(numVal, 2);
+        } else if (field === 'carriage') {
+          updated.carriage = round(numVal, 2);
         }
 
         const qty = updated.qty || 0;
         const rate = updated.rate || 0;
         const disc = updated.discount || 0;
         const addLess = updated.addLess || 0;
+        const carriage = updated.carriage || 0;
 
-        updated.amount = round(((qty * (rate - disc)) + addLess), 2);
+        updated.amount = round(((qty * (rate - disc)) + carriage + addLess), 2);
         return updated;
       }
       return line;
@@ -135,6 +142,7 @@ export const NormalSupplyRegister: React.FC = () => {
         rate: record.rate,
         discount: record.discount,
         addLess: record.addLess,
+        carriage: record.carriage || 0,
         secQty: 0,
         secRate: 0,
         secUnit: null
@@ -173,6 +181,7 @@ export const NormalSupplyRegister: React.FC = () => {
           rate: l.rate,
           discount: l.discount,
           addLess: l.addLess,
+          carriage: l.carriage || 0,
           secQty: 0,
           secRate: 0,
           secUnit: null
@@ -235,6 +244,7 @@ export const NormalSupplyRegister: React.FC = () => {
           rate: d.rate,
           discount: d.discount,
           addLess: d.addLess,
+          carriage: d.carriage || 0,
           secQty: d.secQty,
           secRate: d.secRate,
           secUnit: d.secUnit || null
@@ -248,6 +258,7 @@ export const NormalSupplyRegister: React.FC = () => {
           rate: values.rate || 0,
           discount: values.discount || 0,
           addLess: values.addLess || 0,
+          carriage: values.carriage || 0,
           secQty: 0,
           secRate: 0,
           secUnit: null
@@ -272,6 +283,7 @@ export const NormalSupplyRegister: React.FC = () => {
             rate: values.rate || 0,
             discount: values.discount || 0,
             addLess: values.addLess || 0,
+            carriage: values.carriage || 0,
             secQty: 0,
             secRate: 0,
             secUnit: null
@@ -420,6 +432,21 @@ export const NormalSupplyRegister: React.FC = () => {
         />
       ),
     },
+    ...(enableCarriage ? [{
+      title: 'Carriage',
+      dataIndex: 'carriage',
+      key: 'carriage',
+      width: 110,
+      render: (val: number, record: EditableLine) => (
+        <InputNumber
+          size="middle"
+          precision={2}
+          value={val || 0}
+          style={{ width: '100%', fontSize: '13px' }}
+          onChange={(newVal) => handleCellChange(`${record.voucherNo}-${record.seq}`, 'carriage', newVal)}
+        />
+      ),
+    }] : []),
     {
       title: 'Amount (Rs.)',
       dataIndex: 'amount',

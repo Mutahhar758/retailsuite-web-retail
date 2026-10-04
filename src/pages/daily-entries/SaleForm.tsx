@@ -17,7 +17,7 @@ import type { NarrationDto } from '../../services/narrationService';
 import type { Item } from '../../services/inventoryService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useAppStore } from '../../stores/useAppStore';
-import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 
 const { Title, Text } = Typography;
@@ -41,6 +41,7 @@ export const SaleForm: React.FC = () => {
   const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
   const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
   const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
+  const enableCarriage = getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true';
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
@@ -69,7 +70,7 @@ export const SaleForm: React.FC = () => {
       cashReceipt: 0,
       cashBack: 0,
       date: dayjs(),
-      saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]
+      saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]
     }];
   });
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
@@ -245,7 +246,7 @@ export const SaleForm: React.FC = () => {
     if (tabs.length === 1) {
       form.resetFields();
       form.setFieldsValue({ date: dayjs() });
-      setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }]);
+      setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0 }]);
       focusCustomerSelect();
     } else {
       const tabToCloseIndex = tabs.findIndex(t => t.id === tabToCloseId);
@@ -300,13 +301,14 @@ export const SaleForm: React.FC = () => {
           ...l,
           key: Date.now() + idx,
           seq: idx + 1,
+          carriage: l.carriage || 0,
           secQty: l.secQty || 0,
           secRate: l.secRate || 0,
           secUnit: l.secUnit || null,
           packQty: l.packQty || 0,
           packing: l.packing || 0
         }));
-        setSaleLines(initialLines.length > 0 ? initialLines : [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
+        setSaleLines(initialLines.length > 0 ? initialLines : [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
         setTabs(prev => prev.map((t, idx) => idx === 0 ? {
           ...t,
           account: copyFrom.account,
@@ -318,7 +320,7 @@ export const SaleForm: React.FC = () => {
           saleLines: initialLines.length > 0 ? initialLines : t.saleLines
         } : t));
       } else {
-        setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
+        setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
         form.setFieldsValue({ date: dayjs() });
       }
     }
@@ -332,7 +334,7 @@ export const SaleForm: React.FC = () => {
         offlineCacheService.getNarrations(),
         offlineCacheService.getItems(),
       ]);
-      fetchSettings('Inventory');
+      fetchSettings();
       setCustomers(customers);
       setNarrations(narrations);
       setItems(items);
@@ -368,8 +370,9 @@ export const SaleForm: React.FC = () => {
             key: d.seq,
             rate: d.rate,
             discount: d.discount,
+            carriage: d.carriage || 0,
             amount: hasVariablePackFeature
-              ? d.qty * (d.rate - (d.discount || 0))
+              ? (d.qty * (d.rate - (d.discount || 0))) + (d.carriage || 0)
               : d.amount,
             secUnit: d.secUnit,
             secQty: d.secQty,
@@ -444,7 +447,7 @@ export const SaleForm: React.FC = () => {
   const handleAddRow = () => {
     setSaleLines(prev => {
       const newSeq = prev.length > 0 ? Math.max(...prev.map(l => l.seq)) + 1 : 1;
-      return [...prev, { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }];
+      return [...prev, { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0 }];
     });
     focusLastRowSelect();
   };
@@ -543,10 +546,22 @@ export const SaleForm: React.FC = () => {
             updated.secRate = round(bagRate, 4);
           }
 
+          if (field === 'discount') {
+            updated.discount = numVal;
+          }
+          if (field === 'carriage') {
+            updated.carriage = numVal;
+          }
+
           const qty = updated.qty || 0;
           const rate = updated.rate || 0;
           const disc = updated.discount || 0;
-          updated.amount = round(qty * (rate - disc), 2);
+          const carriage = updated.carriage || 0;
+          const secQty = updated.secQty || 0;
+          const secRate = updated.secRate || 0;
+          updated.amount = hasVariablePackFeature
+            ? round((qty * (rate - disc)) + carriage, 2)
+            : round((qty * (rate - disc)) + carriage + (secQty * secRate), 2);
           return updated;
         }
         return l;
@@ -555,7 +570,7 @@ export const SaleForm: React.FC = () => {
       const lastRow = newLines[newLines.length - 1];
       if (lastRow.key === key && lastRow.itemId) {
         const newSeq = newLines.length > 0 ? Math.max(...newLines.map(l => l.seq)) + 1 : 1;
-        return [...newLines, { key: Date.now() + 1, seq: newSeq, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }];
+        return [...newLines, { key: Date.now() + 1, seq: newSeq, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }];
       }
 
       return newLines;
@@ -617,6 +632,7 @@ export const SaleForm: React.FC = () => {
             qty: l.qty,
             rate: l.rate,
             discount: l.discount,
+            carriage: l.carriage || 0,
             secUnit: l.secUnit || null,
             secQty: l.secQty || 0,
             secRate: l.secRate || 0,
@@ -836,6 +852,27 @@ export const SaleForm: React.FC = () => {
         />
       )
     },
+    ...(enableCarriage ? [
+      {
+        title: 'Carriage',
+        dataIndex: 'carriage',
+        key: 'carriage',
+        width: 90,
+        render: (val: number, record: any) => (
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            precision={2}
+            step={1}
+            formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            parser={value => value?.replace(/[^0-9.]/g, '') as any}
+            onChange={(v) => updateLine(record.key, 'carriage', v)}
+            tabIndex={-1}
+          />
+        )
+      }
+    ] : []),
     {
       title: 'Amount',
       dataIndex: 'amount',

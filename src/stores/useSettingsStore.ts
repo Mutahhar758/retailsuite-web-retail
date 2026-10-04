@@ -38,6 +38,9 @@ export const RESTAURANT_ENABLE_KOT_KEY = 'Restaurant.EnableKot';
 // Supply setting keys
 export const SUPPLY_ENABLE_KEY = 'Supply.EnableSupply';
 
+// Transaction setting keys
+export const TRANSACTION_ENABLE_CARRIAGE_KEY = 'Transaction.EnableCarriage';
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: {
     [BILL_THANK_YOU_KEY]: BILL_THANK_YOU_DEFAULT,

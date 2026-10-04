@@ -12,6 +12,8 @@ export interface CustomerSupplyItemDto {
   addLess?: number;
   /** Override discount (Rs). undefined/null means treat as 0. */
   discount?: number;
+  /** Carriage / Rent per item. undefined/null means treat as 0. */
+  carriage?: number;
 }
 
 

@@ -16,6 +16,7 @@ import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../service
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { round } from '../../utils/numberUtils';
 import { rangePresets } from '../../utils/datePresets';
+import { useSettingsStore, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -27,6 +28,9 @@ interface EditableWandaLine extends SaleSupplyLine {
 }
 
 export const WandaSupplyRegister: React.FC = () => {
+  const { getSetting } = useSettingsStore();
+  const enableCarriage = getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true';
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -137,6 +141,8 @@ export const WandaSupplyRegister: React.FC = () => {
           updated.discount = round(numVal, 2);
         } else if (field === 'addLess') {
           updated.addLess = round(numVal, 2);
+        } else if (field === 'carriage') {
+          updated.carriage = round(numVal, 2);
         }
 
         updated.qty = round(kgQty, 2);
@@ -147,10 +153,11 @@ export const WandaSupplyRegister: React.FC = () => {
         updated.secRate = round(bagRate, 4);
 
         const disc = updated.discount || 0;
-        const carriage = updated.addLess || 0;
+        const carriage = updated.carriage || 0;
+        const addLess = updated.addLess || 0;
 
-        // Wanda line amount: Weight * (Rate - Disc) + Carriage
-        updated.amount = round(((updated.qty * (updated.rate - disc)) + carriage), 2);
+        // Wanda line amount: Weight * (Rate - Disc) + Carriage + AddLess
+        updated.amount = round(((updated.qty * (updated.rate - disc)) + carriage + addLess), 2);
         return updated;
       }
       return line;
@@ -169,6 +176,7 @@ export const WandaSupplyRegister: React.FC = () => {
         rate: record.rate,
         discount: record.discount,
         addLess: record.addLess,
+        carriage: record.carriage || 0,
         secQty: record.secQty,
         secRate: record.secRate,
         secUnit: record.secUnit || 'Bags'
@@ -207,6 +215,7 @@ export const WandaSupplyRegister: React.FC = () => {
           rate: l.rate,
           discount: l.discount,
           addLess: l.addLess,
+          carriage: l.carriage || 0,
           secQty: l.secQty,
           secRate: l.secRate,
           secUnit: l.secUnit || 'Bags'
@@ -269,6 +278,7 @@ export const WandaSupplyRegister: React.FC = () => {
           rate: d.rate,
           discount: d.discount,
           addLess: d.addLess,
+          carriage: d.carriage || 0,
           secQty: d.secQty,
           secRate: d.secRate,
           secUnit: 'Bags'
@@ -282,6 +292,7 @@ export const WandaSupplyRegister: React.FC = () => {
           rate: values.rate || 0,
           discount: values.discount || 0,
           addLess: values.addLess || 0,
+          carriage: values.carriage || 0,
           secQty: values.secQty || 0,
           secRate: values.secRate || 0,
           secUnit: 'Bags'
@@ -306,6 +317,7 @@ export const WandaSupplyRegister: React.FC = () => {
             rate: values.rate || 0,
             discount: values.discount || 0,
             addLess: values.addLess || 0,
+            carriage: values.carriage || 0,
             secQty: values.secQty || 0,
             secRate: values.secRate || 0,
             secUnit: 'Bags'
@@ -474,7 +486,7 @@ export const WandaSupplyRegister: React.FC = () => {
       ),
     },
     {
-      title: 'Carriage',
+      title: 'Add / Less',
       dataIndex: 'addLess',
       key: 'addLess',
       width: 105,
@@ -488,6 +500,21 @@ export const WandaSupplyRegister: React.FC = () => {
         />
       ),
     },
+    ...(enableCarriage ? [{
+      title: 'Carriage',
+      dataIndex: 'carriage',
+      key: 'carriage',
+      width: 105,
+      render: (val: number, record: EditableWandaLine) => (
+        <InputNumber
+          size="middle"
+          precision={2}
+          value={val || 0}
+          style={{ width: '100%', fontSize: '13px' }}
+          onChange={(newVal) => handleCellChange(`${record.voucherNo}-${record.seq}`, 'carriage', newVal)}
+        />
+      ),
+    }] : []),
     {
       title: 'Amount (Rs.)',
       dataIndex: 'amount',
