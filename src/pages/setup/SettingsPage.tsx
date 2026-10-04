@@ -27,7 +27,8 @@ import {
   SmileOutlined,
   QrcodeOutlined,
   BankOutlined,
-  AppstoreOutlined
+  AppstoreOutlined,
+  CoffeeOutlined
 } from '@ant-design/icons';
 import {
   useSettingsStore,
@@ -38,7 +39,8 @@ import {
   BILL_QR_ACCOUNT_NUMBER,
   BILL_QR_BANK_NAME,
   BILL_QR_INCLUDE_AMOUNT,
-  INVENTORY_ENABLE_SECONDARY_QTY_KEY
+  INVENTORY_ENABLE_SECONDARY_QTY_KEY,
+  RESTAURANT_ENABLE_KOT_KEY
 } from '../../stores/useSettingsStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { PrinterSettings } from './PrinterSettings';
@@ -76,6 +78,11 @@ export const SettingsPage: React.FC = () => {
   const [savingInventory, setSavingInventory] = useState(false);
   const [inventoryLastSaved, setInventoryLastSaved] = useState<string | null>(null);
 
+  // Local state for Restaurant & KOT settings
+  const [kotEnabled, setKotEnabled] = useState(false);
+  const [savingKot, setSavingKot] = useState(false);
+  const [kotLastSaved, setKotLastSaved] = useState<string | null>(null);
+
   // Initialize and load settings from API when page mounts or tenant changes
   useEffect(() => {
     fetchSettings();
@@ -97,6 +104,7 @@ export const SettingsPage: React.FC = () => {
     setQrBankName(getSetting(BILL_QR_BANK_NAME, ''));
     setQrIncludeAmount(getSetting(BILL_QR_INCLUDE_AMOUNT, 'false') === 'true');
     setSecondaryQtyEnabled(getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, 'false') === 'true');
+    setKotEnabled(getSetting(RESTAURANT_ENABLE_KOT_KEY, 'false') === 'true');
   }, [initialized, settings, getSetting]);
 
   const handleSaveThankYou = async () => {
@@ -136,6 +144,24 @@ export const SettingsPage: React.FC = () => {
       message.error(err?.response?.data?.message || 'Failed to save inventory settings.');
     } finally {
       setSavingInventory(false);
+    }
+  };
+
+  const handleSaveRestaurant = async () => {
+    setSavingKot(true);
+    try {
+      await updateSetting(
+        RESTAURANT_ENABLE_KOT_KEY,
+        kotEnabled ? 'true' : 'false',
+        'Enable Kitchen Order Tickets (KOT), Dining Tables, and Kitchen Display System (KDS)',
+        'Restaurant'
+      );
+      setKotLastSaved(new Date().toLocaleTimeString());
+      message.success('Restaurant & KOT settings saved successfully!');
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to save restaurant settings.');
+    } finally {
+      setSavingKot(false);
     }
   };
 
@@ -723,6 +749,77 @@ export const SettingsPage: React.FC = () => {
                           style={{ fontWeight: 600, borderRadius: 8, paddingLeft: 24, paddingRight: 24 }}
                         >
                           Save Inventory Settings
+                        </Button>
+                      </div>
+                    </Card>
+                  </Col>
+                </Row>
+              </Spin>
+            )
+          },
+          {
+            key: 'restaurant-settings',
+            label: (
+              <span>
+                <CoffeeOutlined style={{ marginRight: 8 }} />
+                Restaurant & KOT
+              </span>
+            ),
+            children: (
+              <Spin spinning={loading && !initialized}>
+                <Row gutter={[24, 24]}>
+                  <Col xs={24} lg={16}>
+                    <Card
+                      className="shadow-sm border-gray-100 rounded-xl"
+                      title={
+                        <Space>
+                          <CoffeeOutlined style={{ color: '#fa8c16', fontSize: 18 }} />
+                          <span style={{ fontWeight: 600 }}>Restaurant & KOT Features</span>
+                        </Space>
+                      }
+                      extra={
+                        kotLastSaved && (
+                          <Tag icon={<CheckCircleOutlined />} color="success">
+                            Saved at {kotLastSaved}
+                          </Tag>
+                        )
+                      }
+                    >
+                      <Paragraph type="secondary" style={{ marginBottom: 20 }}>
+                        Configure dining table management, Kitchen Order Tickets (KOT), and Kitchen Display System (KDS) for restaurant or cafe workflows.
+                      </Paragraph>
+
+                      <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <Row align="middle" justify="space-between">
+                          <Col span={18}>
+                            <Text strong style={{ fontSize: 15, display: 'block' }}>
+                              Enable Kitchen Order Tickets (KOT) & Dining Tables
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                              When enabled, the POS Touch interface displays Dining Table assignment and KOT printing. The Dining Tables setup menu and Kitchen Display (KDS) menu become available in navigation.
+                            </Text>
+                          </Col>
+                          <Col span={6} style={{ textAlign: 'right' }}>
+                            <Switch
+                              checked={kotEnabled}
+                              onChange={setKotEnabled}
+                              checkedChildren="Enabled"
+                              unCheckedChildren="Disabled"
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+
+                      <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
+                        <Button
+                          type="primary"
+                          icon={<SaveOutlined />}
+                          size="large"
+                          loading={savingKot}
+                          onClick={handleSaveRestaurant}
+                          style={{ fontWeight: 600, borderRadius: 8, paddingLeft: 24, paddingRight: 24 }}
+                        >
+                          Save Restaurant Settings
                         </Button>
                       </div>
                     </Card>

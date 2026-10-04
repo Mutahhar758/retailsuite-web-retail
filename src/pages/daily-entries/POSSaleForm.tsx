@@ -33,7 +33,7 @@ import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCa
 import type { NarrationDto } from '../../services/narrationService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { kotService, type DiningTableDto, type KotOrderResponse } from '../../services/kotService';
-import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT } from '../../stores/useSettingsStore';
+import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT, RESTAURANT_ENABLE_KOT_KEY } from '../../stores/useSettingsStore';
 
 const { Title, Text } = Typography;
 
@@ -68,10 +68,11 @@ export const POSSaleForm: React.FC = () => {
   const { currentTenantIdentifier, licenses } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const currentOrgName = currentOrg?.name || 'Retail Store';
-  const hasKotFeature = currentOrg?.hasKotFeature ?? false;
   const { isOnline } = useNetworkStatus();
   const [isOfflineSaved, setIsOfflineSaved] = useState(false);
   const { getSetting, fetchSettings, initialized: settingsInitialized } = useSettingsStore();
+  const settingKot = getSetting(RESTAURANT_ENABLE_KOT_KEY, '');
+  const hasKotFeature = settingKot !== '' ? settingKot === 'true' : (currentOrg?.hasKotFeature ?? false);
 
   useEffect(() => {
     if (!settingsInitialized) {
