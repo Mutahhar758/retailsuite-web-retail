@@ -47,7 +47,7 @@ import { IncomeSummary } from './pages/reports/IncomeSummary';
 import { BalanceSheet } from './pages/reports/BalanceSheet';
 import { NormalCustomerBill } from './pages/reports/NormalCustomerBill';
 import { WandaCustomerBill } from './pages/reports/WandaCustomerBill';
-import { MilkComparisonReport } from './pages/reports/MilkComparisonReport';
+import { PurchaseSupplyComparisonReport } from './pages/reports/PurchaseSupplyComparisonReport';
 import { CustomerBalanceRecoveryReport } from './pages/reports/CustomerBalanceRecoveryReport';
 import { ProfitByCustomer } from './pages/reports/ProfitByCustomer';
 import { ProfitByItem } from './pages/reports/ProfitByItem';
@@ -191,7 +191,8 @@ function App() {
             <Route path="reports/income-summary" element={<IncomeSummary />} />
             <Route path="reports/balance-sheet" element={<BalanceSheet />} />
             <Route path="reports/customer-bill" element={IsWandaFeature ? <WandaCustomerBill /> : <NormalCustomerBill />} />
-            <Route path="reports/milk-comparison" element={<MilkComparisonReport />} />
+            <Route path="reports/purchase-supply-comparison" element={<PurchaseSupplyComparisonReport />} />
+            <Route path="reports/milk-comparison" element={<PurchaseSupplyComparisonReport />} />
             <Route path="reports/customer-balance-recovery" element={<CustomerBalanceRecoveryReport />} />
             <Route path="reports/profit-by-customer" element={<ProfitByCustomer />} />
             <Route path="reports/profit-by-item" element={<ProfitByItem />} />

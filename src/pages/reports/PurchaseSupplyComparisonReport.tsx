@@ -34,7 +34,7 @@ import { rangePresets } from '../../utils/datePresets';
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
-export const MilkComparisonReport: React.FC = () => {
+export const PurchaseSupplyComparisonReport: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -53,13 +53,7 @@ export const MilkComparisonReport: React.FC = () => {
   useEffect(() => {
     inventoryService.getItemsLookup().then(res => {
       setItems(res || []);
-      const milkItem = res?.find(i =>
-        i.title.toLowerCase().includes('milk') ||
-        i.title.toLowerCase().includes('dodh') ||
-        i.title.includes('دودھ') ||
-        i.title.toLowerCase().includes('doodh')
-      );
-      const chosenItem = milkItem ? milkItem.id : (res && res.length > 0 ? res[0].id : undefined);
+      const chosenItem = res && res.length > 0 ? res[0].id : undefined;
       if (chosenItem) {
         form.setFieldValue('itemId', chosenItem);
       }
@@ -181,7 +175,7 @@ export const MilkComparisonReport: React.FC = () => {
     const toStr = dates?.[1]?.format('YYYYMMDD') || 'To';
     const link = document.createElement('a');
     link.href = pdfBlobUrl;
-    link.download = `MilkComparison_${fromStr}_${toStr}.pdf`;
+    link.download = `PurchaseSupplyComparison_${fromStr}_${toStr}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -286,7 +280,7 @@ export const MilkComparisonReport: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `MilkComparison_${dates?.[0]?.format('YYYYMMDD') || ''}_${dates?.[1]?.format('YYYYMMDD') || ''}.xls`;
+    link.download = `PurchaseSupplyComparison_${dates?.[0]?.format('YYYYMMDD') || ''}_${dates?.[1]?.format('YYYYMMDD') || ''}.xls`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -352,7 +346,7 @@ export const MilkComparisonReport: React.FC = () => {
     const link = document.createElement('a');
     link.href = url;
     const dates = form.getFieldValue('dateRange');
-    link.download = `MilkComparison_${dates?.[0]?.format('YYYYMMDD') || ''}_${dates?.[1]?.format('YYYYMMDD') || ''}.csv`;
+    link.download = `PurchaseSupplyComparison_${dates?.[0]?.format('YYYYMMDD') || ''}_${dates?.[1]?.format('YYYYMMDD') || ''}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -377,7 +371,7 @@ export const MilkComparisonReport: React.FC = () => {
 
       const lines: string[] = [];
       lines.push(ESC_ALIGN_CENTER + ESC_DOUBLE_ON + currentOrgName.toUpperCase());
-      lines.push(ESC_DOUBLE_OFF + 'MILK PURCHASE VS SUPPLY REPORT');
+      lines.push(ESC_DOUBLE_OFF + 'PURCHASE VS SUPPLY REPORT');
       lines.push(`Item: ${reportData.itemTitle}`);
       lines.push(`Period: ${fromStr} to ${toStr}`);
       lines.push(`Printed: ${dayjs().format('DD-MMM-YYYY HH:mm')}`);
@@ -507,7 +501,7 @@ export const MilkComparisonReport: React.FC = () => {
               >
                 <Select
                   showSearch
-                  placeholder="Select Milk/Item..."
+                  placeholder="Select Item..."
                   optionFilterProp="children"
                   filterOption={(input, option) =>
                     (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
@@ -583,7 +577,7 @@ export const MilkComparisonReport: React.FC = () => {
               Purchase vs Supply Comparison
             </Title>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              {reportData?.itemTitle ? `${reportData.itemTitle} (${reportData.unitTitle})` : 'Milk & Commodity Reconciliation'}
+              {reportData?.itemTitle ? `${reportData.itemTitle} (${reportData.unitTitle})` : 'Purchase vs Supply Reconciliation'}
             </Text>
           </div>
 
@@ -676,7 +670,7 @@ export const MilkComparisonReport: React.FC = () => {
             <iframe
               ref={iframeRef}
               src={`${pdfBlobUrl}#view=FitH`}
-              title="Milk Comparison Preview"
+              title="Purchase vs Supply Comparison Preview"
               style={{
                 width: '100%',
                 height: '100%',
@@ -695,4 +689,4 @@ export const MilkComparisonReport: React.FC = () => {
   );
 };
 
-export default MilkComparisonReport;
+export default PurchaseSupplyComparisonReport;
