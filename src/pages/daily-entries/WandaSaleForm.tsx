@@ -17,6 +17,7 @@ import type { NarrationDto } from '../../services/narrationService';
 import type { Item } from '../../services/inventoryService';
 import { useSettingsStore, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 
 const { Title, Text } = Typography;
 
@@ -565,7 +566,7 @@ export const WandaSaleForm: React.FC = () => {
     if (!isEdit) {
       const currentReceipt = form.getFieldValue('cashReceipt');
       const isAutoSynced = currentReceipt === undefined || currentReceipt === null || currentReceipt === 0 || currentReceipt === prevTotalAmountRef.current;
-      
+
       if (isAutoSynced) {
         form.setFieldsValue({
           cashReceipt: totalAmount,
