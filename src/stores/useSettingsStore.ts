@@ -35,6 +35,9 @@ export const INVENTORY_ENABLE_SECONDARY_QTY_KEY = 'Inventory.EnableSecondaryQty'
 // Restaurant & KOT setting keys
 export const RESTAURANT_ENABLE_KOT_KEY = 'Restaurant.EnableKot';
 
+// Supply setting keys
+export const SUPPLY_ENABLE_KEY = 'Supply.EnableSupply';
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: {
     [BILL_THANK_YOU_KEY]: BILL_THANK_YOU_DEFAULT,

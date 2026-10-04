@@ -22,7 +22,7 @@ import {
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useAppStore } from '../stores/useAppStore';
-import { useSettingsStore, RESTAURANT_ENABLE_KOT_KEY } from '../stores/useSettingsStore';
+import { useSettingsStore, RESTAURANT_ENABLE_KOT_KEY, SUPPLY_ENABLE_KEY } from '../stores/useSettingsStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useOfflineStore } from '../stores/useOfflineStore';
 import { profileService, logoutService } from '../services/profileService';
@@ -188,7 +188,8 @@ export const MainLayout: React.FC = () => {
   };
 
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
-  const hasSupplyFeature = currentOrg?.hasSupplyFeature ?? false;
+  const settingSupply = useSettingsStore(state => state.getSetting(SUPPLY_ENABLE_KEY, ''));
+  const hasSupplyFeature = settingSupply !== '' ? settingSupply === 'true' : (currentOrg?.hasSupplyFeature ?? false);
   const settingKot = useSettingsStore(state => state.getSetting(RESTAURANT_ENABLE_KOT_KEY, ''));
   const hasKotFeature = settingKot !== '' ? settingKot === 'true' : (currentOrg?.hasKotFeature ?? false);
 

@@ -40,7 +40,8 @@ import {
   BILL_QR_BANK_NAME,
   BILL_QR_INCLUDE_AMOUNT,
   INVENTORY_ENABLE_SECONDARY_QTY_KEY,
-  RESTAURANT_ENABLE_KOT_KEY
+  RESTAURANT_ENABLE_KOT_KEY,
+  SUPPLY_ENABLE_KEY
 } from '../../stores/useSettingsStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { PrinterSettings } from './PrinterSettings';
@@ -75,6 +76,7 @@ export const SettingsPage: React.FC = () => {
 
   // Local state for Inventory settings
   const [secondaryQtyEnabled, setSecondaryQtyEnabled] = useState(false);
+  const [supplyEnabled, setSupplyEnabled] = useState(false);
   const [savingInventory, setSavingInventory] = useState(false);
   const [inventoryLastSaved, setInventoryLastSaved] = useState<string | null>(null);
 
@@ -104,6 +106,9 @@ export const SettingsPage: React.FC = () => {
     setQrBankName(getSetting(BILL_QR_BANK_NAME, ''));
     setQrIncludeAmount(getSetting(BILL_QR_INCLUDE_AMOUNT, 'false') === 'true');
     setSecondaryQtyEnabled(getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, 'false') === 'true');
+    const supplySetting = getSetting(SUPPLY_ENABLE_KEY, '');
+    const orgSupply = licenses.find((l) => l.tenantIdentifier === currentTenantIdentifier)?.hasSupplyFeature ?? false;
+    setSupplyEnabled(supplySetting !== '' ? supplySetting === 'true' : orgSupply);
     setKotEnabled(getSetting(RESTAURANT_ENABLE_KOT_KEY, 'false') === 'true');
   }, [initialized, settings, getSetting]);
 
@@ -137,6 +142,12 @@ export const SettingsPage: React.FC = () => {
         secondaryQtyEnabled ? 'true' : 'false',
         'Enable Secondary Quantity (Single & Pack Qty / Rate) in transactions',
         'Inventory'
+      );
+      await updateSetting(
+        SUPPLY_ENABLE_KEY,
+        supplyEnabled ? 'true' : 'false',
+        'Enable Supply Orders, Sale Supply, and Customer Supply Register',
+        'Supply'
       );
       setInventoryLastSaved(new Date().toLocaleTimeString());
       message.success('Inventory settings saved successfully!');
@@ -732,6 +743,27 @@ export const SettingsPage: React.FC = () => {
                             <Switch
                               checked={secondaryQtyEnabled}
                               onChange={setSecondaryQtyEnabled}
+                              checkedChildren="Enabled"
+                              unCheckedChildren="Disabled"
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+
+                      <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <Row align="middle" justify="space-between">
+                          <Col span={18}>
+                            <Text strong style={{ fontSize: 15, display: 'block' }}>
+                              Enable Supply Feature
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                              When enabled, Supply Orders, Sale Supply and the Customer Supply Register become available in the menu.
+                            </Text>
+                          </Col>
+                          <Col span={6} style={{ textAlign: 'right' }}>
+                            <Switch
+                              checked={supplyEnabled}
+                              onChange={setSupplyEnabled}
                               checkedChildren="Enabled"
                               unCheckedChildren="Disabled"
                             />
