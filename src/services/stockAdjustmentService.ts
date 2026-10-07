@@ -24,6 +24,8 @@ export interface StockAdjustmentLine {
   secQtyOut?: number;
   secRate?: number;
   secUnit?: string | null;
+  imei?: string;
+  imei2?: string;
   narration?: string;
   narrationId?: string;
   date?: string;
@@ -42,6 +44,8 @@ export interface StockAdjustmentLineRequest {
   secQtyOut?: number;
   secRate?: number;
   secUnit?: string | null;
+  imei?: string | null;
+  imei2?: string | null;
 }
 
 export interface StockAdjustmentRequest {

@@ -220,6 +220,14 @@ export const NormalPurchaseReturnForm: React.FC = () => {
         return;
       }
 
+      for (const line of validLines) {
+        const item = items.find(i => String(i.id) === String(line.itemId));
+        if (item?.requireImei && (!line.imei || !line.imei.trim())) {
+          message.error(`Item "${item.title}" requires an IMEI / Serial number.`);
+          return;
+        }
+      }
+
       setLoading(true);
       const request = {
         ...values,

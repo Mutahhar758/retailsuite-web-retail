@@ -73,7 +73,9 @@ export const NormalPurchaseForm: React.FC = () => {
               narration: first.narrationId,
               description: first.description,
               cashPaid: (first as any).cashPaid ?? 0,
-              cashBack: (first as any).cashBack ?? 0
+              cashBack: (first as any).cashBack ?? 0,
+              sellerCnic: (first as any).sellerCnic || '',
+              sellerContact: (first as any).sellerContact || ''
             });
             setPurchaseLines(details.map((d, i) => ({
               key: i,
@@ -85,6 +87,9 @@ export const NormalPurchaseForm: React.FC = () => {
               addLess: d.addLess,
               imei: (d as any).imei || '',
               imei2: (d as any).imei2 || '',
+              ptaStatus: (d as any).ptaStatus || undefined,
+              batteryHealth: (d as any).batteryHealth || undefined,
+              conditionNote: (d as any).conditionNote || '',
               amount: d.amount,
               secQty: d.secQty,
               secRate: d.secRate,
@@ -108,7 +113,9 @@ export const NormalPurchaseForm: React.FC = () => {
           narration: copyFrom.narration,
           description: copyFrom.description,
           cashPaid: copyFrom.cashPaid,
-          cashBack: copyFrom.cashBack
+          cashBack: copyFrom.cashBack,
+          sellerCnic: copyFrom.sellerCnic || '',
+          sellerContact: copyFrom.sellerContact || ''
         });
         const initialLines = (copyFrom.lines || []).map((l: any, idx: number) => ({
           ...l,
@@ -116,6 +123,9 @@ export const NormalPurchaseForm: React.FC = () => {
           seq: idx + 1,
           imei: l.imei || '',
           imei2: l.imei2 || '',
+          ptaStatus: l.ptaStatus || undefined,
+          batteryHealth: l.batteryHealth || undefined,
+          conditionNote: l.conditionNote || '',
           secQty: l.secQty || 0,
           secRate: l.secRate || 0,
           secUnit: l.secUnit || null
@@ -130,6 +140,9 @@ export const NormalPurchaseForm: React.FC = () => {
           addLess: 0,
           imei: '',
           imei2: '',
+          ptaStatus: undefined,
+          batteryHealth: undefined,
+          conditionNote: '',
           amount: 0,
           secQty: 0,
           secRate: 0
@@ -138,7 +151,9 @@ export const NormalPurchaseForm: React.FC = () => {
         form.setFieldsValue({
           date: dayjs(),
           cashPaid: 0,
-          cashBack: 0
+          cashBack: 0,
+          sellerCnic: '',
+          sellerContact: ''
         });
         setPurchaseLines([{
           key: Date.now(),
@@ -150,6 +165,9 @@ export const NormalPurchaseForm: React.FC = () => {
           addLess: 0,
           imei: '',
           imei2: '',
+          ptaStatus: undefined,
+          batteryHealth: undefined,
+          conditionNote: '',
           amount: 0,
           secQty: 0,
           secRate: 0
@@ -170,6 +188,9 @@ export const NormalPurchaseForm: React.FC = () => {
       addLess: 0,
       imei: '',
       imei2: '',
+      ptaStatus: undefined,
+      batteryHealth: undefined,
+      conditionNote: '',
       amount: 0,
       secQty: 0,
       secRate: 0
@@ -240,6 +261,11 @@ export const NormalPurchaseForm: React.FC = () => {
           qty: 1,
           rate: 0,
           addLess: 0,
+          imei: '',
+          imei2: '',
+          ptaStatus: undefined,
+          batteryHealth: undefined,
+          conditionNote: '',
           amount: 0,
           secQty: 0,
           secRate: 0
@@ -283,12 +309,22 @@ export const NormalPurchaseForm: React.FC = () => {
         return;
       }
 
+      for (const line of validLines) {
+        const item = items.find(i => String(i.id) === String(line.itemId));
+        if (item?.requireImei && (!line.imei || !line.imei.trim())) {
+          message.error(`Item "${item.title}" requires an IMEI / Serial number.`);
+          return;
+        }
+      }
+
       setLoading(true);
       const request = {
         ...values,
         date: values.date.format('YYYY-MM-DD'),
         cashPaid: values.cashPaid || 0,
         cashBack: values.cashBack || 0,
+        sellerCnic: values.sellerCnic || null,
+        sellerContact: values.sellerContact || null,
         lines: validLines.map(l => ({
           seq: l.seq,
           itemId: l.itemId,
@@ -298,6 +334,9 @@ export const NormalPurchaseForm: React.FC = () => {
           addLess: l.addLess || 0,
           imei: l.imei || null,
           imei2: l.imei2 || null,
+          ptaStatus: l.ptaStatus || null,
+          batteryHealth: l.batteryHealth || null,
+          conditionNote: l.conditionNote || null,
           secUnit: l.secUnit || null,
           secQty: l.secQty || 0,
           secRate: l.secRate || 0
@@ -347,7 +386,7 @@ export const NormalPurchaseForm: React.FC = () => {
       {
         title: 'IMEI / Serial',
         dataIndex: 'imei',
-        width: 170,
+        width: 160,
         render: (text: string, record: any) => (
           <Input
             value={text}
@@ -359,12 +398,60 @@ export const NormalPurchaseForm: React.FC = () => {
       {
         title: 'IMEI 2',
         dataIndex: 'imei2',
-        width: 150,
+        width: 130,
         render: (text: string, record: any) => (
           <Input
             value={text}
-            placeholder="IMEI 2 (Optional)"
+            placeholder="IMEI 2"
             onChange={(e) => updateRow(record.key, 'imei2', e.target.value)}
+          />
+        )
+      },
+      {
+        title: 'PTA Status',
+        dataIndex: 'ptaStatus',
+        width: 130,
+        render: (text: string, record: any) => (
+          <Select
+            value={text}
+            placeholder="PTA"
+            style={{ width: '100%' }}
+            allowClear
+            onChange={(val) => updateRow(record.key, 'ptaStatus', val)}
+            options={[
+              { value: 'Official PTA', label: 'Official PTA' },
+              { value: 'Non-PTA', label: 'Non-PTA' },
+              { value: 'CPID', label: 'CPID' },
+              { value: 'Patched', label: 'Patched' },
+              { value: 'JV', label: 'JV' },
+            ]}
+          />
+        )
+      },
+      {
+        title: 'Bat %',
+        dataIndex: 'batteryHealth',
+        width: 80,
+        render: (val: number, record: any) => (
+          <InputNumber
+            value={val}
+            placeholder="%"
+            min={0}
+            max={100}
+            style={{ width: '100%' }}
+            onChange={(v) => updateRow(record.key, 'batteryHealth', v)}
+          />
+        )
+      },
+      {
+        title: 'Condition / Note',
+        dataIndex: 'conditionNote',
+        width: 140,
+        render: (text: string, record: any) => (
+          <Input
+            value={text}
+            placeholder="Condition/Note"
+            onChange={(e) => updateRow(record.key, 'conditionNote', e.target.value)}
           />
         )
       }
@@ -483,6 +570,8 @@ export const NormalPurchaseForm: React.FC = () => {
                       description: values.description,
                       cashPaid: values.cashPaid,
                       cashBack: values.cashBack,
+                      sellerCnic: values.sellerCnic,
+                      sellerContact: values.sellerContact,
                       lines: purchaseLines
                     }
                   }
@@ -538,11 +627,25 @@ export const NormalPurchaseForm: React.FC = () => {
         </Row>
 
         <Row gutter={16}>
-          <Col xs={24} lg={24}>
+          <Col xs={24} lg={hasMobileShopFeature ? 12 : 24}>
             <Form.Item label="Description" name="description">
               <Input placeholder="Additional purchase details..." />
             </Form.Item>
           </Col>
+          {hasMobileShopFeature && (
+            <>
+              <Col xs={24} sm={12} lg={6}>
+                <Form.Item label="Seller CNIC" name="sellerCnic">
+                  <Input placeholder="e.g. 35202-xxxxxxx-x" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12} lg={6}>
+                <Form.Item label="Seller Contact / Phone" name="sellerContact">
+                  <Input placeholder="e.g. 0300-1234567" />
+                </Form.Item>
+              </Col>
+            </>
+          )}
         </Row>
 
         <div className="flex justify-between items-center mb-4 mt-2">

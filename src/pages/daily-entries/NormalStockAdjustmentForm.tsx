@@ -10,7 +10,7 @@ import {
 import dayjs from 'dayjs';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppStore } from '../../stores/useAppStore';
-import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, MOBILE_SHOP_ENABLE_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 import { stockAdjustmentService } from '../../services/stockAdjustmentService';
 import { inventoryService, type Item } from '../../services/inventoryService';
@@ -24,6 +24,8 @@ export const NormalStockAdjustmentForm: React.FC = () => {
   const { getSetting, fetchSettings } = useSettingsStore();
   const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
   const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
+  const settingMobile = getSetting(MOBILE_SHOP_ENABLE_KEY, '');
+  const hasMobileShopFeature = settingMobile !== '' ? settingMobile === 'true' : (currentOrg?.hasMobileShopFeature ?? false);
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
@@ -54,7 +56,7 @@ export const NormalStockAdjustmentForm: React.FC = () => {
     if (isEdit) {
       fetchDetail();
     } else {
-      setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0 }]);
+      setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0, imei: '', imei2: '' }]);
       form.setFieldsValue({ date: dayjs() });
     }
   }, [isEdit, voucherNo]);
@@ -74,6 +76,8 @@ export const NormalStockAdjustmentForm: React.FC = () => {
         setAdjustmentLines(details.map(d => ({
           ...d,
           key: d.seq || Date.now() + Math.random(),
+          imei: (d as any).imei || '',
+          imei2: (d as any).imei2 || '',
           amount: d.amount || (((d.qtyIn - d.qtyOut) * d.rate) + (((d.secQtyIn ?? 0) - (d.secQtyOut ?? 0)) * (d.secRate ?? 0))),
           secQtyIn: d.secQtyIn,
           secQtyOut: d.secQtyOut,
@@ -81,7 +85,7 @@ export const NormalStockAdjustmentForm: React.FC = () => {
           secUnit: d.secUnit
         })));
       } else {
-        setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0 }]);
+        setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0, imei: '', imei2: '' }]);
       }
     } catch {
       message.error('Failed to fetch stock adjustment details');
@@ -93,7 +97,7 @@ export const NormalStockAdjustmentForm: React.FC = () => {
   const handleAddRow = () => {
     setAdjustmentLines(prev => {
       const newSeq = prev.length > 0 ? Math.max(...prev.map(l => l.seq)) + 1 : 1;
-      return [...prev, { key: Date.now(), seq: newSeq, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0 }];
+      return [...prev, { key: Date.now(), seq: newSeq, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0, imei: '', imei2: '' }];
     });
   };
 
@@ -152,7 +156,7 @@ export const NormalStockAdjustmentForm: React.FC = () => {
       const lastRow = newLines[newLines.length - 1];
       if (lastRow.key === key && lastRow.itemId && (lastRow.qtyIn !== 0 || lastRow.qtyOut !== 0 || (lastRow.secQtyIn || 0) !== 0 || (lastRow.secQtyOut || 0) !== 0)) {
         const newSeq = newLines.length > 0 ? Math.max(...newLines.map(l => l.seq)) + 1 : 1;
-        return [...newLines, { key: Date.now() + 1, seq: newSeq, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0 }];
+        return [...newLines, { key: Date.now() + 1, seq: newSeq, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0, imei: '', imei2: '' }];
       }
       return newLines;
     });
@@ -165,6 +169,14 @@ export const NormalStockAdjustmentForm: React.FC = () => {
       if (validLines.length === 0) {
         message.error('Please add at least one item');
         return;
+      }
+
+      for (const line of validLines) {
+        const item = items.find(i => String(i.id) === String(line.itemId));
+        if (item?.requireImei && (!line.imei || !line.imei.trim())) {
+          message.error(`Item "${item.title}" requires an IMEI / Serial number.`);
+          return;
+        }
       }
 
       setLoading(true);
@@ -183,7 +195,9 @@ export const NormalStockAdjustmentForm: React.FC = () => {
           secUnit: l.secUnit || null,
           secQtyIn: l.secQtyIn || 0,
           secQtyOut: l.secQtyOut || 0,
-          secRate: l.secRate || 0
+          secRate: l.secRate || 0,
+          imei: l.imei || null,
+          imei2: l.imei2 || null
         }))
       };
 
@@ -235,6 +249,34 @@ export const NormalStockAdjustmentForm: React.FC = () => {
         </Select>
       )
     },
+    ...(hasMobileShopFeature ? [
+      {
+        title: 'IMEI / Serial',
+        dataIndex: 'imei',
+        key: 'imei',
+        width: 170,
+        render: (text: string, record: any) => (
+          <Input
+            value={text}
+            placeholder="Scan/Type IMEI"
+            onChange={(e) => updateLine(record.key, 'imei', e.target.value)}
+          />
+        )
+      },
+      {
+        title: 'IMEI 2',
+        dataIndex: 'imei2',
+        key: 'imei2',
+        width: 150,
+        render: (text: string, record: any) => (
+          <Input
+            value={text}
+            placeholder="IMEI 2 (Optional)"
+            onChange={(e) => updateLine(record.key, 'imei2', e.target.value)}
+          />
+        )
+      }
+    ] : []),
     {
       title: hasSecondaryQty ? 'Single Qty In' : 'Qty In',
       dataIndex: 'qtyIn',

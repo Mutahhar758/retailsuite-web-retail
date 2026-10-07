@@ -9,6 +9,9 @@ export interface PurchaseLine {
   addLess: number;
   imei?: string;
   imei2?: string;
+  ptaStatus?: string;
+  batteryHealth?: number;
+  conditionNote?: string;
   amount: number;
   secQty?: number;
   secRate?: number;
@@ -21,6 +24,8 @@ export interface PurchaseLine {
   description?: string;
   cashPaid?: number;
   cashBack?: number;
+  sellerCnic?: string;
+  sellerContact?: string;
 }
 
 export interface Purchase {
@@ -40,6 +45,8 @@ export interface PurchaseCreateRequest {
   narration?: string;
   cashPaid?: number;
   cashBack?: number;
+  sellerCnic?: string;
+  sellerContact?: string;
   lines: {
     seq: number;
     itemId: string;
@@ -49,6 +56,9 @@ export interface PurchaseCreateRequest {
     addLess: number;
     imei?: string;
     imei2?: string;
+    ptaStatus?: string;
+    batteryHealth?: number;
+    conditionNote?: string;
     secQty?: number;
     secRate?: number;
     secUnit?: string | null;

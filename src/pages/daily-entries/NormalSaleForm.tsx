@@ -371,7 +371,11 @@ export const NormalSaleForm: React.FC = () => {
           secQty: d.secQty,
           secRate: d.secRate,
           imei: d.imei || '',
-          imei2: d.imei2 || ''
+          imei2: d.imei2 || '',
+          ptaStatus: d.ptaStatus || undefined,
+          warrantyMonths: d.warrantyMonths || undefined,
+          batteryHealth: d.batteryHealth || undefined,
+          conditionNote: d.conditionNote || ''
         })));
       }
     } catch {
@@ -546,6 +550,14 @@ export const NormalSaleForm: React.FC = () => {
         return;
       }
 
+      for (const line of validLines) {
+        const item = items.find(i => i.id === line.itemId);
+        if (item?.requireImei && (!line.imei || !line.imei.trim())) {
+          message.error(`Item "${item.title}" requires an IMEI / Serial number.`);
+          return;
+        }
+      }
+
       setLoading(true);
       const request = {
         ...values,
@@ -566,7 +578,11 @@ export const NormalSaleForm: React.FC = () => {
             secQty: l.secQty || 0,
             secRate: l.secRate || 0,
             imei: l.imei || null,
-            imei2: l.imei2 || null
+            imei2: l.imei2 || null,
+            ptaStatus: l.ptaStatus || null,
+            warrantyMonths: l.warrantyMonths || null,
+            batteryHealth: l.batteryHealth || null,
+            conditionNote: l.conditionNote || null
           };
         })
       };
@@ -657,7 +673,7 @@ export const NormalSaleForm: React.FC = () => {
         title: 'IMEI / Serial',
         dataIndex: 'imei',
         key: 'imei',
-        width: 170,
+        width: 160,
         render: (text: string, record: any) => (
           <Input
             value={text}
@@ -670,12 +686,79 @@ export const NormalSaleForm: React.FC = () => {
         title: 'IMEI 2',
         dataIndex: 'imei2',
         key: 'imei2',
-        width: 150,
+        width: 130,
         render: (text: string, record: any) => (
           <Input
             value={text}
-            placeholder="IMEI 2 (Optional)"
+            placeholder="IMEI 2"
             onChange={(e) => updateLine(record.key, 'imei2', e.target.value)}
+          />
+        )
+      },
+      {
+        title: 'PTA Status',
+        dataIndex: 'ptaStatus',
+        key: 'ptaStatus',
+        width: 130,
+        render: (text: string, record: any) => (
+          <Select
+            value={text}
+            placeholder="PTA"
+            style={{ width: '100%' }}
+            allowClear
+            onChange={(val) => updateLine(record.key, 'ptaStatus', val)}
+            options={[
+              { value: 'Official PTA', label: 'Official PTA' },
+              { value: 'Non-PTA', label: 'Non-PTA' },
+              { value: 'CPID', label: 'CPID' },
+              { value: 'Patched', label: 'Patched' },
+              { value: 'JV', label: 'JV' },
+            ]}
+          />
+        )
+      },
+      {
+        title: 'Warr (Mo)',
+        dataIndex: 'warrantyMonths',
+        key: 'warrantyMonths',
+        width: 95,
+        render: (val: number, record: any) => (
+          <InputNumber
+            value={val}
+            placeholder="Mo"
+            min={0}
+            max={60}
+            style={{ width: '100%' }}
+            onChange={(v) => updateLine(record.key, 'warrantyMonths', v)}
+          />
+        )
+      },
+      {
+        title: 'Bat %',
+        dataIndex: 'batteryHealth',
+        key: 'batteryHealth',
+        width: 80,
+        render: (val: number, record: any) => (
+          <InputNumber
+            value={val}
+            placeholder="%"
+            min={0}
+            max={100}
+            style={{ width: '100%' }}
+            onChange={(v) => updateLine(record.key, 'batteryHealth', v)}
+          />
+        )
+      },
+      {
+        title: 'Condition / Note',
+        dataIndex: 'conditionNote',
+        key: 'conditionNote',
+        width: 140,
+        render: (text: string, record: any) => (
+          <Input
+            value={text}
+            placeholder="Condition/Note"
+            onChange={(e) => updateLine(record.key, 'conditionNote', e.target.value)}
           />
         )
       }
