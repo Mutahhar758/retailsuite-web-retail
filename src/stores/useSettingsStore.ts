@@ -38,6 +38,9 @@ export const RESTAURANT_ENABLE_KOT_KEY = 'Restaurant.EnableKot';
 // Supply setting keys
 export const SUPPLY_ENABLE_KEY = 'Supply.EnableSupply';
 
+// Mobile Shop setting keys
+export const MOBILE_SHOP_ENABLE_KEY = 'MobileShop.EnableMobileShop';
+
 // Transaction setting keys
 export const TRANSACTION_ENABLE_CARRIAGE_KEY = 'Transaction.EnableCarriage';
 

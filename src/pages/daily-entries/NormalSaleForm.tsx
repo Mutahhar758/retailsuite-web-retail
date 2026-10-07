@@ -17,7 +17,7 @@ import type { NarrationDto } from '../../services/narrationService';
 import type { Item } from '../../services/inventoryService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useAppStore } from '../../stores/useAppStore';
-import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, TRANSACTION_ENABLE_CARRIAGE_KEY, MOBILE_SHOP_ENABLE_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 
 const { Title, Text } = Typography;
@@ -40,6 +40,8 @@ export const NormalSaleForm: React.FC = () => {
   const { getSetting, fetchSettings } = useSettingsStore();
   const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
   const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
+  const settingMobile = getSetting(MOBILE_SHOP_ENABLE_KEY, '');
+  const hasMobileShopFeature = settingMobile !== '' ? settingMobile === 'true' : (currentOrg?.hasMobileShopFeature ?? false);
   const enableCarriage = getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true';
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
@@ -367,7 +369,9 @@ export const NormalSaleForm: React.FC = () => {
           amount: d.amount,
           secUnit: d.secUnit,
           secQty: d.secQty,
-          secRate: d.secRate
+          secRate: d.secRate,
+          imei: d.imei || '',
+          imei2: d.imei2 || ''
         })));
       }
     } catch {
@@ -560,7 +564,9 @@ export const NormalSaleForm: React.FC = () => {
             carriage: l.carriage || 0,
             secUnit: l.secUnit || null,
             secQty: l.secQty || 0,
-            secRate: l.secRate || 0
+            secRate: l.secRate || 0,
+            imei: l.imei || null,
+            imei2: l.imei2 || null
           };
         })
       };
@@ -646,6 +652,34 @@ export const NormalSaleForm: React.FC = () => {
         </Select>
       )
     },
+    ...(hasMobileShopFeature ? [
+      {
+        title: 'IMEI / Serial',
+        dataIndex: 'imei',
+        key: 'imei',
+        width: 170,
+        render: (text: string, record: any) => (
+          <Input
+            value={text}
+            placeholder="Scan/Type IMEI"
+            onChange={(e) => updateLine(record.key, 'imei', e.target.value)}
+          />
+        )
+      },
+      {
+        title: 'IMEI 2',
+        dataIndex: 'imei2',
+        key: 'imei2',
+        width: 150,
+        render: (text: string, record: any) => (
+          <Input
+            value={text}
+            placeholder="IMEI 2 (Optional)"
+            onChange={(e) => updateLine(record.key, 'imei2', e.target.value)}
+          />
+        )
+      }
+    ] : []),
     {
       title: hasSecondaryQty ? 'Single Qty' : 'Qty',
       dataIndex: 'qty',

@@ -10,6 +10,7 @@ export interface OrganizationLicense {
   hasSecondaryQty?: boolean;
   hasKotFeature?: boolean;
   hasVariablePackFeature?: boolean;
+  hasMobileShopFeature?: boolean;
 }
 
 interface AppState {
@@ -22,6 +23,7 @@ interface AppState {
   addLicense: (license: OrganizationLicense) => void;
   setCurrentTenant: (tenantId: string) => void;
   removeLicense: (licenseKey: string) => void;
+  updateLicenseFeatures: (tenantId: string, features: Partial<OrganizationLicense>) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -44,6 +46,9 @@ export const useAppStore = create<AppState>()(
           currentTenantIdentifier: state.licenses.length === 0 ? license.tenantIdentifier : state.currentTenantIdentifier
         };
       }),
+      updateLicenseFeatures: (tenantId, features) => set((state) => ({
+        licenses: state.licenses.map(l => l.tenantIdentifier === tenantId ? { ...l, ...features } : l)
+      })),
       setCurrentTenant: (tenantId) => {
         set({ currentTenantIdentifier: tenantId });
         useSettingsStore.getState().resetSettings();

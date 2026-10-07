@@ -24,6 +24,8 @@ export interface SaleReturnLine {
   rate: number;
   discount: number;
   amount: number;
+  imei?: string;
+  imei2?: string;
   secQty?: number;
   secRate?: number;
   secUnit?: string | null;
@@ -38,6 +40,8 @@ export interface SaleReturnLineRequest {
   qty: number;
   rate: number;
   discount: number;
+  imei?: string;
+  imei2?: string;
   secQty?: number;
   secRate?: number;
   secUnit?: string | null;

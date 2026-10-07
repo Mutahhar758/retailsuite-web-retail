@@ -36,6 +36,12 @@ export interface SaleLine {
   rate: number;
   discount: number;
   carriage?: number;
+  imei?: string;
+  imei2?: string;
+  ptaStatus?: string;
+  warrantyMonths?: number;
+  batteryHealth?: number;
+  conditionNote?: string;
   amount: number;
   cashReceipt: number;
   cashBack: number;
@@ -56,6 +62,12 @@ export interface SaleLineRequest {
   rate: number;
   discount: number;
   carriage?: number;
+  imei?: string;
+  imei2?: string;
+  ptaStatus?: string;
+  warrantyMonths?: number;
+  batteryHealth?: number;
+  conditionNote?: string;
   secQty?: number;
   secRate?: number;
   secUnit?: string | null;

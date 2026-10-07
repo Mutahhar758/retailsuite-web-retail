@@ -20,6 +20,13 @@ export interface Item {
   mediaId?: string;
   mediaUrl?: string;
   quickQtyPresets?: string;
+  requireImei?: boolean;
+  brandId?: string;
+  brandTitle?: string;
+  modelName?: string;
+  storage?: string;
+  ram?: string;
+  color?: string;
 }
 
 export interface InventoryItemUpsertRequest {
@@ -41,6 +48,12 @@ export interface InventoryItemUpsertRequest {
   itemType?: string;
   mediaId?: string;
   quickQtyPresets?: string;
+  requireImei?: boolean;
+  brandId?: string;
+  modelName?: string;
+  storage?: string;
+  ram?: string;
+  color?: string;
 }
 
 export interface Unit {

@@ -17,7 +17,8 @@ import type { NarrationDto } from '../../services/narrationService';
 import type { Item } from '../../services/inventoryService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useAppStore } from '../../stores/useAppStore';
-import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, TRANSACTION_ENABLE_CARRIAGE_KEY, MOBILE_SHOP_ENABLE_KEY } from '../../stores/useSettingsStore';
+import { imeiService, type ImeiStockResponse } from '../../services/imeiService';
 import { round } from '../../utils/numberUtils';
 
 const { Title, Text } = Typography;
@@ -41,6 +42,8 @@ export const SaleForm: React.FC = () => {
   const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
   const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
   const hasVariablePackFeature = currentOrg?.hasVariablePackFeature ?? false;
+  const settingMobile = getSetting(MOBILE_SHOP_ENABLE_KEY, '');
+  const hasMobileShopFeature = settingMobile !== '' ? settingMobile === 'true' : (currentOrg?.hasMobileShopFeature ?? false);
   const enableCarriage = getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true';
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
@@ -54,6 +57,7 @@ export const SaleForm: React.FC = () => {
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [inStockImeis, setInStockImeis] = useState<ImeiStockResponse[]>([]);
   const [saleLines, setSaleLines] = useState<any[]>([]);
   const [cacheMissError, setCacheMissError] = useState<string | null>(null);
   const prevTotalAmountRef = useRef(0);
@@ -339,6 +343,11 @@ export const SaleForm: React.FC = () => {
       setNarrations(narrations);
       setItems(items);
       setCacheMissError(null);
+      if (hasMobileShopFeature) {
+        imeiService.getImeiStock()
+          .then(res => setInStockImeis((res || []).filter(i => i.isInStock !== false)))
+          .catch(() => {});
+      }
       focusCustomerSelect();
     } catch (err) {
       if (err instanceof OfflineCacheMissError) {
@@ -482,6 +491,25 @@ export const SaleForm: React.FC = () => {
               updated.packing = pSize;
               updated.secRate = item.secRate || ((item.priRate || 0) * (pSize > 0 ? pSize : 1));
               updated.secQty = 0;
+            }
+          }
+
+          if (field === 'imei') {
+            const matched = inStockImeis.find(stk => stk.imei === value);
+            if (matched) {
+              if (matched.itemId) {
+                updated.itemId = matched.itemId;
+                const itm = items.find(i => String(i.id) === String(matched.itemId));
+                if (itm) {
+                  updated.unit = itm.defaultUnit || itm.primaryUnit;
+                  updated.rate = itm.priRate || 0;
+                  updated.secUnit = itm.secondaryUnit;
+                }
+              }
+              if (matched.imei2) updated.imei2 = matched.imei2;
+              if (matched.ptaStatus) updated.ptaStatus = matched.ptaStatus;
+              if (matched.conditionNote) updated.conditionNote = matched.conditionNote;
+              if (matched.batteryHealth) updated.batteryHealth = matched.batteryHealth;
             }
           }
 
@@ -637,7 +665,13 @@ export const SaleForm: React.FC = () => {
             secQty: l.secQty || 0,
             secRate: l.secRate || 0,
             qtyInPack: l.packQty || l.qtyInPack || null,
-            packing: l.packing || null
+            packing: l.packing || null,
+            imei: l.imei || null,
+            imei2: l.imei2 || null,
+            ptaStatus: l.ptaStatus || null,
+            warrantyMonths: l.warrantyMonths ? Number(l.warrantyMonths) : null,
+            batteryHealth: l.batteryHealth ? Number(l.batteryHealth) : null,
+            conditionNote: l.conditionNote || null
           };
         })
       };
@@ -719,6 +753,113 @@ export const SaleForm: React.FC = () => {
         </Select>
       )
     },
+    ...(hasMobileShopFeature ? [
+      {
+        title: 'IMEI / Serial',
+        dataIndex: 'imei',
+        key: 'imei',
+        width: 170,
+        render: (val: string, record: any) => {
+          const matchingImeis = inStockImeis.filter(i => !record.itemId || String(i.itemId) === String(record.itemId));
+          return (
+            <Select
+              showSearch
+              allowClear
+              style={{ width: '100%' }}
+              placeholder="Scan/Select IMEI"
+              value={val}
+              onChange={(newVal) => updateLine(record.key, 'imei', newVal)}
+              filterOption={(input, option) =>
+                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+              }
+              options={matchingImeis.map(i => ({
+                value: i.imei,
+                label: `${i.imei} ${i.ptaStatus ? `(${i.ptaStatus})` : ''}`
+              }))}
+            />
+          );
+        }
+      },
+      {
+        title: 'IMEI 2',
+        dataIndex: 'imei2',
+        key: 'imei2',
+        width: 140,
+        render: (val: string, record: any) => (
+          <Input
+            value={val}
+            placeholder="IMEI 2"
+            onChange={(e) => updateLine(record.key, 'imei2', e.target.value)}
+          />
+        )
+      },
+      {
+        title: 'PTA Status',
+        dataIndex: 'ptaStatus',
+        key: 'ptaStatus',
+        width: 120,
+        render: (val: string, record: any) => (
+          <Select
+            allowClear
+            style={{ width: '100%' }}
+            placeholder="PTA"
+            value={val}
+            onChange={(v) => updateLine(record.key, 'ptaStatus', v)}
+            options={[
+              { label: 'Official PTA', value: 'Official PTA' },
+              { label: 'Non-PTA', value: 'Non-PTA' },
+              { label: 'CPID', value: 'CPID' },
+              { label: 'Patched', value: 'Patched' },
+              { label: 'JV', value: 'JV' }
+            ]}
+          />
+        )
+      },
+      {
+        title: 'Warranty (Mo)',
+        dataIndex: 'warrantyMonths',
+        key: 'warrantyMonths',
+        width: 100,
+        render: (val: number, record: any) => (
+          <InputNumber
+            min={0}
+            style={{ width: '100%' }}
+            value={val}
+            placeholder="Mo"
+            onChange={(v) => updateLine(record.key, 'warrantyMonths', v)}
+          />
+        )
+      },
+      {
+        title: 'Battery %',
+        dataIndex: 'batteryHealth',
+        key: 'batteryHealth',
+        width: 90,
+        render: (val: number, record: any) => (
+          <InputNumber
+            min={0}
+            max={100}
+            style={{ width: '100%' }}
+            value={val}
+            placeholder="%"
+            onChange={(v) => updateLine(record.key, 'batteryHealth', v)}
+          />
+        )
+      },
+      {
+        title: 'Condition / Note',
+        dataIndex: 'conditionNote',
+        key: 'conditionNote',
+        width: 130,
+        render: (val: string, record: any) => (
+          <Input
+            value={val}
+            placeholder="Condition"
+            onChange={(e) => updateLine(record.key, 'conditionNote', e.target.value)}
+          />
+        )
+      }
+    ] : []),
     {
       title: hasVariablePackFeature ? 'Qty (Kg)' : (hasSecondaryQty ? 'Single Qty' : 'Qty'),
       dataIndex: 'qty',

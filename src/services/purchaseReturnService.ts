@@ -18,6 +18,8 @@ export interface PurchaseReturnLine {
   rate: number;
   addLess: number;
   amount: number;
+  imei?: string;
+  imei2?: string;
   secQty?: number;
   secRate?: number;
   secUnit?: string | null;
@@ -41,6 +43,8 @@ export interface PurchaseReturnCreateRequest {
     qty: number;
     rate: number;
     addLess: number;
+    imei?: string;
+    imei2?: string;
     secQty?: number;
     secRate?: number;
     secUnit?: string | null;

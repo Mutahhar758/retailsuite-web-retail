@@ -72,6 +72,11 @@ import { RoleList } from './pages/setup/RoleList';
 import { RoleForm } from './pages/setup/RoleForm';
 import { OpeningBalance } from './pages/setup/OpeningBalance';
 import { DiningTableList } from './pages/setup/DiningTableList';
+import { BrandList } from './pages/setup/BrandList';
+import { RepairJobList } from './pages/devices-repairs/RepairJobList';
+import { RepairJobForm } from './pages/devices-repairs/RepairJobForm';
+import { ImeiStockList } from './pages/devices-repairs/ImeiStockList';
+import { ImeiHistoryView } from './pages/devices-repairs/ImeiHistoryView';
 import { Profile } from './pages/auth/Profile';
 import { useAppStore } from './stores/useAppStore';
 import { useAuthStore } from './stores/useAuthStore';
@@ -199,6 +204,7 @@ function App() {
             <Route path="profile" element={<Profile />} />
             
             {/* Setup */}
+            <Route path="setup/brands" element={<BrandList />} />
             <Route path="setup/narrations" element={<NarrationList />} />
             <Route path="setup/units" element={<UnitList />} />
             <Route path="setup/item-categories" element={<ItemCategoryList />} />
@@ -235,6 +241,13 @@ function App() {
             <Route path="setup/printer-settings" element={<PrinterSettings />} />
             <Route path="setup/opening-balance" element={<OpeningBalance />} />
             <Route path="setup/dining-tables" element={<DiningTableList />} />
+            
+            {/* Devices & Repairs */}
+            <Route path="devices-repairs/repair-jobs" element={<RepairJobList />} />
+            <Route path="devices-repairs/repair-jobs/new" element={<RepairJobForm />} />
+            <Route path="devices-repairs/repair-jobs/:jobNo" element={<RepairJobForm />} />
+            <Route path="devices-repairs/imei-stock" element={<ImeiStockList />} />
+            <Route path="devices-repairs/imei-history" element={<ImeiHistoryView />} />
             
             {/* Other routes */}
             <Route path="setup/*" element={<PlaceholderPage />} />

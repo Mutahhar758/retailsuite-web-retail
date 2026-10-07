@@ -71,7 +71,9 @@ export const InventoryItemList: React.FC = () => {
   const filteredData = data.filter(item => 
     item.title.toLowerCase().includes(searchText.toLowerCase()) ||
     item.id.toLowerCase().includes(searchText.toLowerCase()) ||
-    item.barcode?.toLowerCase().includes(searchText.toLowerCase())
+    item.barcode?.toLowerCase().includes(searchText.toLowerCase()) ||
+    item.brandTitle?.toLowerCase().includes(searchText.toLowerCase()) ||
+    item.modelName?.toLowerCase().includes(searchText.toLowerCase())
   );
 
   const columns = [
@@ -106,7 +108,16 @@ export const InventoryItemList: React.FC = () => {
               )}
             </div>
           )}
-          <Text strong>{record.title}</Text>
+          <div>
+            <Text strong>{record.title}</Text>
+            {(record.brandTitle || record.modelName || record.requireImei) && (
+              <div style={{ marginTop: 2 }}>
+                {record.brandTitle && <Tag color="blue" style={{ fontSize: 11 }}>{record.brandTitle}</Tag>}
+                {record.modelName && <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>{record.modelName}</Text>}
+                {record.requireImei && <Tag color="purple" style={{ fontSize: 11 }}>Req IMEI</Tag>}
+              </div>
+            )}
+          </div>
         </Space>
       ),
     },

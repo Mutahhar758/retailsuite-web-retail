@@ -7,6 +7,8 @@ export interface PurchaseLine {
   qty: number;
   rate: number;
   addLess: number;
+  imei?: string;
+  imei2?: string;
   amount: number;
   secQty?: number;
   secRate?: number;
@@ -45,6 +47,8 @@ export interface PurchaseCreateRequest {
     qty: number;
     rate: number;
     addLess: number;
+    imei?: string;
+    imei2?: string;
     secQty?: number;
     secRate?: number;
     secUnit?: string | null;

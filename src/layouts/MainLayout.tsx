@@ -18,14 +18,16 @@ import {
   DisconnectOutlined,
   RocketOutlined,
   ShoppingCartOutlined,
+  MobileOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useAppStore } from '../stores/useAppStore';
-import { useSettingsStore, RESTAURANT_ENABLE_KOT_KEY, SUPPLY_ENABLE_KEY } from '../stores/useSettingsStore';
+import { useSettingsStore, RESTAURANT_ENABLE_KOT_KEY, SUPPLY_ENABLE_KEY, MOBILE_SHOP_ENABLE_KEY } from '../stores/useSettingsStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useOfflineStore } from '../stores/useOfflineStore';
 import { profileService, logoutService } from '../services/profileService';
+import api from '../services/api';
 
 const { Header, Sider, Content } = Layout;
 
@@ -82,10 +84,32 @@ export const MainLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, user, setUser, permissions, setPermissions } = useAuthStore();
-  const { theme: appTheme, setTheme, layout, setLayout, currentTenantIdentifier, licenses } = useAppStore();
+  const { theme: appTheme, setTheme, layout, setLayout, currentTenantIdentifier, licenses, updateLicenseFeatures } = useAppStore();
   const { token } = theme.useToken();
   const { isOnline } = useNetworkStatus();
   const { pendingCount } = useOfflineStore();
+
+  React.useEffect(() => {
+    if (!currentTenantIdentifier || !isOnline) return;
+    const syncFeatures = async () => {
+      try {
+        const response = await api.get('/api/license/features');
+        const body = response.data?.body || response.data;
+        if (body) {
+          updateLicenseFeatures(currentTenantIdentifier, {
+            hasSupplyFeature: body.hasSupplyFeature,
+            hasSecondaryQty: body.hasSecondaryQty,
+            hasKotFeature: body.hasKotFeature,
+            hasVariablePackFeature: body.hasVariablePackFeature,
+            hasMobileShopFeature: body.hasMobileShopFeature
+          });
+        }
+      } catch (err) {
+        console.error('Failed to sync tenant features', err);
+      }
+    };
+    syncFeatures();
+  }, [currentTenantIdentifier, isOnline]);
 
   React.useEffect(() => {
     const fetchProfileAndPermissions = async () => {
@@ -136,7 +160,8 @@ export const MainLayout: React.FC = () => {
     const isIdSegment = index > 0 && [
       'users', 'roles', 'hr-info', 'customers', 'vendors', 'supply-order', 'item-details',
       'payment-voucher', 'receipt-voucher', 'journal-voucher', 'purchase', 'sale',
-      'pos-sale', 'sale-supply', 'sale-return', 'purchase-return', 'stock-adjustment'
+      'pos-sale', 'sale-supply', 'sale-return', 'purchase-return', 'stock-adjustment',
+      'repair-jobs'
     ].includes(array[index - 1]);
     
     if (isIdSegment && path !== 'new') {
@@ -192,6 +217,8 @@ export const MainLayout: React.FC = () => {
   const hasSupplyFeature = settingSupply !== '' ? settingSupply === 'true' : (currentOrg?.hasSupplyFeature ?? false);
   const settingKot = useSettingsStore(state => state.getSetting(RESTAURANT_ENABLE_KOT_KEY, ''));
   const hasKotFeature = settingKot !== '' ? settingKot === 'true' : (currentOrg?.hasKotFeature ?? false);
+  const settingMobile = useSettingsStore(state => state.getSetting(MOBILE_SHOP_ENABLE_KEY, ''));
+  const hasMobileShopFeature = settingMobile !== '' ? settingMobile === 'true' : (currentOrg?.hasMobileShopFeature ?? false);
 
   const baseMenuItems = [
     { 
@@ -203,6 +230,7 @@ export const MainLayout: React.FC = () => {
         { key: '/setup/detail-accounts', label: 'Detail Accounts' },
         { key: '/setup/customers', label: 'Customer' },
         { key: '/setup/vendors', label: 'Vendor' },
+        { key: '/setup/brands', label: 'Brands' },
         { key: '/setup/item-details', label: 'Product' },
         { key: '/setup/item-categories', label: 'Product Category' },
         { key: '/setup/units', label: 'Unit Index' },
@@ -238,6 +266,16 @@ export const MainLayout: React.FC = () => {
         hasKotFeature ? { key: '/daily-entries/kitchen-display', label: 'Kitchen Display (KDS)' } : null,
       ].filter(Boolean) as any[]
     },
+    hasMobileShopFeature ? {
+      key: '/devices-repairs',
+      icon: <MobileOutlined />,
+      label: 'Devices & Repairs',
+      children: [
+        { key: '/devices-repairs/repair-jobs', label: 'Repair Job Cards' },
+        { key: '/devices-repairs/imei-stock', label: 'IMEI Stock Ledger' },
+        { key: '/devices-repairs/imei-history', label: 'Device Lifecycle History' },
+      ]
+    } : null,
     { 
       key: '/reports', 
       icon: <BarChartOutlined />, 
@@ -258,7 +296,7 @@ export const MainLayout: React.FC = () => {
         { key: '/reports/profit-by-item', label: 'Profit by Item' },
       ]
     },
-  ];
+  ].filter(Boolean) as any[];
 
   interface ShortcutItem {
     key: string;

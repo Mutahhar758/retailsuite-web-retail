@@ -11,7 +11,7 @@ import dayjs from 'dayjs';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppStore } from '../../stores/useAppStore';
 import { round } from '../../utils/numberUtils';
-import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, MOBILE_SHOP_ENABLE_KEY } from '../../stores/useSettingsStore';
 import { saleReturnService } from '../../services/saleReturnService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
@@ -25,6 +25,8 @@ export const NormalSaleReturnForm: React.FC = () => {
   const { getSetting, fetchSettings } = useSettingsStore();
   const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
   const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
+  const settingMobile = getSetting(MOBILE_SHOP_ENABLE_KEY, '');
+  const hasMobileShopFeature = settingMobile !== '' ? settingMobile === 'true' : (currentOrg?.hasMobileShopFeature ?? false);
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
@@ -172,7 +174,9 @@ export const NormalSaleReturnForm: React.FC = () => {
             discount: l.discount,
             secUnit: l.secUnit || null,
             secQty: l.secQty || 0,
-            secRate: l.secRate || 0
+            secRate: l.secRate || 0,
+            imei: l.imei || null,
+            imei2: l.imei2 || null
           };
         })
       };
@@ -225,6 +229,34 @@ export const NormalSaleReturnForm: React.FC = () => {
         </Select>
       )
     },
+    ...(hasMobileShopFeature ? [
+      {
+        title: 'IMEI / Serial',
+        dataIndex: 'imei',
+        key: 'imei',
+        width: 170,
+        render: (text: string, record: any) => (
+          <Input
+            value={text}
+            placeholder="Scan/Type IMEI"
+            onChange={(e) => updateLine(record.key, 'imei', e.target.value)}
+          />
+        )
+      },
+      {
+        title: 'IMEI 2',
+        dataIndex: 'imei2',
+        key: 'imei2',
+        width: 150,
+        render: (text: string, record: any) => (
+          <Input
+            value={text}
+            placeholder="IMEI 2 (Optional)"
+            onChange={(e) => updateLine(record.key, 'imei2', e.target.value)}
+          />
+        )
+      }
+    ] : []),
     {
       title: hasSecondaryQty ? 'Single Qty' : 'Qty',
       dataIndex: 'qty',

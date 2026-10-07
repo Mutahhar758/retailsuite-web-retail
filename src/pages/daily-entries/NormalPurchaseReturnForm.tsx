@@ -14,7 +14,7 @@ import { inventoryService, type Item } from '../../services/inventoryService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 import { useAppStore } from '../../stores/useAppStore';
-import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, MOBILE_SHOP_ENABLE_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 
 const { Title, Text } = Typography;
@@ -25,6 +25,8 @@ export const NormalPurchaseReturnForm: React.FC = () => {
   const { getSetting, fetchSettings } = useSettingsStore();
   const settingSecQty = getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, '');
   const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
+  const settingMobile = getSetting(MOBILE_SHOP_ENABLE_KEY, '');
+  const hasMobileShopFeature = settingMobile !== '' ? settingMobile === 'true' : (currentOrg?.hasMobileShopFeature ?? false);
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const navigate = useNavigate();
@@ -231,7 +233,9 @@ export const NormalPurchaseReturnForm: React.FC = () => {
           addLess: l.addLess || 0,
           secUnit: l.secUnit || null,
           secQty: l.secQty || 0,
-          secRate: l.secRate || 0
+          secRate: l.secRate || 0,
+          imei: l.imei || null,
+          imei2: l.imei2 || null
         }))
       };
 
@@ -274,6 +278,32 @@ export const NormalPurchaseReturnForm: React.FC = () => {
         />
       )
     },
+    ...(hasMobileShopFeature ? [
+      {
+        title: 'IMEI / Serial',
+        dataIndex: 'imei',
+        width: 170,
+        render: (text: string, record: any) => (
+          <Input
+            value={text}
+            placeholder="Scan/Type IMEI"
+            onChange={(e) => updateRow(record.key, 'imei', e.target.value)}
+          />
+        )
+      },
+      {
+        title: 'IMEI 2',
+        dataIndex: 'imei2',
+        width: 150,
+        render: (text: string, record: any) => (
+          <Input
+            value={text}
+            placeholder="IMEI 2 (Optional)"
+            onChange={(e) => updateRow(record.key, 'imei2', e.target.value)}
+          />
+        )
+      }
+    ] : []),
     {
       title: hasSecondaryQty ? 'Single Qty' : 'Qty',
       dataIndex: 'qty',

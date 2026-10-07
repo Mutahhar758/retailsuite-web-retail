@@ -10,6 +10,9 @@ import axios from 'axios';
 import { inventoryService } from '../../services/inventoryService';
 import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCategoryService';
 import { unitService, type UnitDto } from '../../services/unitService';
+import { brandService, type BrandLookupDto } from '../../services/brandService';
+import { useAppStore } from '../../stores/useAppStore';
+import { useSettingsStore, MOBILE_SHOP_ENABLE_KEY } from '../../stores/useSettingsStore';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -18,23 +21,32 @@ export const InventoryItemForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id && id !== 'new';
   const navigate = useNavigate();
+  const { licenses, currentTenantIdentifier } = useAppStore();
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
+  const { getSetting } = useSettingsStore();
+  const settingMobile = getSetting(MOBILE_SHOP_ENABLE_KEY, '');
+  const hasMobileShopFeature = settingMobile !== '' ? settingMobile === 'true' : (currentOrg?.hasMobileShopFeature ?? false);
+
   const [form] = Form.useForm();
   const itemType = Form.useWatch('itemType', form);
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<ItemCategoryDto[]>([]);
   const [units, setUnits] = useState<UnitDto[]>([]);
+  const [brands, setBrands] = useState<BrandLookupDto[]>([]);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [categoriesResult, unitsResult] = await Promise.all([
+      const [categoriesResult, unitsResult, brandsResult] = await Promise.all([
         itemCategoryService.getActiveItemCategories(),
-        unitService.getActiveUnits()
+        unitService.getActiveUnits(),
+        brandService.getActiveBrands().catch(() => [])
       ]);
       setCategories(categoriesResult);
       setUnits(unitsResult);
+      setBrands(brandsResult);
 
       if (isEdit) {
         const item = await inventoryService.getById(id!);
@@ -58,6 +70,12 @@ export const InventoryItemForm: React.FC = () => {
           }
           form.setFieldsValue({
             ...item,
+            requireImei: item.requireImei ?? false,
+            brandId: item.brandId ?? undefined,
+            modelName: item.modelName ?? undefined,
+            storage: item.storage ?? undefined,
+            ram: item.ram ?? undefined,
+            color: item.color ?? undefined,
             quickQtyPresets: quickQtyPresetsArray
           });
           if (item.mediaUrl) {
@@ -207,7 +225,7 @@ export const InventoryItemForm: React.FC = () => {
           <Col xs={24} md={18}>
             <Title level={5} className="mb-4">Basic Information</Title>
             <Row gutter={16}>
-              <Col xs={24} md={8}>
+              <Col xs={24} md={6}>
                 <Form.Item
                   name="itemType"
                   label="Type"
@@ -219,7 +237,7 @@ export const InventoryItemForm: React.FC = () => {
                   </Select>
                 </Form.Item>
               </Col>
-              <Col xs={24} md={8}>
+              <Col xs={24} md={6}>
                 <Form.Item
                   name="barcode"
                   label="Barcode"
@@ -227,7 +245,7 @@ export const InventoryItemForm: React.FC = () => {
                   <Input placeholder="Scan or enter barcode" disabled={itemType === 'Service'} />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={8}>
+              <Col xs={24} md={6}>
                 <Form.Item
                   name="itemCategoryCode"
                   label="Category"
@@ -236,6 +254,18 @@ export const InventoryItemForm: React.FC = () => {
                   <Select placeholder="Select category" showSearch optionFilterProp="children">
                     {categories.map(cat => (
                       <Option key={cat.code} value={cat.code}>{cat.title}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={6}>
+                <Form.Item
+                  name="brandId"
+                  label="Brand"
+                >
+                  <Select placeholder="Select brand" allowClear showSearch optionFilterProp="children">
+                    {brands.map(b => (
+                      <Option key={b.id} value={b.id}>{b.title}</Option>
                     ))}
                   </Select>
                 </Form.Item>
@@ -261,6 +291,55 @@ export const InventoryItemForm: React.FC = () => {
                 </Form.Item>
               </Col>
             </Row>
+
+            {hasMobileShopFeature && itemType !== 'Service' && (
+              <div className="mt-4 mb-2 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                <Title level={5} className="mb-3" style={{ fontSize: 14 }}>Device & IMEI Specifications</Title>
+                <Row gutter={16}>
+                  <Col xs={24} md={6}>
+                    <Form.Item
+                      name="requireImei"
+                      valuePropName="checked"
+                      label="IMEI Tracking"
+                    >
+                      <Checkbox>Requires IMEI / Serial</Checkbox>
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} md={6}>
+                    <Form.Item
+                      name="modelName"
+                      label="Model Name"
+                    >
+                      <Input placeholder="e.g. iPhone 15 Pro, S24" />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={12} md={4}>
+                    <Form.Item
+                      name="storage"
+                      label="Storage"
+                    >
+                      <Input placeholder="e.g. 128GB, 256GB" />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={12} md={4}>
+                    <Form.Item
+                      name="ram"
+                      label="RAM"
+                    >
+                      <Input placeholder="e.g. 8GB, 12GB" />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} md={4}>
+                    <Form.Item
+                      name="color"
+                      label="Color"
+                    >
+                      <Input placeholder="e.g. Black, Silver" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </div>
+            )}
 
             <div className="flex justify-between items-center mb-4 mt-6">
               <Title level={5} style={{ margin: 0 }}>Pricing & Units</Title>
