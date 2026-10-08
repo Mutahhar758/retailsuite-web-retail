@@ -14,7 +14,7 @@ import { customerService, type CustomerCreateRequest, type CustomerUpdateRequest
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { useAppStore } from '../../stores/useAppStore';
 import { useSettingsStore, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
-
+import { getPresentableUploadErrorMessage } from '../../utils/errorUtils';
 
 const { Title, Text } = Typography;
 
@@ -248,9 +248,9 @@ export const CustomerForm: React.FC = () => {
       
       message.success('Avatar uploaded successfully');
       onSuccess?.("ok");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      message.error('Failed to upload avatar');
+      message.error(getPresentableUploadErrorMessage(err, 'Unable to upload customer avatar. Please try again.'));
       onError?.(err as Error);
     } finally {
       setUploading(false);

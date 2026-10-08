@@ -10,6 +10,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { vendorService, type VendorCreateRequest, type VendorUpdateRequest } from '../../services/vendorService';
+import { getPresentableUploadErrorMessage } from '../../utils/errorUtils';
 
 const { Title, Text } = Typography;
 
@@ -157,9 +158,9 @@ export const VendorForm: React.FC = () => {
       
       message.success('Avatar uploaded successfully');
       onSuccess?.("ok");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      message.error('Failed to upload avatar');
+      message.error(getPresentableUploadErrorMessage(err, 'Unable to upload vendor avatar. Please try again.'));
       onError?.(err as Error);
     } finally {
       setUploading(false);

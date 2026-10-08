@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCategoryService';
 import axios from 'axios';
+import { getPresentableUploadErrorMessage } from '../../utils/errorUtils';
 
 const { Title, Text } = Typography;
 
@@ -87,9 +88,9 @@ export const ItemCategoryList: React.FC = () => {
       
       message.success('Image uploaded successfully');
       onSuccess?.("ok");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      message.error('Failed to upload image');
+      message.error(getPresentableUploadErrorMessage(err, 'Unable to upload category image. Please try again.'));
       onError?.(err as Error);
     } finally {
       setUploading(false);

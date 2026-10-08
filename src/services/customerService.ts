@@ -95,7 +95,11 @@ export const customerService = {
 
   async getPresignedUploadUrl(fileName: string) {
     const response = await api.post('/api/customers/presigned-upload-url', null, { params: { fileName } });
-    return response.data.body as { fileId: string; uploadUrl: string; expiresAt: string };
+    const data = response?.data?.body;
+    if (!data?.uploadUrl) {
+      throw new Error(response?.data?.metadata?.message || 'Server did not return a valid upload URL for the media.');
+    }
+    return data as { fileId: string; uploadUrl: string; expiresAt: string };
   },
 
   async getSupplyItems(params?: { customerId?: string; itemId?: string }) {

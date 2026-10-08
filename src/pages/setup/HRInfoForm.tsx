@@ -14,6 +14,7 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import { hrInfoService, type HRInfoUpsertRequest } from '../../services/hrInfoService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
+import { getPresentableUploadErrorMessage } from '../../utils/errorUtils';
 
 const { Title, Text } = Typography;
 
@@ -145,9 +146,9 @@ export const HRInfoForm: React.FC = () => {
       
       message.success('Employee photograph uploaded successfully');
       onSuccess?.("ok");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      message.error('Failed to upload employee photograph');
+      message.error(getPresentableUploadErrorMessage(err, 'Unable to upload employee photograph. Please try again.'));
       onError?.(err as Error);
     } finally {
       setUploading(false);

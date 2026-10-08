@@ -13,6 +13,7 @@ import { unitService, type UnitDto } from '../../services/unitService';
 import { brandService, type BrandLookupDto } from '../../services/brandService';
 import { useAppStore } from '../../stores/useAppStore';
 import { useSettingsStore, MOBILE_SHOP_ENABLE_KEY } from '../../stores/useSettingsStore';
+import { getPresentableUploadErrorMessage } from '../../utils/errorUtils';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -161,9 +162,9 @@ export const InventoryItemForm: React.FC = () => {
       
       message.success('Image uploaded successfully');
       onSuccess?.("ok");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      message.error('Failed to upload image');
+      message.error(getPresentableUploadErrorMessage(err, 'Unable to upload product image. Please try again.'));
       onError?.(err as Error);
     } finally {
       setUploading(false);
