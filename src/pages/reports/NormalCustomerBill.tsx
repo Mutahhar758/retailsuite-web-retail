@@ -72,7 +72,7 @@ export const NormalCustomerBill: React.FC = () => {
   const [layout, setLayout] = useState<'A4' | 'Thermal'>('A4');
   const [layoutUserSelected, setLayoutUserSelected] = useState<boolean>(false);
   const [qrEnabled, setQrEnabled] = useState<boolean>(true);
-  const { getSetting, fetchSettings } = useSettingsStore();
+  const { settings, initialized, getSetting, fetchSettings } = useSettingsStore();
 
   useEffect(() => {
     fetchSettings();
@@ -83,16 +83,19 @@ export const NormalCustomerBill: React.FC = () => {
       const defaultFmt = getSetting(BILL_DEFAULT_FORMAT_KEY, '');
       if (defaultFmt) {
         const isThermal = defaultFmt.toLowerCase().includes('thermal');
-        setLayout(isThermal ? 'Thermal' : 'A4');
+        const resolved = isThermal ? 'Thermal' : 'A4';
+        setLayout(resolved);
+        form.setFieldsValue({ layout: resolved });
       }
     }
-  }, [getSetting, layoutUserSelected]);
+  }, [initialized, settings, getSetting, layoutUserSelected, form]);
 
   useEffect(() => {
+    if (!initialized) return;
     const storeSetting = getSetting(BILL_QR_ENABLED_KEY, 'false') === 'true';
     const hasAcc = !!getSetting(BILL_QR_ACCOUNT_NUMBER, '');
     setQrEnabled(storeSetting || hasAcc);
-  }, [getSetting]);
+  }, [initialized, settings, getSetting]);
 
   // Load Customers
   useEffect(() => {
@@ -108,8 +111,7 @@ export const NormalCustomerBill: React.FC = () => {
         form.setFieldsValue({
           account: state.customerId,
           dateRange: [fromD, toD],
-          dateBasis: 'ClearingDate',
-          layout: 'A4'
+          dateBasis: 'ClearingDate'
         });
 
         const matchedCus = cusList.find((c: any) => c.account === state.customerId);
@@ -124,14 +126,13 @@ export const NormalCustomerBill: React.FC = () => {
     }).catch(console.error);
   }, [location.state]);
 
-  // Default dates and layout
+  // Default dates
   useEffect(() => {
     const startOfMonth = dayjs().startOf('month');
     const today = dayjs();
     form.setFieldsValue({
       dateRange: [startOfMonth, today],
-      dateBasis: 'ClearingDate',
-      layout: 'A4'
+      dateBasis: 'ClearingDate'
     });
   }, [form]);
 
@@ -152,7 +153,7 @@ export const NormalCustomerBill: React.FC = () => {
 
     const fromDate = dateRange[0].format('YYYY-MM-DD');
     const toDate = dateRange[1].format('YYYY-MM-DD');
-    const targetLayout = fValues.layout || layout || 'A4';
+    const targetLayout = layout || fValues.layout || 'A4';
     const isQrOn = fValues.qrEnabled !== undefined ? fValues.qrEnabled : qrEnabled;
 
     const matched = customers.find(c => c.account === account);
@@ -208,7 +209,7 @@ export const NormalCustomerBill: React.FC = () => {
 
     const fromDate = dateRange[0].format('YYYY-MM-DD');
     const toDate = dateRange[1].format('YYYY-MM-DD');
-    const targetLayout = fValues.layout || layout || 'A4';
+    const targetLayout = layout || fValues.layout || 'A4';
     const isQrOn = fValues.qrEnabled !== undefined ? fValues.qrEnabled : qrEnabled;
 
     setPdfLoading(true);
@@ -605,7 +606,6 @@ export const NormalCustomerBill: React.FC = () => {
           <Form.Item
             label={<span style={{ fontSize: 12, fontWeight: 500 }}>Print Layout Format</span>}
             name="layout"
-            initialValue="A4"
             style={{ marginBottom: 14 }}
           >
             <Segmented
