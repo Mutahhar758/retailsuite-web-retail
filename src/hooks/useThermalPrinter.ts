@@ -272,3 +272,71 @@ async function printViaLocalRelay(lines: string[], options: PrinterOptions) {
     throw err;
   }
 }
+
+/**
+ * Convert a Blob into a base64 string (without the data URL prefix)
+ */
+export function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(',')[1] || '';
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+export interface PdfPrintBridgeOptions {
+  printerName?: string;
+  isThermal?: boolean;
+  scaleFactor?: number;
+  pageWidth?: number;
+  pageHeight?: number;
+}
+
+/**
+ * Direct PDF Spooler through PrinterBridge (Windows Helper Service on port 5000).
+ * Bypasses the browser print dialog completely and prints the exact QuestPDF vector document.
+ */
+export async function printPdfViaBridge(
+  pdfBase64: string,
+  options: PdfPrintBridgeOptions = {}
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const savedPrinter = localStorage.getItem('pos_printer_name') || 'XP-80';
+    const payload = {
+      printerName: options.printerName || savedPrinter,
+      pdfBase64,
+      isThermal: options.isThermal !== false,
+      scaleFactor: options.scaleFactor ?? 0.9,
+      pageWidth: options.pageWidth ?? 3.1496,
+      pageHeight: options.pageHeight ?? 128.976,
+    };
+
+    const response = await fetch('http://localhost:5000/print-pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const responseText = await response.text().catch(() => '');
+      throw new Error(`PrinterBridge error (${response.status}): ${responseText || response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (err: any) {
+    if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
+      throw new Error(
+        'Failed to connect to PrinterBridge (http://localhost:5000). Please make sure the Printer Bridge helper service is running on this PC.'
+      );
+    }
+    throw err;
+  }
+}
+

@@ -221,7 +221,7 @@ export const reportService = {
     return response.data as Blob;
   },
 
-  async getCustomerBill(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }) {
+  async getCustomerBill(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate'; isWandaLayout?: boolean }) {
     const response = await api.get('/api/reports/customer-bill', { params });
     return response.data.body as CustomerBillResponse;
   },
@@ -233,6 +233,7 @@ export const reportService = {
     dateBasis?: 'VoucherDate' | 'ClearingDate';
     layout?: 'A4' | 'Thermal';
     qrEnabled?: boolean;
+    isWandaLayout?: boolean;
   }): Promise<Blob> {
     const response = await api.get('/api/reports/customer-bill/pdf', {
       params,
@@ -249,6 +250,7 @@ export const reportService = {
     layout?: 'A4' | 'Thermal';
     qrEnabled?: boolean;
     onlyWithActivity?: boolean;
+    isWandaLayout?: boolean;
   }): Promise<Blob> {
     const response = await api.post('/api/reports/customer-bill/batch/pdf', data, {
       responseType: 'blob'

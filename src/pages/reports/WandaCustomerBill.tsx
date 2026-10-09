@@ -14,6 +14,8 @@ import {
   Checkbox,
   Input,
   message,
+  Modal,
+  Progress,
 } from 'antd';
 import {
   PrinterOutlined,
@@ -36,6 +38,7 @@ import { reportService, type CustomerBillResponse } from '../../services/reportS
 import { useAppStore } from '../../stores/useAppStore';
 import { useSettingsStore, BILL_QR_ENABLED_KEY, BILL_QR_ACCOUNT_NUMBER, TRANSACTION_ENABLE_CARRIAGE_KEY, BILL_DEFAULT_FORMAT_KEY } from '../../stores/useSettingsStore';
 import { rangePresets } from '../../utils/datePresets';
+import { printPdfViaBridge, blobToBase64 } from '../../hooks/useThermalPrinter';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -73,6 +76,10 @@ export const WandaCustomerBill: React.FC = () => {
   const [layoutUserSelected, setLayoutUserSelected] = useState<boolean>(false);
   const [qrEnabled, setQrEnabled] = useState<boolean>(true);
   const { settings, initialized, getSetting, fetchSettings } = useSettingsStore();
+
+  const [bridgePrinting, setBridgePrinting] = useState<boolean>(false);
+  const [bulkBridgePrinting, setBulkBridgePrinting] = useState<boolean>(false);
+  const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number; customerName: string } | null>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -283,6 +290,112 @@ export const WandaCustomerBill: React.FC = () => {
       }
     }
     window.open(pdfBlobUrl, '_blank');
+  };
+
+  const handlePrintBridgeDirect = async () => {
+    if (!pdfBlobUrl) {
+      message.warning('Please generate the bill first');
+      return;
+    }
+
+    setBridgePrinting(true);
+    try {
+      const res = await fetch(pdfBlobUrl);
+      const blob = await res.blob();
+      const base64 = await blobToBase64(blob);
+
+      const result = await printPdfViaBridge(base64, {
+        isThermal: layout === 'Thermal',
+        scaleFactor: 0.9,
+      });
+
+      if (result.success) {
+        message.success(result.message || '80mm Thermal Receipt sent directly to printer!');
+      } else {
+        message.error(result.message || 'PrinterBridge reported an error');
+      }
+    } catch (err: any) {
+      console.error(err);
+      message.error(err.message || 'Failed to print via PrinterBridge');
+    } finally {
+      setBridgePrinting(false);
+    }
+  };
+
+  const handleBulkPrintBridgeDirect = async () => {
+    if (selectedBulkAccounts.length === 0) {
+      message.warning('Please select at least one customer account');
+      return;
+    }
+
+    const fValues = form.getFieldsValue();
+    const { dateRange, dateBasis = 'ClearingDate' } = fValues;
+
+    if (!dateRange || dateRange.length < 2) {
+      message.warning('Please select a valid date range');
+      return;
+    }
+
+    const fromDate = dateRange[0].format('YYYY-MM-DD');
+    const toDate = dateRange[1].format('YYYY-MM-DD');
+    const isQrOn = fValues.qrEnabled !== undefined ? fValues.qrEnabled : qrEnabled;
+
+    Modal.confirm({
+      title: 'Bulk Print to Thermal Printer',
+      content: `Are you sure you want to silently print ${selectedBulkAccounts.length} customer bill(s) directly to your thermal printer via PrinterBridge?`,
+      okText: 'Start Bulk Print',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        setBulkBridgePrinting(true);
+        let printedCount = 0;
+
+        try {
+          for (let i = 0; i < selectedBulkAccounts.length; i++) {
+            const acc = selectedBulkAccounts[i];
+            const cust = customers.find(c => c.account === acc);
+            const custTitle = cust?.title || acc;
+
+            setBulkProgress({
+              current: i + 1,
+              total: selectedBulkAccounts.length,
+              customerName: custTitle,
+            });
+
+            try {
+              const blob = await reportService.getCustomerBillPdf({
+                account: acc,
+                fromDate,
+                toDate,
+                dateBasis,
+                layout: 'Thermal',
+                qrEnabled: isQrOn,
+                isWandaLayout: true,
+              });
+
+              const base64 = await blobToBase64(blob);
+              await printPdfViaBridge(base64, {
+                isThermal: true,
+                scaleFactor: 0.9,
+              });
+
+              printedCount++;
+            } catch (err) {
+              console.warn(`Failed to print bill for ${acc}:`, err);
+            }
+
+            // Pacing delay: 600ms between bills allows thermal cutter to cycle and prevents buffer overflow
+            await new Promise(r => setTimeout(r, 600));
+          }
+
+          message.success(`Bulk printing complete! ${printedCount} bill(s) printed cleanly.`);
+        } catch (err: any) {
+          message.error(err.message || 'Bulk printing encountered an error');
+        } finally {
+          setBulkBridgePrinting(false);
+          setBulkProgress(null);
+        }
+      },
+    });
   };
 
   const handleDownloadPdf = () => {
@@ -699,6 +812,25 @@ export const WandaCustomerBill: React.FC = () => {
               Compile Batch Bills ({selectedBulkAccounts.length})
             </Button>
           )}
+
+          {mode === 'batch' && layout === 'Thermal' && (
+            <Button
+              type="primary"
+              icon={<PrinterOutlined />}
+              style={{
+                width: '100%',
+                marginTop: 8,
+                backgroundColor: '#059669',
+                borderColor: '#059669',
+                fontWeight: 600
+              }}
+              loading={bulkBridgePrinting}
+              disabled={selectedBulkAccounts.length === 0}
+              onClick={handleBulkPrintBridgeDirect}
+            >
+              🖨 Bulk Print via Bridge ({selectedBulkAccounts.length})
+            </Button>
+          )}
         </Form>
 
         {/* Wanda Balance & Bag KPIs (Single Mode) */}
@@ -815,6 +947,21 @@ export const WandaCustomerBill: React.FC = () => {
             </div>
 
             <Space wrap size={8}>
+              {layout === 'Thermal' && (
+                <Tooltip title="Print directly to configured POS thermal printer via PrinterBridge (1-Click, Silent)">
+                  <Button
+                    type="primary"
+                    icon={<ThunderboltOutlined />}
+                    style={{ backgroundColor: '#d97706', borderColor: '#d97706', fontWeight: 600 }}
+                    loading={bridgePrinting}
+                    disabled={!pdfBlobUrl || pdfLoading}
+                    onClick={handlePrintBridgeDirect}
+                  >
+                    🖨 Direct Thermal
+                  </Button>
+                </Tooltip>
+              )}
+
               <Tooltip title="Print Document">
                 <Button
                   icon={<PrinterOutlined />}
@@ -935,6 +1082,27 @@ export const WandaCustomerBill: React.FC = () => {
           </div>
         </Card>
       </div>
+
+      {/* Bulk Print Progress Modal */}
+      <Modal
+        title="🖨 Printing Bulk Bills via PrinterBridge"
+        open={bulkProgress !== null}
+        footer={null}
+        closable={false}
+      >
+        <div style={{ textAlign: 'center', padding: '16px 0' }}>
+          <Progress
+            percent={bulkProgress ? Math.round((bulkProgress.current / bulkProgress.total) * 100) : 0}
+            status="active"
+          />
+          <Text strong style={{ fontSize: 14, display: 'block', marginTop: 12 }}>
+            Printing {bulkProgress?.current} of {bulkProgress?.total}: {bulkProgress?.customerName}
+          </Text>
+          <Text type="secondary" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
+            Spooling directly to thermal printer with cutter pacing...
+          </Text>
+        </div>
+      </Modal>
     </div>
   );
 };
