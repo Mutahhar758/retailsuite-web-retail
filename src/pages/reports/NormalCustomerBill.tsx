@@ -916,7 +916,7 @@ export const NormalCustomerBill: React.FC = () => {
             </div>
 
             <Space wrap size={8}>
-              {layout === 'Thermal' && (
+              {layout === 'Thermal' ? (
                 <Tooltip title="Print directly to configured POS thermal printer via PrinterBridge (1-Click, Silent)">
                   <Button
                     type="primary"
@@ -929,17 +929,17 @@ export const NormalCustomerBill: React.FC = () => {
                     🖨 Direct Thermal
                   </Button>
                 </Tooltip>
+              ) : (
+                <Tooltip title="Print Document">
+                  <Button
+                    icon={<PrinterOutlined />}
+                    disabled={!pdfBlobUrl || pdfLoading}
+                    onClick={handlePrint}
+                  >
+                    Print
+                  </Button>
+                </Tooltip>
               )}
-
-              <Tooltip title="Print Document">
-                <Button
-                  icon={<PrinterOutlined />}
-                  disabled={!pdfBlobUrl || pdfLoading}
-                  onClick={handlePrint}
-                >
-                  Print
-                </Button>
-              </Tooltip>
 
               <Tooltip title="Download PDF File">
                 <Button
@@ -991,7 +991,10 @@ export const NormalCustomerBill: React.FC = () => {
             position: 'relative',
             backgroundColor: '#525659',
             borderRadius: 6,
-            overflow: 'hidden'
+            overflow: 'hidden',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'stretch'
           }}>
             {pdfLoading && (
               <div style={{
@@ -1020,12 +1023,18 @@ export const NormalCustomerBill: React.FC = () => {
             {pdfBlobUrl ? (
               <iframe
                 ref={iframeRef}
-                src={`${pdfBlobUrl}#toolbar=0&navpanes=0&view=FitH`}
+                src={
+                  layout === 'Thermal'
+                    ? `${pdfBlobUrl}#toolbar=0&navpanes=0&zoom=100`
+                    : `${pdfBlobUrl}#toolbar=0&navpanes=0&view=FitH`
+                }
                 style={{
-                  width: '100%',
+                  width: layout === 'Thermal' ? 'min(420px, 100%)' : '100%',
                   height: '100%',
                   border: 'none',
-                  backgroundColor: '#ffffff'
+                  backgroundColor: '#ffffff',
+                  boxShadow: layout === 'Thermal' ? '0 4px 20px rgba(0, 0, 0, 0.4)' : 'none',
+                  transition: 'width 0.2s ease'
                 }}
                 title="Customer Bill Document Preview"
               />
