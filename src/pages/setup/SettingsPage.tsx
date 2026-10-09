@@ -14,7 +14,8 @@ import {
   Spin,
   Switch,
   Form,
-  Alert
+  Alert,
+  Radio
 } from 'antd';
 import {
   SettingOutlined,
@@ -34,6 +35,7 @@ import {
   useSettingsStore,
   BILL_THANK_YOU_KEY,
   BILL_THANK_YOU_DEFAULT,
+  BILL_DEFAULT_FORMAT_KEY,
   BILL_QR_ENABLED_KEY,
   BILL_QR_ACCOUNT_TITLE,
   BILL_QR_ACCOUNT_NUMBER,
@@ -61,6 +63,7 @@ export const SettingsPage: React.FC = () => {
 
   // Local state for Thank You message setting
   const [thankYouInput, setThankYouInput] = useState<string>('');
+  const [defaultBillFormat, setDefaultBillFormat] = useState<string>('A4');
   const [savingThankYou, setSavingThankYou] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
 
@@ -92,11 +95,13 @@ export const SettingsPage: React.FC = () => {
     fetchSettings();
   }, [fetchSettings, currentTenantIdentifier]);
 
-  // Sync Thank You state when store initialized or settings change
+  // Sync Thank You and Default Bill Format state when store initialized or settings change
   useEffect(() => {
     if (!initialized) return;
     const currentVal = getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT);
     setThankYouInput(currentVal);
+    const formatVal = getSetting(BILL_DEFAULT_FORMAT_KEY, 'A4');
+    setDefaultBillFormat(formatVal.toLowerCase().includes('thermal') ? 'Thermal' : 'A4');
   }, [initialized, settings, getSetting]);
 
   // Sync QR payment state when store initialized or settings change
@@ -124,8 +129,14 @@ export const SettingsPage: React.FC = () => {
         'Customer bill and receipt thank you message',
         'Bill'
       );
+      await updateSetting(
+        BILL_DEFAULT_FORMAT_KEY,
+        defaultBillFormat,
+        'Default customer bill print layout (Thermal or A4)',
+        'Bill'
+      );
       setLastSavedTime(new Date().toLocaleTimeString());
-      message.success('Bill message saved successfully!');
+      message.success('Bill settings saved successfully!');
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Failed to save setting.');
     } finally {
@@ -317,8 +328,25 @@ export const SettingsPage: React.FC = () => {
                       }
                     >
                       <Paragraph type="secondary" style={{ marginBottom: 16 }}>
-                        Customize the message printed at the bottom of sales receipts and customer bills.
+                        Customize the print layout and message printed on sales receipts and customer bills.
                       </Paragraph>
+
+                      {/* Default Format Setting */}
+                      <div style={{ marginBottom: 20 }}>
+                        <Text strong style={{ display: 'block', marginBottom: 8 }}>Default Bill Print Layout:</Text>
+                        <Radio.Group
+                          value={defaultBillFormat}
+                          onChange={(e) => setDefaultBillFormat(e.target.value)}
+                          buttonStyle="solid"
+                          size="middle"
+                        >
+                          <Radio.Button value="Thermal">80mm Thermal Receipt (POS Roll)</Radio.Button>
+                          <Radio.Button value="A4">A4 Sheet (Commercial Invoice)</Radio.Button>
+                        </Radio.Group>
+                        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
+                          Customer bills will default to this layout automatically across all devices.
+                        </Text>
+                      </div>
 
                       <div style={{ marginBottom: 16 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>

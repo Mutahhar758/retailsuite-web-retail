@@ -34,7 +34,7 @@ import dayjs from 'dayjs';
 import api from '../../services/api';
 import { reportService, type CustomerBillResponse } from '../../services/reportService';
 import { useAppStore } from '../../stores/useAppStore';
-import { useSettingsStore, BILL_QR_ENABLED_KEY, BILL_QR_ACCOUNT_NUMBER, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, BILL_QR_ENABLED_KEY, BILL_QR_ACCOUNT_NUMBER, TRANSACTION_ENABLE_CARRIAGE_KEY, BILL_DEFAULT_FORMAT_KEY } from '../../stores/useSettingsStore';
 import { rangePresets } from '../../utils/datePresets';
 
 const { Title, Text } = Typography;
@@ -70,12 +70,23 @@ export const WandaCustomerBill: React.FC = () => {
   const currentOrgName = currentOrg?.name || 'Retail Suite';
 
   const [layout, setLayout] = useState<'A4' | 'Thermal'>('A4');
+  const [layoutUserSelected, setLayoutUserSelected] = useState<boolean>(false);
   const [qrEnabled, setQrEnabled] = useState<boolean>(true);
   const { getSetting, fetchSettings } = useSettingsStore();
 
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
+
+  useEffect(() => {
+    if (!layoutUserSelected) {
+      const defaultFmt = getSetting(BILL_DEFAULT_FORMAT_KEY, '');
+      if (defaultFmt) {
+        const isThermal = defaultFmt.toLowerCase().includes('thermal');
+        setLayout(isThermal ? 'Thermal' : 'A4');
+      }
+    }
+  }, [getSetting, layoutUserSelected]);
 
   useEffect(() => {
     const storeSetting = getSetting(BILL_QR_ENABLED_KEY, 'false') === 'true';
@@ -229,6 +240,7 @@ export const WandaCustomerBill: React.FC = () => {
   };
 
   const handleLayoutChange = (newLayout: 'A4' | 'Thermal') => {
+    setLayoutUserSelected(true);
     setLayout(newLayout);
     form.setFieldsValue({ layout: newLayout });
     if (mode === 'single' && form.getFieldValue('account')) {
