@@ -120,23 +120,44 @@ export const WandaSupplyRegister: React.FC = () => {
         let bagRate = updated.secRate || 0;
 
         if (field === 'qty') {
-          kgQty = numVal;
-          if (bagQty > 0) packQty = round(kgQty / bagQty, 2);
-          else if (packQty > 0) bagQty = round(kgQty / packQty, 2);
+          if (line.qty && round(numVal, 2) === round(line.qty, 2)) {
+            kgQty = line.qty;
+          } else {
+            kgQty = numVal;
+            if (bagQty > 0) packQty = round(kgQty / bagQty, 2);
+            else if (packQty > 0) bagQty = round(kgQty / packQty, 2);
+          }
         } else if (field === 'secQty') {
-          bagQty = numVal;
-          if (packQty > 0) kgQty = round(bagQty * packQty, 2);
-          else if (kgQty > 0) packQty = round(kgQty / bagQty, 2);
+          if (line.secQty && round(numVal, 2) === round(line.secQty, 2)) {
+            bagQty = line.secQty;
+          } else {
+            bagQty = numVal;
+            if (packQty > 0) kgQty = round(bagQty * packQty, 2);
+            else if (kgQty > 0) packQty = round(kgQty / bagQty, 2);
+          }
         } else if (field === 'packQty') {
-          packQty = numVal;
-          packing = numVal;
-          if (bagQty > 0) kgQty = round(bagQty * packQty, 2);
+          if (line.packQty && round(numVal, 2) === round(line.packQty, 2)) {
+            packQty = line.packQty;
+            packing = line.packing || 0;
+          } else {
+            packQty = numVal;
+            packing = numVal;
+            if (bagQty > 0) kgQty = round(bagQty * packQty, 2);
+          }
         } else if (field === 'rate') {
-          kgRate = numVal;
-          if (packing > 0) bagRate = round(kgRate * packing, 4);
+          if (line.rate && round(numVal, 2) === round(line.rate, 2)) {
+            kgRate = line.rate;
+          } else {
+            kgRate = numVal;
+            if (packing > 0) bagRate = round(kgRate * packing, 2);
+          }
         } else if (field === 'secRate') {
-          bagRate = numVal;
-          if (packing > 0) kgRate = round(bagRate / packing, 4);
+          if (line.secRate && round(numVal, 2) === round(line.secRate, 2)) {
+            bagRate = line.secRate;
+          } else {
+            bagRate = numVal;
+            if (packing > 0) kgRate = round(bagRate / packing, 8);
+          }
         } else if (field === 'discount') {
           updated.discount = round(numVal, 2);
         } else if (field === 'addLess') {
@@ -149,8 +170,8 @@ export const WandaSupplyRegister: React.FC = () => {
         updated.secQty = round(bagQty, 2);
         updated.packQty = round(packQty, 2);
         updated.packing = round(packing, 2);
-        updated.rate = round(kgRate, 4);
-        updated.secRate = round(bagRate, 4);
+        updated.rate = round(kgRate, 8);
+        updated.secRate = round(bagRate, 2);
 
         const disc = updated.discount || 0;
         const carriage = updated.carriage || 0;
@@ -460,10 +481,19 @@ export const WandaSupplyRegister: React.FC = () => {
         <InputNumber
           size="middle"
           min={0}
-          precision={4}
           step={0.01}
           value={val}
           style={{ width: '100%', fontSize: '13px' }}
+          formatter={(value: any, info: any) => {
+            if (value == null || value === '') return '';
+            if (info?.userTyping) {
+              return `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            }
+            const num = Number(value);
+            if (isNaN(num)) return `${value}`;
+            return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          }}
+          parser={value => value?.replace(/[^0-9.]/g, '') as any}
           onChange={(newVal) => handleCellChange(`${record.voucherNo}-${record.seq}`, 'rate', newVal)}
         />
       ),
@@ -934,9 +964,18 @@ export const WandaSupplyRegister: React.FC = () => {
               <Form.Item name="rate" label="Rate (/Kg)">
                 <InputNumber
                   min={0}
-                  precision={4}
                   step={0.01}
                   style={{ width: '100%' }}
+                  formatter={(value: any, info: any) => {
+                    if (value == null || value === '') return '';
+                    if (info?.userTyping) {
+                      return `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                    }
+                    const num = Number(value);
+                    if (isNaN(num)) return `${value}`;
+                    return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                  }}
+                  parser={value => value?.replace(/[^0-9.]/g, '') as any}
                   onChange={(val) => {
                     const pack = addForm.getFieldValue('packQty') || 50;
                     addForm.setFieldsValue({ secRate: round((val || 0) * pack, 2) });
@@ -953,7 +992,7 @@ export const WandaSupplyRegister: React.FC = () => {
                   style={{ width: '100%' }}
                   onChange={(val) => {
                     const pack = addForm.getFieldValue('packQty') || 50;
-                    if (pack > 0) addForm.setFieldsValue({ rate: round((val || 0) / pack, 4) });
+                    if (pack > 0) addForm.setFieldsValue({ rate: round((val || 0) / pack, 8) });
                   }}
                 />
               </Form.Item>

@@ -487,8 +487,8 @@ export const WandaCustomerBill: React.FC = () => {
           <td>${l.item || ''}</td>
           <td class="num">${l.qty || ''}</td>
           <td class="num">${l.secQty || ''}</td>
-          <td class="num">${l.rate || ''}</td>
-          <td class="num">${l.secRate || ''}</td>
+          <td class="num">${l.rate != null ? Number(l.rate).toFixed(2) : ''}</td>
+          <td class="num">${l.secRate != null ? Number(l.secRate).toFixed(2) : ''}</td>
           ${enableCarriage ? `<td class="num">${l.carriage || 0}</td>` : ''}
           <td class="num">${l.addLess || ''}</td>
           <td class="num bold">${l.amount || ''}</td>
@@ -556,8 +556,8 @@ export const WandaCustomerBill: React.FC = () => {
         `"${(l.item || '').replace(/"/g, '""')}"`,
         l.qty || '',
         l.secQty || '',
-        l.rate || '',
-        l.secRate || ''
+        l.rate != null ? Number(l.rate).toFixed(2) : '',
+        l.secRate != null ? Number(l.secRate).toFixed(2) : ''
       ];
       if (enableCarriage) {
         baseRow.push(l.carriage || 0);

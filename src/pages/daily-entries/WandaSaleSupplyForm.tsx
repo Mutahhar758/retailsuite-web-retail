@@ -242,9 +242,9 @@ export const WandaSaleSupplyForm: React.FC = () => {
       }
 
       if (order && order.details) {
-        const isSec = item?.defaultUnit === item?.secondaryUnit;
-        const rate = isSec ? (item?.secRate || 0) : (item?.priRate || 0);
+        const pSize = Number(item?.qtyInPack || (item as any)?.QtyInPack || (item as any)?.qty_in_pack || 0);
         const secRate = item?.secRate || 0;
+        const rate = (pSize > 0 && secRate > 0) ? round(secRate / pSize, 8) : (item?.priRate || 0);
 
         const newLines = order.details.map((d, index) => {
           const setting = customerQtyMap.get(d.customerId);
@@ -306,9 +306,9 @@ export const WandaSaleSupplyForm: React.FC = () => {
         });
       }
 
-      const isSec = item?.defaultUnit === item?.secondaryUnit;
-      const rate = isSec ? (item?.secRate || 0) : (item?.priRate || 0);
+      const pSize = Number(item?.qtyInPack || (item as any)?.QtyInPack || (item as any)?.qty_in_pack || 0);
       const secRate = item?.secRate || 0;
+      const rate = (pSize > 0 && secRate > 0) ? round(secRate / pSize, 8) : (item?.priRate || 0);
 
       setSupplyLines(prev => prev.map(line => {
         if (!line.customerId) return line;
@@ -386,44 +386,68 @@ export const WandaSaleSupplyForm: React.FC = () => {
         let bagRate = updated.secRate || 0;
 
         if (field === 'qty') {
-          kgQty = numVal;
-          if (bagQty > 0) {
-            packQty = round(kgQty / bagQty, 2);
-          } else if (packQty > 0) {
-            bagQty = round(kgQty / packQty, 2);
+          if (l.qty && round(numVal, 2) === round(l.qty, 2)) {
+            kgQty = l.qty;
+          } else {
+            kgQty = numVal;
+            if (bagQty > 0) {
+              packQty = round(kgQty / bagQty, 2);
+            } else if (packQty > 0) {
+              bagQty = round(kgQty / packQty, 2);
+            }
           }
         } else if (field === 'secQty') {
-          bagQty = numVal;
-          if (packQty > 0) {
-            kgQty = round(bagQty * packQty, 2);
-          } else if (kgQty > 0) {
-            packQty = round(kgQty / bagQty, 2);
+          if (l.secQty && round(numVal, 2) === round(l.secQty, 2)) {
+            bagQty = l.secQty;
+          } else {
+            bagQty = numVal;
+            if (packQty > 0) {
+              kgQty = round(bagQty * packQty, 2);
+            } else if (kgQty > 0) {
+              packQty = round(kgQty / bagQty, 2);
+            }
           }
         } else if (field === 'packQty') {
-          packQty = numVal;
-          if (bagQty > 0) {
-            kgQty = round(bagQty * packQty, 2);
-          } else if (kgQty > 0) {
-            bagQty = round(kgQty / packQty, 2);
+          if (l.packQty && round(numVal, 2) === round(l.packQty, 2)) {
+            packQty = l.packQty;
+          } else {
+            packQty = numVal;
+            if (bagQty > 0) {
+              kgQty = round(bagQty * packQty, 2);
+            } else if (kgQty > 0) {
+              bagQty = round(kgQty / packQty, 2);
+            }
           }
         } else if (field === 'packing') {
-          packing = numVal;
-          if (packing > 0) {
-            if (bagRate > 0) {
-              kgRate = round(bagRate / packing, 4);
-            } else if (kgRate > 0) {
-              bagRate = round(kgRate * packing, 4);
+          if (l.packing && round(numVal, 2) === round(l.packing, 2)) {
+            packing = l.packing;
+          } else {
+            packing = numVal;
+            if (packing > 0) {
+              if (bagRate > 0) {
+                kgRate = round(bagRate / packing, 8);
+              } else if (kgRate > 0) {
+                bagRate = round(kgRate * packing, 2);
+              }
             }
           }
         } else if (field === 'rate') {
-          kgRate = numVal;
-          if (packing > 0) {
-            bagRate = round(kgRate * packing, 4);
+          if (l.rate && round(numVal, 2) === round(l.rate, 2)) {
+            kgRate = l.rate;
+          } else {
+            kgRate = numVal;
+            if (packing > 0) {
+              bagRate = round(kgRate * packing, 2);
+            }
           }
         } else if (field === 'secRate') {
-          bagRate = numVal;
-          if (packing > 0) {
-            kgRate = round(bagRate / packing, 4);
+          if (l.secRate && round(numVal, 2) === round(l.secRate, 2)) {
+            bagRate = l.secRate;
+          } else {
+            bagRate = numVal;
+            if (packing > 0) {
+              kgRate = round(bagRate / packing, 8);
+            }
           }
         }
 
@@ -431,8 +455,8 @@ export const WandaSaleSupplyForm: React.FC = () => {
         updated.secQty = round(bagQty, 2);
         updated.packQty = round(packQty, 2);
         updated.packing = round(packing, 2);
-        updated.rate = round(kgRate, 4);
-        updated.secRate = round(bagRate, 4);
+        updated.rate = round(kgRate, 8);
+        updated.secRate = round(bagRate, 2);
 
         if (field === 'discPercent') {
           const rate = updated.rate || 0;
@@ -677,12 +701,20 @@ export const WandaSaleSupplyForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={4}
           step={0.01}
           tabIndex={-1}
           keyboard={false}
           controls={false}
-          formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+          formatter={(value: any, info: any) => {
+            if (value == null || value === '') return '';
+            if (info?.userTyping) {
+              return `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            }
+            const num = Number(value);
+            if (isNaN(num)) return `${value}`;
+            return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          }}
+          parser={value => value?.replace(/[^0-9.]/g, '') as any}
           onChange={(v) => updateLine(record.key, 'rate', v)}
           onKeyDown={(e) => handleCellKeyDown(rowIdx, 'rate', e)}
         />
@@ -699,7 +731,7 @@ export const WandaSaleSupplyForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={4}
+          precision={2}
           step={0.01}
           keyboard={false}
           controls={false}

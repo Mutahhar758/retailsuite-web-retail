@@ -461,12 +461,13 @@ export const WandaSaleForm: React.FC = () => {
           if (field === 'itemId') {
             if (item) {
               updated.unit = item.defaultUnit || item.primaryUnit;
-              updated.rate = item.priRate || 0;
               updated.secUnit = item.secondaryUnit;
               const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 0);
               updated.packQty = pSize;
               updated.packing = pSize;
-              updated.secRate = item.secRate || ((item.priRate || 0) * (pSize > 0 ? pSize : 1));
+              const bagR = item.secRate || ((item.priRate || 0) * (pSize > 0 ? pSize : 1));
+              updated.secRate = bagR;
+              updated.rate = (pSize > 0 && bagR > 0) ? round(bagR / pSize, 8) : (item.priRate || 0);
               updated.secQty = 0;
             }
           }
@@ -482,44 +483,68 @@ export const WandaSaleForm: React.FC = () => {
           let bagRate = updated.secRate || 0;
 
           if (field === 'qty') {
-            kgQty = numVal;
-            if (bagQty > 0) {
-              packQty = round(kgQty / bagQty, 2);
-            } else if (packQty > 0) {
-              bagQty = round(kgQty / packQty, 2);
+            if (l.qty && round(numVal, 2) === round(l.qty, 2)) {
+              kgQty = l.qty;
+            } else {
+              kgQty = numVal;
+              if (bagQty > 0) {
+                packQty = round(kgQty / bagQty, 2);
+              } else if (packQty > 0) {
+                bagQty = round(kgQty / packQty, 2);
+              }
             }
           } else if (field === 'secQty') {
-            bagQty = numVal;
-            if (packQty > 0) {
-              kgQty = round(bagQty * packQty, 2);
-            } else if (kgQty > 0) {
-              packQty = round(kgQty / bagQty, 2);
+            if (l.secQty && round(numVal, 2) === round(l.secQty, 2)) {
+              bagQty = l.secQty;
+            } else {
+              bagQty = numVal;
+              if (packQty > 0) {
+                kgQty = round(bagQty * packQty, 2);
+              } else if (kgQty > 0) {
+                packQty = round(kgQty / bagQty, 2);
+              }
             }
           } else if (field === 'packQty') {
-            packQty = numVal;
-            if (bagQty > 0) {
-              kgQty = round(bagQty * packQty, 2);
-            } else if (kgQty > 0) {
-              bagQty = round(kgQty / packQty, 2);
+            if (l.packQty && round(numVal, 2) === round(l.packQty, 2)) {
+              packQty = l.packQty;
+            } else {
+              packQty = numVal;
+              if (bagQty > 0) {
+                kgQty = round(bagQty * packQty, 2);
+              } else if (kgQty > 0) {
+                bagQty = round(kgQty / packQty, 2);
+              }
             }
           } else if (field === 'packing') {
-            packing = numVal;
-            if (packing > 0) {
-              if (bagRate > 0) {
-                kgRate = round(bagRate / packing, 4);
-              } else if (kgRate > 0) {
-                bagRate = round(kgRate * packing, 4);
+            if (l.packing && round(numVal, 2) === round(l.packing, 2)) {
+              packing = l.packing;
+            } else {
+              packing = numVal;
+              if (packing > 0) {
+                if (bagRate > 0) {
+                  kgRate = round(bagRate / packing, 8);
+                } else if (kgRate > 0) {
+                  bagRate = round(kgRate * packing, 2);
+                }
               }
             }
           } else if (field === 'rate') {
-            kgRate = numVal;
-            if (packing > 0) {
-              bagRate = round(kgRate * packing, 4);
+            if (l.rate && round(numVal, 2) === round(l.rate, 2)) {
+              kgRate = l.rate;
+            } else {
+              kgRate = numVal;
+              if (packing > 0) {
+                bagRate = round(kgRate * packing, 2);
+              }
             }
           } else if (field === 'secRate') {
-            bagRate = numVal;
-            if (packing > 0) {
-              kgRate = round(bagRate / packing, 4);
+            if (l.secRate && round(numVal, 2) === round(l.secRate, 2)) {
+              bagRate = l.secRate;
+            } else {
+              bagRate = numVal;
+              if (packing > 0) {
+                kgRate = round(bagRate / packing, 8);
+              }
             }
           }
 
@@ -527,8 +552,8 @@ export const WandaSaleForm: React.FC = () => {
           updated.secQty = round(bagQty, 2);
           updated.packQty = round(packQty, 2);
           updated.packing = round(packing, 2);
-          updated.rate = round(kgRate, 4);
-          updated.secRate = round(bagRate, 4);
+          updated.rate = round(kgRate, 8);
+          updated.secRate = round(bagRate, 2);
 
           if (field === 'discount') {
             updated.discount = numVal;
@@ -772,9 +797,16 @@ export const WandaSaleForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={4}
           step={0.01}
-          formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+          formatter={(value: any, info: any) => {
+            if (value == null || value === '') return '';
+            if (info?.userTyping) {
+              return `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            }
+            const num = Number(value);
+            if (isNaN(num)) return `${value}`;
+            return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          }}
           parser={value => value?.replace(/[^0-9.]/g, '') as any}
           onChange={(v) => updateLine(record.key, 'rate', v)}
           tabIndex={0}
@@ -791,7 +823,7 @@ export const WandaSaleForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={4}
+          precision={2}
           step={0.01}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           parser={value => value?.replace(/[^0-9.]/g, '') as any}
