@@ -596,7 +596,7 @@ export const InventoryItemForm: React.FC = () => {
                       <img 
                         src={imageUrl} 
                         alt="Product" 
-                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }} 
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain', padding: 4, backgroundColor: '#ffffff' }} 
                       />
                     </div>
                   ) : (
@@ -637,9 +637,26 @@ export const InventoryItemForm: React.FC = () => {
                       {imageUrl ? 'Change Image' : 'Upload Image'}
                     </Button>
                   </Upload>
-                  <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 11 }}>
-                    JPG, PNG or JPEG. Max 5MB.
-                  </Text>
+
+                  <div style={{
+                    marginTop: 12,
+                    padding: '10px 12px',
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 8,
+                    textAlign: 'left',
+                    width: '100%'
+                  }}>
+                    <Text strong style={{ fontSize: 12, color: '#334155', display: 'block', marginBottom: 4 }}>
+                      📸 Recommended Image Specs:
+                    </Text>
+                    <div style={{ fontSize: 11, color: '#64748b', lineHeight: '1.6' }}>
+                      <div>• <strong>Aspect Ratio:</strong> 1:1 (Square) or 4:5 (Portrait)</div>
+                      <div>• <strong>Optimal Dimensions:</strong> 600 × 600 px to 1000 × 1000 px</div>
+                      <div>• <strong>File Size & Format:</strong> Max 5MB (JPG, PNG, WebP)</div>
+                      <div>• <strong>POS Tip:</strong> Products with centered framing and clean white/transparent background look best on the POS screen.</div>
+                    </div>
+                  </div>
                 </div>
               </Card>
             )}

@@ -1327,27 +1327,28 @@ export const POSSaleForm: React.FC = () => {
 
           {/* Items Grid Container */}
           <div className="pos-scrollbar" style={{ flex: 1, overflowY: 'auto', paddingRight: 4 }}>
-            <Row gutter={[16, 16]}>
+            <Row gutter={[12, 12]}>
               {filteredItems.map(item => (
-                <Col xs={12} sm={8} md={8} key={item.id}>
+                <Col xs={12} sm={6} md={6} lg={6} xl={6} key={item.id}>
                   <div
                     className="pos-item-card"
                     onClick={() => handleAddToCart(item)}
                     style={{
-                      borderRadius: 16,
+                      borderRadius: 14,
                       overflow: 'hidden',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
-                      height: 210,
+                      height: 240,
                       boxShadow: '0 4px 12px rgba(15, 23, 42, 0.03)',
-                      border: '1px solid #e2e8f0'
+                      border: '1px solid #e2e8f0',
+                      backgroundColor: '#ffffff'
                     }}
                   >
                     {/* Image area — fills card, full picture visible */}
                     <div style={{
                       flex: 1,
-                      backgroundColor: '#f8fafc',
+                      backgroundColor: '#ffffff',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1362,7 +1363,7 @@ export const POSSaleForm: React.FC = () => {
                             width: '100%',
                             height: '100%',
                             objectFit: 'contain',
-                            padding: 8
+                            padding: 4
                           }}
                         />
                       ) : (
@@ -1384,14 +1385,14 @@ export const POSSaleForm: React.FC = () => {
 
                     {/* Info strip at bottom */}
                     <div style={{
-                      padding: '10px 12px',
+                      padding: '8px 10px',
                       backgroundColor: '#ffffff',
                       borderTop: '1px solid #f1f5f9',
                       flexShrink: 0,
                     }}>
                       <div style={{
                         fontWeight: 700,
-                        fontSize: 16,
+                        fontSize: 14,
                         color: '#0f172a',
                         overflow: 'hidden',
                         whiteSpace: 'nowrap',
@@ -1408,7 +1409,7 @@ export const POSSaleForm: React.FC = () => {
                         <div>
                           <span style={{
                             fontWeight: 800,
-                            fontSize: 15,
+                            fontSize: 14,
                             color: '#16a34a',
                             display: 'block'
                           }}>
