@@ -235,7 +235,7 @@ export const MainLayout: React.FC = () => {
         { key: '/setup/item-categories', label: 'Product Category' },
         { key: '/setup/units', label: 'Unit Index' },
         { key: '/setup/narrations', label: 'Narration' },
-        { key: '/setup/hr-info', label: 'HR Info' },
+        { key: '/setup/hr-info', label: 'Employees' },
         { key: '/setup/users', label: 'Users' },
         { key: '/setup/roles', label: 'Roles & Permissions' },
         hasSupplyFeature ? { key: '/setup/supply-order', label: 'Supply Order' } : null,

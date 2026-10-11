@@ -90,7 +90,7 @@ const MODULE_DISPLAY_NAMES: Record<string, string> = {
   ItemCategories: 'Item Categories',
   ChartOfAccounts: 'Chart Of Accounts',
   DetailAccounts: 'Detail Accounts',
-  HRInfo: 'HR Info',
+  HRInfo: 'Employees',
 };
 
 export const RoleForm: React.FC = () => {

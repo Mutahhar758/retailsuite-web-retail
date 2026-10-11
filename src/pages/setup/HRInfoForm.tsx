@@ -105,10 +105,10 @@ export const HRInfoForm: React.FC = () => {
 
       if (isEdit) {
         await hrInfoService.update(id!, requestPayload);
-        message.success('Employee HR information updated successfully');
+        message.success('Employee updated successfully');
       } else {
         await hrInfoService.create(requestPayload);
-        message.success('Employee HR information created successfully');
+        message.success('Employee created successfully');
       }
 
       navigate('/setup/hr-info');
@@ -117,7 +117,7 @@ export const HRInfoForm: React.FC = () => {
       if (error.errorFields) {
         message.error('Please resolve validation errors before saving.');
       } else {
-        message.error(error.response?.data?.message || 'Failed to save employee HR information');
+        message.error(error.response?.data?.message || 'Failed to save employee');
       }
     } finally {
       setLoading(false);
@@ -167,7 +167,7 @@ export const HRInfoForm: React.FC = () => {
           <SolutionOutlined style={{ fontSize: 24, color: '#13c2c2' }} />
           <div>
             <Title level={4} style={{ margin: 0 }}>
-              {isEdit ? `Edit HR Info: ${employeeName}` : 'Create Employee HR Info'}
+              {isEdit ? `Edit Employee: ${employeeName}` : 'Create Employee'}
             </Title>
             <Text type="secondary">
               {isEdit 
@@ -184,7 +184,7 @@ export const HRInfoForm: React.FC = () => {
             loading={loading}
             style={{ backgroundColor: '#13c2c2', borderColor: '#13c2c2' }}
           >
-            {isEdit ? 'Update HR Record' : 'Save HR Record'}
+            {isEdit ? 'Update Employee' : 'Save Employee'}
           </Button>
         </Space>
       </div>

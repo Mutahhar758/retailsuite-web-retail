@@ -25,7 +25,7 @@ export const HRInfoList: React.FC = () => {
       const result = await hrInfoService.getHRInfos();
       setData(result || []);
     } catch (error) {
-      message.error('Failed to fetch HR information records');
+      message.error('Failed to fetch employee records');
     } finally {
       setLoading(false);
     }
@@ -47,10 +47,10 @@ export const HRInfoList: React.FC = () => {
     try {
       setLoading(true);
       await hrInfoService.delete(id);
-      message.success('Employee HR record deleted successfully');
+      message.success('Employee record deleted successfully');
       fetchData();
     } catch (error: any) {
-      message.error(error.response?.data?.message || 'Failed to delete HR record');
+      message.error(error.response?.data?.message || 'Failed to delete employee record');
     } finally {
       setLoading(false);
     }
@@ -200,7 +200,7 @@ export const HRInfoList: React.FC = () => {
       fixed: 'right' as const,
       render: (_: any, record: HRInfoResponse) => (
         <Space size="middle">
-          <Tooltip title="Edit HR Details">
+          <Tooltip title="Edit Employee">
             <Button 
               type="primary" 
               ghost
@@ -210,9 +210,9 @@ export const HRInfoList: React.FC = () => {
               onClick={() => handleEdit(record)}
             />
           </Tooltip>
-          <Tooltip title="Delete HR Record">
+          <Tooltip title="Delete Employee">
             <Popconfirm
-              title="Are you sure you want to delete this HR record?"
+              title="Are you sure you want to delete this employee?"
               onConfirm={() => handleDelete(record.id)}
               okText="Yes"
               cancelText="No"
@@ -237,7 +237,7 @@ export const HRInfoList: React.FC = () => {
         <Space align="center">
           <SolutionOutlined style={{ fontSize: 24, color: '#13c2c2' }} />
           <div>
-            <Title level={4} style={{ margin: 0 }}>Human Resource Directory</Title>
+            <Title level={4} style={{ margin: 0 }}>Employees</Title>
             <Text type="secondary">Manage employee bio-data, designations, salary configurations, and accounting links</Text>
           </div>
         </Space>
@@ -263,7 +263,7 @@ export const HRInfoList: React.FC = () => {
             onClick={handleAdd}
             style={{ backgroundColor: '#13c2c2', borderColor: '#13c2c2' }}
           >
-            New Employee HR Info
+            New Employee
           </Button>
         </Space>
       </div>
