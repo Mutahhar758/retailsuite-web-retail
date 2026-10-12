@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Form, Select, Typography, Space, message, Badge, Alert, Row, Col } from 'antd';
-import { PrinterOutlined, ReloadOutlined, CheckCircleOutlined, InfoCircleOutlined, DownloadOutlined } from '@ant-design/icons';
+import { 
+  PrinterOutlined, 
+  ReloadOutlined, 
+  CheckCircleOutlined, 
+  InfoCircleOutlined, 
+  DownloadOutlined, 
+  CloudSyncOutlined, 
+  CopyOutlined 
+} from '@ant-design/icons';
 import { useThermalPrinter, type ConnectionMethod } from '../../hooks/useThermalPrinter';
 
 const { Title, Text } = Typography;
@@ -9,6 +17,9 @@ export const PrinterSettings: React.FC = () => {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [relayOnline, setRelayOnline] = useState<boolean | null>(null);
+  const [installedVersion, setInstalledVersion] = useState<string | null>(null);
+  const [latestVersionInfo, setLatestVersionInfo] = useState<{ version: string; releaseNotes?: string; downloadUrl?: string } | null>(null);
+  const [updating, setUpdating] = useState<boolean>(false);
 
   // Load configuration states
   const [connectionMethod, setConnectionMethod] = useState<ConnectionMethod>(() => {
@@ -23,18 +34,96 @@ export const PrinterSettings: React.FC = () => {
     printerName
   });
 
-  // Check Local Relay service health status
+  // Check Local Relay service health status and versions
   const checkRelayStatus = async () => {
     try {
+      // 1. Fetch latest version metadata from web server
+      try {
+        const vRes = await fetch('/downloads/version.json');
+        if (vRes.ok) {
+          const vData = await vRes.json();
+          setLatestVersionInfo(vData);
+        }
+      } catch {
+        setLatestVersionInfo({ version: '1.1.0', downloadUrl: '/downloads/printer-bridge.exe' });
+      }
+
+      // 2. Ping local bridge for printers
       const response = await fetch('http://localhost:5000/printers');
       if (response.ok) {
         setRelayOnline(true);
         await fetchAvailablePrinters();
+
+        // 3. Query local bridge for version
+        try {
+          const verRes = await fetch('http://localhost:5000/version');
+          if (verRes.ok) {
+            const verData = await verRes.json();
+            setInstalledVersion(verData.version || '1.1.0');
+          } else {
+            // Older legacy bridge returns 404
+            setInstalledVersion('1.0.0 (Legacy)');
+          }
+        } catch {
+          setInstalledVersion('1.0.0 (Legacy)');
+        }
       } else {
         setRelayOnline(false);
+        setInstalledVersion(null);
       }
-    } catch (err) {
+    } catch {
       setRelayOnline(false);
+      setInstalledVersion(null);
+    }
+  };
+
+  const handleAutoUpdate = async () => {
+    setUpdating(true);
+    try {
+      const downloadUrl = window.location.origin + (latestVersionInfo?.downloadUrl || '/downloads/printer-bridge.exe');
+      const res = await fetch('http://localhost:5000/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ downloadUrl })
+      });
+
+      if (!res.ok) {
+        throw new Error('Update command failed on local printer bridge');
+      }
+
+      message.loading({ content: 'Downloading update and restarting Printer Bridge...', key: 'bridge-upd', duration: 0 });
+
+      // Poll localhost:5000/version every 1.5s for up to 15 seconds
+      let retries = 10;
+      let updated = false;
+      while (retries > 0) {
+        await new Promise(r => setTimeout(r, 1500));
+        try {
+          const checkRes = await fetch('http://localhost:5000/version');
+          if (checkRes.ok) {
+            const data = await checkRes.json();
+            if (data.version === latestVersionInfo?.version) {
+              updated = true;
+              setInstalledVersion(data.version);
+              break;
+            }
+          }
+        } catch {
+          // Service is restarting
+        }
+        retries--;
+      }
+
+      if (updated) {
+        message.success({ content: `Printer Bridge successfully updated to v${latestVersionInfo?.version}!`, key: 'bridge-upd' });
+        await checkRelayStatus();
+      } else {
+        message.info({ content: 'Printer Bridge is restarting. Please click Refresh in a few seconds.', key: 'bridge-upd' });
+      }
+    } catch (err: any) {
+      message.error({ content: err.message || 'Failed to trigger auto-update', key: 'bridge-upd' });
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -123,7 +212,10 @@ export const PrinterSettings: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 600, fontSize: 13, color: '#475569' }}>Local Service Status</span>
                     {relayOnline === true ? (
-                      <Badge status="success" text="Local Relay Online" />
+                      <Badge 
+                        status={installedVersion?.includes('Legacy') || (latestVersionInfo?.version && installedVersion !== latestVersionInfo.version) ? 'warning' : 'success'} 
+                        text={`Local Relay Online (v${installedVersion || '1.1.0'}${latestVersionInfo?.version && installedVersion !== latestVersionInfo.version ? ' - Update Available' : ''})`} 
+                      />
                     ) : relayOnline === false ? (
                       <Badge status="error" text="Local Relay Offline" />
                     ) : (
@@ -132,6 +224,76 @@ export const PrinterSettings: React.FC = () => {
                   </div>
                 </Col>
 
+                {/* Case 1: Relay is Online & Running Legacy v1.0.0 (needs initial 1-time run of v1.1.0) */}
+                {relayOnline === true && installedVersion?.includes('Legacy') && (
+                  <Col span={24} style={{ marginBottom: 14 }}>
+                    <Alert
+                      type="warning"
+                      showIcon
+                      icon={<CloudSyncOutlined />}
+                      message={`Printer Bridge Update Available (v${latestVersionInfo?.version || '1.1.0'})`}
+                      description={
+                        <div>
+                          <div style={{ marginBottom: 8, fontSize: 13 }}>
+                            Your PC is running the legacy Printer Bridge without auto-update capabilities. Download the updated version below — when opened, it will <strong>automatically close the old version and take over</strong> seamlessly, enabling 1-click automatic updates from the web for all future releases!
+                          </div>
+                          <Space wrap>
+                            <Button
+                              type="primary"
+                              icon={<DownloadOutlined />}
+                              href="/downloads/printer-bridge.exe"
+                              download
+                              size="middle"
+                            >
+                              Download &amp; Run Updated Bridge (v{latestVersionInfo?.version || '1.1.0'})
+                            </Button>
+                            <Button
+                              size="middle"
+                              icon={<CopyOutlined />}
+                              onClick={() => {
+                                const cmd = `powershell -Command "Stop-Process -Name 'printer-bridge' -Force -ErrorAction SilentlyContinue; Invoke-WebRequest -Uri '${window.location.origin}/downloads/printer-bridge.exe' -OutFile '$env:LOCALAPPDATA\\RetailSuite\\printer-bridge.exe'; Start-Process '$env:LOCALAPPDATA\\RetailSuite\\printer-bridge.exe'"`;
+                                navigator.clipboard.writeText(cmd);
+                                message.success('Copied 1-line update command to clipboard! Paste it into PowerShell.');
+                              }}
+                            >
+                              Copy 1-Line Auto-Replacer Command
+                            </Button>
+                          </Space>
+                        </div>
+                      }
+                    />
+                  </Col>
+                )}
+
+                {/* Case 2: Relay is Online on v1.1.0+ and a Newer Version is Available (1-Click Seamless Auto Update) */}
+                {relayOnline === true && !installedVersion?.includes('Legacy') && latestVersionInfo?.version && installedVersion !== latestVersionInfo.version && (
+                  <Col span={24} style={{ marginBottom: 14 }}>
+                    <Alert
+                      type="info"
+                      showIcon
+                      icon={<CloudSyncOutlined />}
+                      message={`Printer Bridge Update Available (v${installedVersion} ➔ v${latestVersionInfo.version})`}
+                      description={
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                          <span style={{ fontSize: 13 }}>
+                            {latestVersionInfo.releaseNotes || 'A new version of Printer Bridge is ready to install.'}
+                          </span>
+                          <Button
+                            type="primary"
+                            size="small"
+                            loading={updating}
+                            onClick={handleAutoUpdate}
+                            icon={<ReloadOutlined />}
+                          >
+                            Update Now (1-Click)
+                          </Button>
+                        </div>
+                      }
+                    />
+                  </Col>
+                )}
+
+                {/* Case 3: Relay is completely Offline */}
                 {relayOnline === false && (
                   <Col span={24} style={{ marginBottom: 12 }}>
                     <Alert

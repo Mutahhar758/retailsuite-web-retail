@@ -1,3 +1,5 @@
-Startup registration started. exePath: C:\My Repos\Mutahhar758\RetailSuite\retailsuite-web-retail\public\downloads\printer-bridge.exe
-Existing value: "c:\My Repos\Mutahhar758\RetailSuite\retailsuite-api\printer-bridge\bin\Debug\net8.0-windows\printer-bridge.exe", Expected value: "C:\My Repos\Mutahhar758\RetailSuite\retailsuite-web-retail\public\downloads\printer-bridge.exe"
+Startup registration started. exePath: c:\My Repos\Mutahhar758\RetailSuite\retailsuite-web-retail\public\downloads\printer-bridge.exe
+Existing value: "C:\My Repos\Mutahhar758\RetailSuite\retailsuite-web-retail\public\downloads\printer-bridge.exe", Expected value: "c:\My Repos\Mutahhar758\RetailSuite\retailsuite-web-retail\public\downloads\printer-bridge.exe"
 Registry key updated successfully!
+[2026-10-12 23:15:56] HttpListener started on http://localhost:5000/
+[2026-10-12 23:15:56] Running Application.Run...

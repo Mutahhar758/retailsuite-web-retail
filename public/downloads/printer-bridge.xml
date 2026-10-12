@@ -24,6 +24,11 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:PrinterRelay.SourceGenerationContext.UpdateBridgeRequest">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:PrinterRelay.SourceGenerationContext.ListString">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
