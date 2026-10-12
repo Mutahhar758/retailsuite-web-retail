@@ -37,6 +37,7 @@ import { NormalStockAdjustmentForm } from './pages/daily-entries/NormalStockAdju
 import { WandaStockAdjustmentForm } from './pages/daily-entries/WandaStockAdjustmentForm';
 import { BankReconciliation } from './pages/daily-entries/BankReconciliation';
 import { KitchenDisplay } from './pages/daily-entries/KitchenDisplay';
+import { RecurringVoucherList } from './pages/daily-entries/RecurringVoucherList';
 import { AccountStatement } from './pages/reports/AccountStatement';
 import { AccountStatementWithDue } from './pages/reports/AccountStatementWithDue';
 import { TrialBalanceReport } from './pages/reports/TrialBalanceReport';
@@ -185,6 +186,7 @@ function App() {
             
             <Route path="daily-entries/bank-reconciliation" element={<BankReconciliation />} />
             <Route path="daily-entries/kitchen-display" element={<KitchenDisplay />} />
+            <Route path="daily-entries/recurring-vouchers" element={<RecurringVoucherList />} />
             
             {/* Reports */}
             <Route path="reports/account-statement" element={<AccountStatement />} />

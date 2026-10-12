@@ -64,6 +64,7 @@ const permissionMap: Record<string, string> = {
   '/daily-entries/payroll': 'Permissions.Payrolls.View',
   '/setup/dining-tables': 'Permissions.DiningTables.View',
   '/daily-entries/kitchen-display': 'Permissions.KotOrders.View',
+  '/daily-entries/recurring-vouchers': 'Permissions.RecurringVouchers.View',
 
   '/reports/account-statement': 'Permissions.AccountStatement.View',
   '/reports/account-statement-with-due': 'Permissions.AccountStatementWithDue.View',
@@ -263,6 +264,7 @@ export const MainLayout: React.FC = () => {
         { key: '/daily-entries/stock-adjustment', label: 'Stock Adjustment' },
         { key: '/daily-entries/bank-reconciliation', label: 'Bank Reconciliation' },
         { key: '/daily-entries/payroll', label: 'Payroll' },
+        { key: '/daily-entries/recurring-vouchers', label: 'Recurring Vouchers' },
         hasKotFeature ? { key: '/daily-entries/kitchen-display', label: 'Kitchen Display (KDS)' } : null,
       ].filter(Boolean) as any[]
     },
