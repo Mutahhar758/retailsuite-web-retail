@@ -88,12 +88,15 @@ export const WandaSupplyRegister: React.FC = () => {
       const result = await saleSupplyService.getCustomerLines(params);
       // Sort ASC by date
       result.sort((a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf());
-      setLines(result.map(l => ({
-        ...l,
-        isDirty: false,
-        packQty: l.qty && l.secQty && l.secQty > 0 ? round(l.qty / l.secQty, 2) : 50,
-        packing: l.qty && l.secQty && l.secQty > 0 ? round(l.qty / l.secQty, 2) : 50
-      })));
+      setLines(result.map(l => {
+        const pSize = Number((l as any).packing || (l as any).qtyInPack || (l.qty && l.secQty && l.secQty > 0 ? round(l.qty / l.secQty, 2) : 50));
+        return {
+          ...l,
+          isDirty: false,
+          packQty: pSize,
+          packing: pSize
+        };
+      }));
       setSelectedCustomerId(values.customerId);
     } catch (error) {
       console.error(error);
@@ -200,7 +203,9 @@ export const WandaSupplyRegister: React.FC = () => {
         carriage: record.carriage || 0,
         secQty: record.secQty,
         secRate: record.secRate,
-        secUnit: record.secUnit || 'Bags'
+        secUnit: record.secUnit || 'Bags',
+        qtyInPack: record.packQty || record.packing,
+        packing: record.packing || record.packQty
       });
 
       message.success(`Updated line for voucher SP-${record.voucherNo}`);
@@ -239,7 +244,9 @@ export const WandaSupplyRegister: React.FC = () => {
           carriage: l.carriage || 0,
           secQty: l.secQty,
           secRate: l.secRate,
-          secUnit: l.secUnit || 'Bags'
+          secUnit: l.secUnit || 'Bags',
+          qtyInPack: l.packQty || l.packing,
+          packing: l.packing || l.packQty
         }
       }));
 

@@ -90,12 +90,33 @@ export const WandaSaleSupplyForm: React.FC = () => {
   const handleAddRow = useCallback(() => {
     setSupplyLines(prev => {
       const newSeq = prev.length > 0 ? Math.max(...prev.map(l => l.seq)) + 1 : 1;
+      const masterItemId = form.getFieldValue('itemId');
+      const item = items.find(i => i.id === masterItemId);
+      const pSize = Number(item?.qtyInPack || (item as any)?.QtyInPack || (item as any)?.qty_in_pack || 0);
+      const secRate = item?.secRate || ((item?.priRate || 0) * (pSize > 0 ? pSize : 1));
+      const rate = (pSize > 0 && secRate > 0) ? round(secRate / pSize, 8) : (item?.priRate || 0);
+
       return [
         ...prev,
-        { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, addLess: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }
+        {
+          key: Date.now(),
+          seq: newSeq,
+          qty: 1,
+          rate,
+          discount: 0,
+          addLess: 0,
+          carriage: 0,
+          amount: rate,
+          secQty: 0,
+          secRate,
+          secUnit: item?.secondaryUnit || '',
+          unit: item?.defaultUnit || item?.primaryUnit || '',
+          packQty: pSize || 0,
+          packing: pSize || 0
+        }
       ];
     });
-  }, []);
+  }, [form, items]);
 
   const { getCellRef, handleCellKeyDown, focusCell } = useGridKeyboard({
     rowCount: supplyLines.length,
@@ -243,7 +264,7 @@ export const WandaSaleSupplyForm: React.FC = () => {
 
       if (order && order.details) {
         const pSize = Number(item?.qtyInPack || (item as any)?.QtyInPack || (item as any)?.qty_in_pack || 0);
-        const secRate = item?.secRate || 0;
+        const secRate = item?.secRate || ((item?.priRate || 0) * (pSize > 0 ? pSize : 1));
         const rate = (pSize > 0 && secRate > 0) ? round(secRate / pSize, 8) : (item?.priRate || 0);
 
         const newLines = order.details.map((d, index) => {
@@ -260,7 +281,7 @@ export const WandaSaleSupplyForm: React.FC = () => {
             key: Date.now() + index,
             seq: index + 1,
             customerId: d.customerId,
-            unit: item?.defaultUnit || '',
+            unit: item?.defaultUnit || item?.primaryUnit || '',
             qty: qty,
             rate: lineRate,
             discount: lineDiscount,
@@ -270,8 +291,8 @@ export const WandaSaleSupplyForm: React.FC = () => {
             secQty: secQty,
             secRate: secRate,
             secUnit: item?.secondaryUnit || '',
-            packQty: 0,
-            packing: 0
+            packQty: (secQty > 0 && qty > 0) ? round(qty / secQty, 2) : (pSize || 0),
+            packing: pSize || 0
           };
         });
         setSupplyLines(newLines);
@@ -307,11 +328,22 @@ export const WandaSaleSupplyForm: React.FC = () => {
       }
 
       const pSize = Number(item?.qtyInPack || (item as any)?.QtyInPack || (item as any)?.qty_in_pack || 0);
-      const secRate = item?.secRate || 0;
+      const secRate = item?.secRate || ((item?.priRate || 0) * (pSize > 0 ? pSize : 1));
       const rate = (pSize > 0 && secRate > 0) ? round(secRate / pSize, 8) : (item?.priRate || 0);
 
       setSupplyLines(prev => prev.map(line => {
-        if (!line.customerId) return line;
+        if (!line.customerId) {
+          return {
+            ...line,
+            unit: item?.defaultUnit || item?.primaryUnit || line.unit,
+            secUnit: item?.secondaryUnit || line.secUnit,
+            secRate,
+            rate,
+            packing: pSize || 0,
+            packQty: pSize || 0,
+            amount: round((line.qty || 1) * rate, 2)
+          };
+        }
         const setting = customerQtyMap.get(line.customerId);
         const qty = setting ? setting.qty : (line.qty || 1);
         const secQty = setting ? (setting.secQty || 0) : (line.secQty || 0);
@@ -323,7 +355,7 @@ export const WandaSaleSupplyForm: React.FC = () => {
 
         return {
           ...line,
-          unit: item?.defaultUnit || line.unit,
+          unit: item?.defaultUnit || item?.primaryUnit || line.unit,
           qty,
           secQty,
           rate: lineRate,
@@ -332,6 +364,8 @@ export const WandaSaleSupplyForm: React.FC = () => {
           carriage: lineCarriage,
           secRate,
           secUnit: item?.secondaryUnit || line.secUnit,
+          packQty: (secQty > 0 && qty > 0) ? round(qty / secQty, 2) : (pSize || 0),
+          packing: pSize || 0,
           amount
         };
       }));
@@ -552,13 +586,16 @@ export const WandaSaleSupplyForm: React.FC = () => {
   const handleCustomerChange = async (key: number, customerId: string) => {
     const masterItemId = form.getFieldValue('itemId');
     const item = items.find(i => i.id === masterItemId);
-    const isSec = item?.defaultUnit === item?.secondaryUnit;
-    const rate = isSec ? (item?.secRate || 0) : (item?.priRate || 0);
-    const secRate = item?.secRate || 0;
+    const pSize = Number(item?.qtyInPack || (item as any)?.QtyInPack || (item as any)?.qty_in_pack || 0);
+    const secRate = item?.secRate || ((item?.priRate || 0) * (pSize > 0 ? pSize : 1));
+    const rate = (pSize > 0 && secRate > 0) ? round(secRate / pSize, 8) : (item?.priRate || 0);
 
     let defQty = 1;
     let defSecQty = 0;
     let defCarriage = 0;
+    let customRate: number | undefined;
+    let customDiscount: number | undefined;
+    let customAddLess: number | undefined;
 
     if (masterItemId && customerId) {
       try {
@@ -567,6 +604,9 @@ export const WandaSaleSupplyForm: React.FC = () => {
           defQty = customItems[0].qty > 0 ? customItems[0].qty : 1;
           defSecQty = customItems[0].secQty || 0;
           if (customItems[0].carriage != null) defCarriage = customItems[0].carriage;
+          if (customItems[0].rate != null) customRate = customItems[0].rate;
+          if (customItems[0].discount != null) customDiscount = customItems[0].discount;
+          if (customItems[0].addLess != null) customAddLess = customItems[0].addLess;
         }
       } catch (err) {
         console.error('Failed to get customer supply item default', err);
@@ -575,13 +615,24 @@ export const WandaSaleSupplyForm: React.FC = () => {
 
     setSupplyLines(prev => prev.map(l => {
       if (l.key === key) {
-        const amount = round(defQty * (rate - (l.discount || 0)) + defCarriage + (l.addLess || 0), 2);
+        const lineRate = customRate ?? rate;
+        const lineDiscount = customDiscount ?? (l.discount || 0);
+        const lineAddLess = customAddLess ?? (l.addLess || 0);
+        const linePacking = pSize > 0 ? pSize : (l.packing || 0);
+        const linePackQty = (defSecQty > 0 && defQty > 0) ? round(defQty / defSecQty, 2) : (pSize > 0 ? pSize : (l.packQty || 0));
+        const amount = round(defQty * (lineRate - lineDiscount) + defCarriage + lineAddLess, 2);
         return {
           ...l,
           customerId,
+          unit: item?.defaultUnit || item?.primaryUnit || l.unit,
+          secUnit: item?.secondaryUnit || l.secUnit,
           qty: defQty,
           secQty: defSecQty,
-          rate,
+          packing: linePacking,
+          packQty: linePackQty,
+          rate: lineRate,
+          discount: lineDiscount,
+          addLess: lineAddLess,
           secRate,
           carriage: defCarriage,
           amount
