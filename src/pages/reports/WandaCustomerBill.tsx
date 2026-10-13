@@ -34,7 +34,7 @@ import {
 import { useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import api from '../../services/api';
-import { reportService, type CustomerBillResponse } from '../../services/reportService';
+import { reportService, type WandaCustomerBillResponse } from '../../services/reportService';
 import { useAppStore } from '../../stores/useAppStore';
 import { useSettingsStore, BILL_QR_ENABLED_KEY, BILL_QR_ACCOUNT_NUMBER, TRANSACTION_ENABLE_CARRIAGE_KEY, BILL_DEFAULT_FORMAT_KEY } from '../../stores/useSettingsStore';
 import { rangePresets } from '../../utils/datePresets';
@@ -58,7 +58,7 @@ export const WandaCustomerBill: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [pdfLoading, setPdfLoading] = useState<boolean>(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
-  const [billData, setBillData] = useState<CustomerBillResponse | null>(null);
+  const [billData, setBillData] = useState<WandaCustomerBillResponse | null>(null);
 
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null);
@@ -171,8 +171,8 @@ export const WandaCustomerBill: React.FC = () => {
 
     try {
       const [dataRes, blob] = await Promise.all([
-        reportService.getCustomerBill({ fromDate, toDate, account, dateBasis }),
-        reportService.getCustomerBillPdf({
+        reportService.getWandaCustomerBill({ fromDate, toDate, account, dateBasis }),
+        reportService.getWandaCustomerBillPdf({
           fromDate,
           toDate,
           account,
@@ -222,7 +222,7 @@ export const WandaCustomerBill: React.FC = () => {
     setPdfLoading(true);
 
     try {
-      const blob = await reportService.getCustomerBillBatchPdf({
+      const blob = await reportService.getWandaCustomerBillBatchPdf({
         fromDate,
         toDate,
         accounts: selectedBulkAccounts,
@@ -362,14 +362,13 @@ export const WandaCustomerBill: React.FC = () => {
             });
 
             try {
-              const blob = await reportService.getCustomerBillPdf({
+              const blob = await reportService.getWandaCustomerBillPdf({
                 account: acc,
                 fromDate,
                 toDate,
                 dateBasis,
                 layout: 'Thermal',
                 qrEnabled: isQrOn,
-                isWandaLayout: true,
               });
 
               const base64 = await blobToBase64(blob);
@@ -854,11 +853,43 @@ export const WandaCustomerBill: React.FC = () => {
                 <span style={{ fontWeight: 600 }}>Rs. {(billData.summary.previousBalance || 0).toLocaleString()}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                <span style={{ color: '#64748b' }}>Current Invoiced:</span>
+                <span style={{ color: '#64748b' }}>Total Sales:</span>
                 <span style={{ fontWeight: 600, color: '#0284c7' }}>
-                  Rs. {wandaKpis.totalBilled.toLocaleString()}
+                  Rs. {(billData.summary.totalSales ?? wandaKpis.totalBilled).toLocaleString()}
                 </span>
               </div>
+              {(billData.summary.totalPurchases || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                  <span style={{ color: '#64748b' }}>Less Purchases:</span>
+                  <span style={{ fontWeight: 600, color: '#b91c1c' }}>
+                    Rs. ({(billData.summary.totalPurchases || 0).toLocaleString()})
+                  </span>
+                </div>
+              )}
+              {(billData.summary.totalSaleReturns || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                  <span style={{ color: '#64748b' }}>Less Sale Returns:</span>
+                  <span style={{ fontWeight: 600, color: '#b91c1c' }}>
+                    Rs. ({(billData.summary.totalSaleReturns || 0).toLocaleString()})
+                  </span>
+                </div>
+              )}
+              {(billData.summary.totalPurchaseReturns || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                  <span style={{ color: '#64748b' }}>Add Purchase Returns:</span>
+                  <span style={{ fontWeight: 600, color: '#0284c7' }}>
+                    Rs. {(billData.summary.totalPurchaseReturns || 0).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {((billData.summary.totalPurchases || 0) > 0 || (billData.summary.totalSaleReturns || 0) > 0 || (billData.summary.totalPurchaseReturns || 0) > 0) && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4, fontWeight: 600, borderTop: '1px dotted #cbd5e1', paddingTop: 4 }}>
+                  <span style={{ color: '#475569' }}>Net Current Bill:</span>
+                  <span style={{ color: '#0284c7' }}>
+                    Rs. {(billData.summary.totalBill ?? wandaKpis.totalBilled).toLocaleString()}
+                  </span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
                 <span style={{ color: '#64748b' }}>Payments Received:</span>
                 <span style={{ fontWeight: 600, color: '#10b981' }}>

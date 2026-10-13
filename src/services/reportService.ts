@@ -90,12 +90,11 @@ export interface CustomerBillLine {
   addLess: number;
   carriage?: number;
   amount: number;
-  secQty?: number;
-  secRate?: number;
-  qtyInPack?: number;
-  secUnitTitle?: string;
-  receiptDate?: string;
-  receiptAmount?: number;
+  imei?: string;
+  imei2?: string;
+  ptaStatus?: string;
+  warrantyMonths?: number;
+  conditionNote?: string;
 }
 
 export interface CustomerBillResponse {
@@ -113,6 +112,54 @@ export interface CustomerBillResponse {
     previousBalance: number;
     payment: number;
     balance: number;
+    totalSales: number;
+  };
+}
+
+export interface WandaCustomerBillLine {
+  date: string;
+  vNo: string;
+  item: string;
+  unitTitle: string;
+  qty: number;
+  rate: number;
+  addLess: number;
+  carriage?: number;
+  amount: number;
+  secQty?: number;
+  secRate?: number;
+  qtyInPack?: number;
+  secUnitTitle?: string;
+  receiptDate?: string;
+  receiptAmount?: number;
+  imei?: string;
+  imei2?: string;
+  ptaStatus?: string;
+  warrantyMonths?: number;
+  conditionNote?: string;
+  transactionType: string;
+}
+
+export interface WandaCustomerBillResponse {
+  header?: {
+    account: string;
+    title: string;
+    address?: string;
+    phone?: string;
+    fromDate: string;
+    toDate: string;
+    enableCarriage?: boolean;
+  };
+  lines: WandaCustomerBillLine[];
+  summary: {
+    previousBalance: number;
+    payment: number;
+    balance: number;
+    totalSales: number;
+    totalPurchases: number;
+    totalSaleReturns: number;
+    totalPurchaseReturns: number;
+    totalBill: number;
   };
 }
 
@@ -253,6 +300,41 @@ export const reportService = {
     isWandaLayout?: boolean;
   }): Promise<Blob> {
     const response = await api.post('/api/reports/customer-bill/batch/pdf', data, {
+      responseType: 'blob'
+    });
+    return response.data as Blob;
+  },
+
+  async getWandaCustomerBill(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }) {
+    const response = await api.get('/api/reports/wanda-customer-bill', { params });
+    return response.data.body as WandaCustomerBillResponse;
+  },
+
+  async getWandaCustomerBillPdf(params: {
+    fromDate: string;
+    toDate: string;
+    account: string;
+    dateBasis?: 'VoucherDate' | 'ClearingDate';
+    layout?: 'A4' | 'Thermal';
+    qrEnabled?: boolean;
+  }): Promise<Blob> {
+    const response = await api.get('/api/reports/wanda-customer-bill/pdf', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data as Blob;
+  },
+
+  async getWandaCustomerBillBatchPdf(data: {
+    fromDate: string;
+    toDate: string;
+    accounts: string[];
+    dateBasis?: 'VoucherDate' | 'ClearingDate';
+    layout?: 'A4' | 'Thermal';
+    qrEnabled?: boolean;
+    onlyWithActivity?: boolean;
+  }): Promise<Blob> {
+    const response = await api.post('/api/reports/wanda-customer-bill/batch/pdf', data, {
       responseType: 'blob'
     });
     return response.data as Blob;

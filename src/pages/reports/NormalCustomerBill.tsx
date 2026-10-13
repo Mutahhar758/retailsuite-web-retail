@@ -171,7 +171,7 @@ export const NormalCustomerBill: React.FC = () => {
 
     try {
       const [dataRes, blob] = await Promise.all([
-        reportService.getCustomerBill({ fromDate, toDate, account, dateBasis }),
+        reportService.getCustomerBill({ fromDate, toDate, account, dateBasis, isWandaLayout: false }),
         reportService.getCustomerBillPdf({
           fromDate,
           toDate,
@@ -179,6 +179,7 @@ export const NormalCustomerBill: React.FC = () => {
           dateBasis,
           layout: targetLayout,
           qrEnabled: isQrOn,
+          isWandaLayout: false,
         })
       ]);
 
@@ -230,6 +231,7 @@ export const NormalCustomerBill: React.FC = () => {
         layout: targetLayout,
         qrEnabled: isQrOn,
         onlyWithActivity,
+        isWandaLayout: false,
       });
 
       if (pdfBlobUrl) {
@@ -369,6 +371,7 @@ export const NormalCustomerBill: React.FC = () => {
                 dateBasis,
                 layout: 'Thermal',
                 qrEnabled: isQrOn,
+                isWandaLayout: false,
               });
 
               const base64 = await blobToBase64(blob);
