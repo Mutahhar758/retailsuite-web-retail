@@ -133,7 +133,7 @@ export const NormalSaleReturnForm: React.FC = () => {
           const disc = updated.discount || 0;
           const secQty = updated.secQty || 0;
           const secRate = updated.secRate || 0;
-          updated.amount = round((qty * (rate - disc)) + (secQty * secRate), 2);
+          updated.amount = round(((qty * rate) + (secQty * secRate)) - disc, 2);
           return updated;
         }
         return l;

@@ -495,7 +495,7 @@ export const NormalSaleForm: React.FC = () => {
           const carriage = updated.carriage || 0;
           const secQty = updated.secQty || 0;
           const secRate = updated.secRate || 0;
-          updated.amount = round((qty * (rate - disc)) + carriage + (secQty * secRate), 2);
+          updated.amount = round(((qty * rate) + (secQty * secRate)) - disc + carriage, 2);
           return updated;
         }
         return l;

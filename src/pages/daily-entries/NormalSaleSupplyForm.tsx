@@ -252,7 +252,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
           const lineDiscount = setting?.discount != null ? setting.discount : 0;
           const lineAddLess = setting?.addLess != null ? setting.addLess : 0;
           const lineCarriage = setting?.carriage != null ? setting.carriage : 0;
-          const amount = round((qty * (lineRate - lineDiscount)) + lineCarriage + lineAddLess + (secQty * secRate), 2);
+          const amount = round((qty * lineRate) - lineDiscount + lineCarriage + lineAddLess + (secQty * secRate), 2);
 
           return {
             key: Date.now() + index,
@@ -315,7 +315,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
         const lineDiscount = setting?.discount != null ? setting.discount : (line.discount || 0);
         const lineAddLess = setting?.addLess != null ? setting.addLess : (line.addLess || 0);
         const lineCarriage = setting?.carriage != null ? setting.carriage : (line.carriage || 0);
-        const amount = round(qty * (lineRate - lineDiscount) + lineCarriage + lineAddLess + (secQty * secRate), 2);
+        const amount = round((qty * lineRate) - lineDiscount + lineCarriage + lineAddLess + (secQty * secRate), 2);
 
         return {
           ...line,
@@ -374,28 +374,22 @@ export const NormalSaleSupplyForm: React.FC = () => {
         const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
         const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
 
+        const lineGross = ((updated.qty || 0) * (updated.rate || 0)) + ((updated.secQty || 0) * (updated.secRate || 0));
         if (field === 'discPercent') {
-          const rate = updated.rate || 0;
-          updated.discount = rate > 0 ? round(rate * (numVal / 100), 2) : 0;
+          updated.discount = lineGross > 0 ? round(lineGross * (numVal / 100), 2) : 0;
           updated.discPercent = numVal;
         } else if (field === 'discount') {
-          const rate = updated.rate || 0;
           updated.discount = numVal;
-          updated.discPercent = rate > 0 ? round((numVal / rate) * 100, 2) : 0;
-        } else if (field === 'rate') {
-          const rate = updated.rate || 0;
+          updated.discPercent = lineGross > 0 ? round((numVal / lineGross) * 100, 2) : 0;
+        } else if (field === 'rate' || field === 'qty' || field === 'secRate' || field === 'secQty') {
           const disc = updated.discount || 0;
-          updated.discPercent = rate > 0 ? round((disc / rate) * 100, 2) : 0;
+          updated.discPercent = lineGross > 0 ? round((disc / lineGross) * 100, 2) : 0;
         }
 
-        const qty = updated.qty || 0;
-        const rate = updated.rate || 0;
-        const disc = updated.discount || 0;
         const addLess = updated.addLess || 0;
         const carriage = updated.carriage || 0;
-        const secQty = updated.secQty || 0;
-        const secRate = updated.secRate || 0;
-        updated.amount = round(((qty * (rate - disc)) + carriage + addLess + (secQty * secRate)), 2);
+        const disc = updated.discount || 0;
+        updated.amount = round((lineGross - disc) + carriage + addLess, 2);
         return updated;
       }
       return l;
@@ -491,7 +485,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
 
     setSupplyLines(prev => prev.map(l => {
       if (l.key === key) {
-        const amount = round(defQty * (rate - (l.discount || 0)) + defCarriage + (l.addLess || 0) + (defSecQty * secRate), 2);
+        const amount = round((defQty * rate) - (l.discount || 0) + defCarriage + (l.addLess || 0) + (defSecQty * secRate), 2);
         return {
           ...l,
           customerId,
@@ -642,7 +636,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
       render: (val: number, record: any) => (
         <InputNumber
           style={{ width: '100%' }}
-          value={val != null ? val : (record.rate > 0 && record.discount > 0 ? round((record.discount / record.rate) * 100, 2) : 0)}
+          value={val != null ? val : (((record.qty * record.rate) > 0 && record.discount > 0) ? round((record.discount / (record.qty * record.rate)) * 100, 2) : 0)}
           min={0}
           max={100}
           tabIndex={-1}

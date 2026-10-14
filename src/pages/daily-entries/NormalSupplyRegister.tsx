@@ -123,7 +123,7 @@ export const NormalSupplyRegister: React.FC = () => {
         const addLess = updated.addLess || 0;
         const carriage = updated.carriage || 0;
 
-        updated.amount = round(((qty * (rate - disc)) + carriage + addLess), 2);
+        updated.amount = round(((qty * rate) - disc + carriage + addLess), 2);
         return updated;
       }
       return line;

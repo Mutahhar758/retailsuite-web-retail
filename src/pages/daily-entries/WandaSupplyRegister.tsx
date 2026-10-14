@@ -180,8 +180,8 @@ export const WandaSupplyRegister: React.FC = () => {
         const carriage = updated.carriage || 0;
         const addLess = updated.addLess || 0;
 
-        // Wanda line amount: Weight * (Rate - Disc) + Carriage + AddLess
-        updated.amount = round(((updated.qty * (updated.rate - disc)) + carriage + addLess), 2);
+        // Wanda line amount: (Weight * Rate) - Disc + Carriage + AddLess
+        updated.amount = round(((updated.qty * updated.rate) - disc + carriage + addLess), 2);
         return updated;
       }
       return line;

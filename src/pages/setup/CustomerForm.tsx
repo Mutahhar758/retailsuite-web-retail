@@ -89,8 +89,9 @@ export const CustomerForm: React.FC = () => {
           if (customer.supplyItems && Array.isArray(customer.supplyItems)) {
             setSupplyLines(customer.supplyItems.map((si, idx) => {
               const rate = si.rate != null ? Number(si.rate) : 0;
-              const discount = si.discount != null ? Number(si.discount) : 0;
-              const discPercent = (rate > 0 && discount > 0) ? Number(((discount / rate) * 100).toFixed(2)) : null;
+              const disc = si.discount != null ? Number(si.discount) : 0;
+              const lineGross = rate * (si.qty || 1);
+              const discPercent = (lineGross > 0 && disc > 0) ? Number(((disc / lineGross) * 100).toFixed(2)) : null;
               return {
                 key: idx,
                 itemId: si.itemId,
@@ -136,15 +137,16 @@ export const CustomerForm: React.FC = () => {
       if (l.key === key) {
         const updated = { ...l, [field]: value };
         const rate = updated.rate != null ? Number(updated.rate) : 0;
+        const lineGross = rate * (updated.qty || 1);
         if (field === 'discPercent') {
           const pct = value != null ? Number(value) : 0;
-          updated.discount = rate > 0 ? Number(((rate * pct) / 100).toFixed(2)) : 0;
+          updated.discount = lineGross > 0 ? Number(((lineGross * pct) / 100).toFixed(2)) : 0;
         } else if (field === 'discount') {
           const disc = value != null ? Number(value) : 0;
-          updated.discPercent = rate > 0 ? Number(((disc / rate) * 100).toFixed(2)) : null;
-        } else if (field === 'rate') {
+          updated.discPercent = lineGross > 0 ? Number(((disc / lineGross) * 100).toFixed(2)) : null;
+        } else if (field === 'rate' || field === 'qty') {
           const disc = updated.discount != null ? Number(updated.discount) : 0;
-          updated.discPercent = rate > 0 ? Number(((disc / rate) * 100).toFixed(2)) : null;
+          updated.discPercent = lineGross > 0 ? Number(((disc / lineGross) * 100).toFixed(2)) : null;
         }
         return updated;
       }

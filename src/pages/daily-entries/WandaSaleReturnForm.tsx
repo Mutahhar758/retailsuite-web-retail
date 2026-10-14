@@ -183,7 +183,7 @@ export const WandaSaleReturnForm: React.FC = () => {
           const qty = updated.qty || 0;
           const rate = updated.rate || 0;
           const disc = updated.discount || 0;
-          updated.amount = round(qty * (rate - disc), 2);
+          updated.amount = round((qty * rate) - disc, 2);
           return updated;
         }
         return l;
