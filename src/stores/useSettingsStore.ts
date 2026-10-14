@@ -42,6 +42,9 @@ export const SUPPLY_ENABLE_KEY = 'Supply.EnableSupply';
 // Mobile Shop setting keys
 export const MOBILE_SHOP_ENABLE_KEY = 'MobileShop.EnableMobileShop';
 
+// Manufacturing setting keys
+export const MANUFACTURING_ENABLE_KEY = 'Manufacturing.EnableManufacturing';
+
 // Transaction setting keys
 export const TRANSACTION_ENABLE_CARRIAGE_KEY = 'Transaction.EnableCarriage';
 

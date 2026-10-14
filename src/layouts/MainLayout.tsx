@@ -23,7 +23,7 @@ import {
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useAppStore } from '../stores/useAppStore';
-import { useSettingsStore, RESTAURANT_ENABLE_KOT_KEY, SUPPLY_ENABLE_KEY, MOBILE_SHOP_ENABLE_KEY } from '../stores/useSettingsStore';
+import { useSettingsStore, RESTAURANT_ENABLE_KOT_KEY, SUPPLY_ENABLE_KEY, MOBILE_SHOP_ENABLE_KEY, MANUFACTURING_ENABLE_KEY } from '../stores/useSettingsStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useOfflineStore } from '../stores/useOfflineStore';
 import { profileService, logoutService } from '../services/profileService';
@@ -48,6 +48,7 @@ const permissionMap: Record<string, string> = {
   '/setup/settings': 'Permissions.Settings.View',
   '/setup/printer-settings': 'Permissions.PrinterSettings.View',
   '/setup/opening-balance': 'Permissions.OpeningBalances.View',
+  '/setup/bom': 'Permissions.BillOfMaterials.View',
 
   '/daily-entries/payment-voucher': 'Permissions.PaymentVouchers.View',
   '/daily-entries/receipt-voucher': 'Permissions.ReceiptVouchers.View',
@@ -59,7 +60,8 @@ const permissionMap: Record<string, string> = {
   '/daily-entries/customer-supply': 'Permissions.SaleSupplies.View',
   '/daily-entries/purchase-return': 'Permissions.PurchaseReturns.View',
   '/daily-entries/sale-return': 'Permissions.SaleReturns.View',
-   '/daily-entries/stock-adjustment': 'Permissions.StockAdjustments.View',
+  '/daily-entries/stock-adjustment': 'Permissions.StockAdjustments.View',
+  '/daily-entries/manufacturing': 'Permissions.Manufacturing.View',
   '/daily-entries/bank-reconciliation': 'Permissions.BankReconciliations.View',
   '/daily-entries/payroll': 'Permissions.Payrolls.View',
   '/setup/dining-tables': 'Permissions.DiningTables.View',
@@ -78,6 +80,7 @@ const permissionMap: Record<string, string> = {
   '/reports/purchase-supply-comparison': 'Permissions.PurchaseSupplyComparison.View',
   '/reports/milk-comparison': 'Permissions.PurchaseSupplyComparison.View',
   '/reports/customer-balance-recovery': 'Permissions.CustomerBalanceRecovery.View',
+  '/reports/manufacturing': 'Permissions.Manufacturing.View',
 };
 
 export const MainLayout: React.FC = () => {
@@ -152,7 +155,9 @@ export const MainLayout: React.FC = () => {
     const labelMap: Record<string, string> = {
       'item-details': 'Product',
       'item-categories': 'Product Category',
-      'item-ledger': 'Product Ledger'
+      'item-ledger': 'Product Ledger',
+      'bom': 'Bill of Materials',
+      'manufacturing': 'Manufacturing Voucher',
     };
     
     let label = labelMap[path] || path.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
@@ -162,7 +167,7 @@ export const MainLayout: React.FC = () => {
       'users', 'roles', 'hr-info', 'customers', 'vendors', 'supply-order', 'item-details',
       'payment-voucher', 'receipt-voucher', 'journal-voucher', 'purchase', 'sale',
       'pos-sale', 'sale-supply', 'sale-return', 'purchase-return', 'stock-adjustment',
-      'repair-jobs'
+      'repair-jobs', 'bom', 'manufacturing'
     ].includes(array[index - 1]);
     
     if (isIdSegment && path !== 'new') {
@@ -220,6 +225,8 @@ export const MainLayout: React.FC = () => {
   const hasKotFeature = settingKot !== '' ? settingKot === 'true' : (currentOrg?.hasKotFeature ?? false);
   const settingMobile = useSettingsStore(state => state.getSetting(MOBILE_SHOP_ENABLE_KEY, ''));
   const hasMobileShopFeature = settingMobile !== '' ? settingMobile === 'true' : (currentOrg?.hasMobileShopFeature ?? false);
+  const settingManufacturing = useSettingsStore(state => state.getSetting(MANUFACTURING_ENABLE_KEY, ''));
+  const hasManufacturingFeature = settingManufacturing !== '' ? settingManufacturing === 'true' : true;
 
   const baseMenuItems = [
     { 
@@ -233,6 +240,7 @@ export const MainLayout: React.FC = () => {
         { key: '/setup/vendors', label: 'Vendor' },
         { key: '/setup/brands', label: 'Brands' },
         { key: '/setup/item-details', label: 'Product' },
+        hasManufacturingFeature ? { key: '/setup/bom', label: 'Bill of Materials / Recipe' } : null,
         { key: '/setup/item-categories', label: 'Product Category' },
         { key: '/setup/units', label: 'Unit Index' },
         { key: '/setup/narrations', label: 'Narration' },
@@ -257,6 +265,7 @@ export const MainLayout: React.FC = () => {
         { key: '/daily-entries/purchase', label: 'Purchase' },
         { key: '/daily-entries/sale', label: 'Sale' },
         { key: '/daily-entries/pos-sale', label: 'POS Touch Sale' },
+        hasManufacturingFeature ? { key: '/daily-entries/manufacturing', label: 'Manufacturing Voucher' } : null,
         hasSupplyFeature ? { key: '/daily-entries/sale-supply', label: 'Sale Supply' } : null,
         hasSupplyFeature ? { key: '/daily-entries/customer-supply', label: 'Customer Supply Register' } : null,
         { key: '/daily-entries/purchase-return', label: 'Purchase Return' },
@@ -292,12 +301,13 @@ export const MainLayout: React.FC = () => {
         { key: '/reports/income-summary', label: 'Income Summary' },
         { key: '/reports/balance-sheet', label: 'Balance Sheet' },
         { key: '/reports/customer-bill', label: 'Customer Bill' },
+        hasManufacturingFeature ? { key: '/reports/manufacturing', label: 'Manufacturing Report' } : null,
         { key: '/reports/purchase-supply-comparison', label: 'Purchase vs Supply Comparison' },
         { key: '/reports/customer-balance-recovery', label: 'Customer Balance & Recovery' },
         { key: '/reports/profit-by-customer', label: 'Profit by Customer' },
         { key: '/reports/profit-by-item', label: 'Profit by Item' },
         { key: '/reports/barcode-print', label: 'Barcode Print' },
-      ]
+      ].filter(Boolean) as any[]
     },
   ].filter(Boolean) as any[];
 

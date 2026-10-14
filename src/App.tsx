@@ -80,6 +80,11 @@ import { RepairJobForm } from './pages/devices-repairs/RepairJobForm';
 import { ImeiStockList } from './pages/devices-repairs/ImeiStockList';
 import { ImeiHistoryView } from './pages/devices-repairs/ImeiHistoryView';
 import { Profile } from './pages/auth/Profile';
+import { BomList } from './pages/setup/BomList';
+import { BomForm } from './pages/setup/BomForm';
+import { ManufacturingList } from './pages/daily-entries/ManufacturingList';
+import { ManufacturingForm } from './pages/daily-entries/ManufacturingForm';
+import { ManufacturingReport } from './pages/reports/ManufacturingReport';
 import { useAppStore } from './stores/useAppStore';
 import { useAuthStore } from './stores/useAuthStore';
 import { useOfflineStore } from './stores/useOfflineStore';
@@ -188,6 +193,9 @@ function App() {
             <Route path="daily-entries/bank-reconciliation" element={<BankReconciliation />} />
             <Route path="daily-entries/kitchen-display" element={<KitchenDisplay />} />
             <Route path="daily-entries/recurring-vouchers" element={<RecurringVoucherList />} />
+            <Route path="daily-entries/manufacturing" element={<ManufacturingList />} />
+            <Route path="daily-entries/manufacturing/new" element={<ManufacturingForm />} />
+            <Route path="daily-entries/manufacturing/:voucherNo" element={<ManufacturingForm />} />
             
             {/* Reports */}
             <Route path="reports/account-statement" element={<AccountStatement />} />
@@ -205,9 +213,13 @@ function App() {
             <Route path="reports/profit-by-customer" element={<ProfitByCustomer />} />
             <Route path="reports/profit-by-item" element={<ProfitByItem />} />
             <Route path="reports/barcode-print" element={<BarcodePrint />} />
+            <Route path="reports/manufacturing" element={<ManufacturingReport />} />
             <Route path="profile" element={<Profile />} />
             
             {/* Setup */}
+            <Route path="setup/bom" element={<BomList />} />
+            <Route path="setup/bom/new" element={<BomForm />} />
+            <Route path="setup/bom/:id" element={<BomForm />} />
             <Route path="setup/brands" element={<BrandList />} />
             <Route path="setup/narrations" element={<NarrationList />} />
             <Route path="setup/units" element={<UnitList />} />
