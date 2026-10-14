@@ -296,9 +296,11 @@ export const MainLayout: React.FC = () => {
         { key: '/reports/customer-balance-recovery', label: 'Customer Balance & Recovery' },
         { key: '/reports/profit-by-customer', label: 'Profit by Customer' },
         { key: '/reports/profit-by-item', label: 'Profit by Item' },
+        { key: '/reports/barcode-print', label: 'Barcode Print' },
       ]
     },
   ].filter(Boolean) as any[];
+
 
   interface ShortcutItem {
     key: string;

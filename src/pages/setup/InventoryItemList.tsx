@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, 
-  ReloadOutlined, ShoppingOutlined, SearchOutlined
+  ReloadOutlined, ShoppingOutlined, SearchOutlined, BarcodeOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { inventoryService, type Item } from '../../services/inventoryService';
@@ -179,7 +179,16 @@ export const InventoryItemList: React.FC = () => {
       key: 'action',
       width: '120px',
       render: (_: any, record: Item) => (
-        <Space size="middle">
+        <Space size="small">
+          <Tooltip title="Print Barcode">
+            <Button 
+              icon={<BarcodeOutlined />} 
+              size="small"
+              onClick={() => navigate(`/reports/barcode-print?itemId=${record.id}`)}
+              disabled={record.itemType === 'Service'}
+              style={{ color: '#0284c7', borderColor: '#bae6fd' }}
+            />
+          </Tooltip>
           <Tooltip title="Edit">
             <Button 
               type="primary" 

@@ -52,6 +52,7 @@ import { PurchaseSupplyComparisonReport } from './pages/reports/PurchaseSupplyCo
 import { CustomerBalanceRecoveryReport } from './pages/reports/CustomerBalanceRecoveryReport';
 import { ProfitByCustomer } from './pages/reports/ProfitByCustomer';
 import { ProfitByItem } from './pages/reports/ProfitByItem';
+import { BarcodePrint } from './pages/reports/BarcodePrint';
 import { NarrationList } from './pages/setup/NarrationList';
 import { UnitList } from './pages/setup/UnitList';
 import { ItemCategoryList } from './pages/setup/ItemCategoryList';
@@ -203,6 +204,7 @@ function App() {
             <Route path="reports/customer-balance-recovery" element={<CustomerBalanceRecoveryReport />} />
             <Route path="reports/profit-by-customer" element={<ProfitByCustomer />} />
             <Route path="reports/profit-by-item" element={<ProfitByItem />} />
+            <Route path="reports/barcode-print" element={<BarcodePrint />} />
             <Route path="profile" element={<Profile />} />
             
             {/* Setup */}

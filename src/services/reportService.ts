@@ -403,7 +403,15 @@ export const reportService = {
     });
     return response.data as Blob;
   },
+
+  async getBarcodeLabelsPdf(data: BarcodePrintRequest): Promise<Blob> {
+    const response = await api.post('/api/reports/barcode/pdf', data, {
+      responseType: 'blob'
+    });
+    return response.data as Blob;
+  },
 };
+
 
 export interface CustomerBalanceRecoveryLine {
   customerAccountId: string;
@@ -543,5 +551,23 @@ export interface ProfitByItemResponse {
   itemCount: number;
   lines: ProfitByItemLine[];
 }
+
+export interface BarcodePrintItem {
+  itemId?: string;
+  title?: string;
+  barcode?: string;
+  rate: number;
+  copies: number;
+}
+
+export interface BarcodePrintRequest {
+  items: BarcodePrintItem[];
+  layout?: 'Roll4Inch3Up' | 'ThermalRoll' | 'SheetA4';
+  includePrice?: boolean;
+  includeTitle?: boolean;
+  includeCompanyName?: boolean;
+  companyName?: string;
+}
+
 
 
