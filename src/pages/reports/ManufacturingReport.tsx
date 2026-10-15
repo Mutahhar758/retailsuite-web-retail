@@ -11,7 +11,8 @@ import dayjs from 'dayjs';
 import { 
   manufacturingService, 
   type ProductionResponse, 
-  ProductionStatusLabels 
+  ProductionStatusLabels,
+  getProductionStatusConfig 
 } from '../../services/manufacturingService';
 import { inventoryService, type Item } from '../../services/inventoryService';
 
@@ -132,7 +133,7 @@ export const ManufacturingReport: React.FC = () => {
       key: 'status',
       width: 120,
       render: (_: any, record: ProductionResponse) => {
-        const config = ProductionStatusLabels[record.status] || { label: 'Unknown', color: 'default' };
+        const config = getProductionStatusConfig(record.status);
         return <Tag color={config.color}>{config.label}</Tag>;
       }
     }

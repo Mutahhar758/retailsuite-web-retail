@@ -15,7 +15,8 @@ import {
   type ProductionResponse, 
   ProductionStatusLabels, 
   ProductionStatusEnum, 
-  type ProductionStatus 
+  type ProductionStatus,
+  getProductionStatusConfig 
 } from '../../services/manufacturingService';
 
 const { Title, Text } = Typography;
@@ -146,11 +147,13 @@ export const ManufacturingList: React.FC = () => {
       key: 'status',
       width: 160,
       render: (_: any, record: ProductionResponse) => {
-        const config = ProductionStatusLabels[record.status] || { label: 'Unknown', color: 'default' };
+        const config = getProductionStatusConfig(record.status);
+        const statusStr = String(record.status).toLowerCase();
+        const isInProgress = statusStr === 'inprogress' || record.status === 1;
         return (
           <div>
             <Tag color={config.color}>{config.label}</Tag>
-            {record.currentStage && record.status === ProductionStatusEnum.InProgress && (
+            {record.currentStage && isInProgress && (
               <div style={{ marginTop: 4 }}>
                 <Text type="secondary" style={{ fontSize: 11 }}>Stage: {record.currentStage}</Text>
               </div>
@@ -164,35 +167,40 @@ export const ManufacturingList: React.FC = () => {
       key: 'action',
       width: 180,
       align: 'center' as const,
-      render: (_: any, record: ProductionResponse) => (
-        <Space size="small">
-          {record.status === ProductionStatusEnum.Planned && (
-            <Tooltip title="Issue Materials into WIP">
-              <Button
-                size="small"
-                type="primary"
-                ghost
-                icon={<ClockCircleOutlined />}
-                onClick={() => handleStatusChange(record.voucherNo, ProductionStatusEnum.InProgress)}
-              >
-                Start WIP
-              </Button>
-            </Tooltip>
-          )}
+      render: (_: any, record: ProductionResponse) => {
+        const statusStr = String(record.status).toLowerCase();
+        const isPlanned = statusStr === 'planned' || record.status === 0;
+        const isInProgress = statusStr === 'inprogress' || record.status === 1;
 
-          {record.status === ProductionStatusEnum.InProgress && (
-            <Tooltip title="Complete Batch & Admit Goods">
-              <Button
-                size="small"
-                type="primary"
-                style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                icon={<CheckCircleOutlined />}
-                onClick={() => handleStatusChange(record.voucherNo, ProductionStatusEnum.Completed)}
-              >
-                Complete
-              </Button>
-            </Tooltip>
-          )}
+        return (
+          <Space size="small">
+            {isPlanned && (
+              <Tooltip title="Issue Materials into WIP">
+                <Button
+                  size="small"
+                  type="primary"
+                  ghost
+                  icon={<ClockCircleOutlined />}
+                  onClick={() => handleStatusChange(record.voucherNo, ProductionStatusEnum.InProgress)}
+                >
+                  Start WIP
+                </Button>
+              </Tooltip>
+            )}
+
+            {isInProgress && (
+              <Tooltip title="Complete Batch & Admit Goods">
+                <Button
+                  size="small"
+                  type="primary"
+                  style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                  icon={<CheckCircleOutlined />}
+                  onClick={() => handleStatusChange(record.voucherNo, ProductionStatusEnum.Completed)}
+                >
+                  Complete
+                </Button>
+              </Tooltip>
+            )}
 
           <Tooltip title="View / Edit Voucher">
             <Button

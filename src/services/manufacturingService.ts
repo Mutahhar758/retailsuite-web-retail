@@ -1,18 +1,41 @@
 import api from './api';
 
-export type ProductionStatus = 0 | 1 | 2 | 3;
+export type ProductionStatus = 'Planned' | 'InProgress' | 'Completed' | 'Cancelled' | 0 | 1 | 2 | 3 | string;
+
 export const ProductionStatusEnum = {
-  Planned: 0 as ProductionStatus,
-  InProgress: 1 as ProductionStatus,
-  Completed: 2 as ProductionStatus,
-  Cancelled: 3 as ProductionStatus,
+  Planned: 'Planned' as ProductionStatus,
+  InProgress: 'InProgress' as ProductionStatus,
+  Completed: 'Completed' as ProductionStatus,
+  Cancelled: 'Cancelled' as ProductionStatus,
 };
 
-export const ProductionStatusLabels: Record<ProductionStatus, { label: string; color: string }> = {
+export const ProductionStatusLabels: Record<string | number, { label: string; color: string }> = {
+  'Planned': { label: 'Planned', color: 'blue' },
+  'InProgress': { label: 'In Progress (WIP)', color: 'orange' },
+  'Completed': { label: 'Completed', color: 'green' },
+  'Cancelled': { label: 'Cancelled', color: 'red' },
+  'planned': { label: 'Planned', color: 'blue' },
+  'inprogress': { label: 'In Progress (WIP)', color: 'orange' },
+  'completed': { label: 'Completed', color: 'green' },
+  'cancelled': { label: 'Cancelled', color: 'red' },
   0: { label: 'Planned', color: 'blue' },
   1: { label: 'In Progress (WIP)', color: 'orange' },
   2: { label: 'Completed', color: 'green' },
   3: { label: 'Cancelled', color: 'red' },
+};
+
+export const getProductionStatusConfig = (status?: any) => {
+  if (status === undefined || status === null) {
+    return { label: 'Unknown', color: 'default' };
+  }
+  if (ProductionStatusLabels[status]) {
+    return ProductionStatusLabels[status];
+  }
+  const key = String(status).toLowerCase();
+  if (ProductionStatusLabels[key]) {
+    return ProductionStatusLabels[key];
+  }
+  return { label: String(status), color: 'default' };
 };
 
 export interface ProductionLineResponse {
