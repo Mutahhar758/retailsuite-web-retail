@@ -33,7 +33,8 @@ import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCa
 import type { NarrationDto } from '../../services/narrationService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { kotService, type DiningTableDto, type KotOrderResponse } from '../../services/kotService';
-import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT, RESTAURANT_ENABLE_KOT_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT, RESTAURANT_ENABLE_KOT_KEY, BARCODE_FAST_SCAN_SOUND_KEY } from '../../stores/useSettingsStore';
+import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
 
 const { Title, Text } = Typography;
 
@@ -1136,9 +1137,35 @@ export const POSSaleForm: React.FC = () => {
             <Input
               className="pos-search-input"
               prefix={<SearchOutlined style={{ color: '#64748b', fontSize: 18 }} />}
-              placeholder="Search products..."
+              placeholder="Search products or scan barcode (Enter)..."
               value={searchItemQuery}
               onChange={e => setSearchItemQuery(e.target.value)}
+              onPressEnter={() => {
+                const query = searchItemQuery.trim();
+                if (!query) return;
+
+                let matched = items.find(i => i.barcode && i.barcode.toLowerCase() === query.toLowerCase());
+                if (!matched) {
+                  matched = items.find(i => String(i.id).toLowerCase() === query.toLowerCase() || (i.itemKey && i.itemKey.toLowerCase() === query.toLowerCase()));
+                }
+                if (!matched && filteredItems.length === 1) {
+                  matched = filteredItems[0];
+                }
+
+                if (matched) {
+                  handleAddToCart(matched);
+                  setSearchItemQuery('');
+                  if (getSetting(BARCODE_FAST_SCAN_SOUND_KEY, 'true') !== 'false') {
+                    playScanSuccessTone();
+                  }
+                  message.success(`Added: ${matched.title}`);
+                } else {
+                  if (getSetting(BARCODE_FAST_SCAN_SOUND_KEY, 'true') !== 'false') {
+                    playScanErrorTone();
+                  }
+                  message.warning(`No item found matching barcode "${query}"`);
+                }
+              }}
               style={{ height: 50, borderRadius: 12, fontSize: 15, flex: 1.5 }}
               suffix={
                 searchItemQuery && (

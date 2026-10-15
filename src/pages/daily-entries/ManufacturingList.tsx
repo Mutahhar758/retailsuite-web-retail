@@ -13,7 +13,6 @@ import dayjs from 'dayjs';
 import { 
   manufacturingService, 
   type ProductionResponse, 
-  ProductionStatusLabels, 
   ProductionStatusEnum, 
   type ProductionStatus,
   getProductionStatusConfig 
@@ -222,9 +221,10 @@ export const ManufacturingList: React.FC = () => {
             </Popconfirm>
           </Tooltip>
         </Space>
-      )
+      );
     }
-  ];
+  }
+];
 
   return (
     <div style={{ padding: '24px' }}>

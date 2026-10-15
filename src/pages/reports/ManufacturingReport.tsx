@@ -11,7 +11,6 @@ import dayjs from 'dayjs';
 import { 
   manufacturingService, 
   type ProductionResponse, 
-  ProductionStatusLabels,
   getProductionStatusConfig 
 } from '../../services/manufacturingService';
 import { inventoryService, type Item } from '../../services/inventoryService';

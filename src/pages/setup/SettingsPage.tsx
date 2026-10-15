@@ -29,7 +29,10 @@ import {
   QrcodeOutlined,
   BankOutlined,
   AppstoreOutlined,
-  CoffeeOutlined
+  CoffeeOutlined,
+  BarcodeOutlined,
+  ThunderboltOutlined,
+  SoundOutlined
 } from '@ant-design/icons';
 import {
   useSettingsStore,
@@ -44,11 +47,17 @@ import {
   INVENTORY_ENABLE_SECONDARY_QTY_KEY,
   RESTAURANT_ENABLE_KOT_KEY,
   SUPPLY_ENABLE_KEY,
-  TRANSACTION_ENABLE_CARRIAGE_KEY
+  TRANSACTION_ENABLE_CARRIAGE_KEY,
+  BARCODE_FAST_SCAN_ENABLED_KEY,
+  BARCODE_FAST_SCAN_INCREMENT_KEY,
+  BARCODE_FAST_SCAN_SOUND_KEY,
+  BARCODE_FAST_SCAN_AUTOFOCUS_KEY
 } from '../../stores/useSettingsStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { PrinterSettings } from './PrinterSettings';
 import { buildEmvCoPayload, normalizeToIban, isValidIban, formatIban } from '../../utils/emvcoQr';
+import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
+import { inventoryService, type Item } from '../../services/inventoryService';
 import QRCode from 'qrcode';
 
 const { Title, Text, Paragraph } = Typography;
@@ -90,9 +99,24 @@ export const SettingsPage: React.FC = () => {
   const [savingKot, setSavingKot] = useState(false);
   const [kotLastSaved, setKotLastSaved] = useState<string | null>(null);
 
+  // Local state for Barcode Fast Scan settings
+  const [fastScanEnabled, setFastScanEnabled] = useState(false);
+  const [fastScanIncrement, setFastScanIncrement] = useState(true);
+  const [fastScanSound, setFastScanSound] = useState(true);
+  const [fastScanAutoFocus, setFastScanAutoFocus] = useState(true);
+  const [savingFastScan, setSavingFastScan] = useState(false);
+  const [fastScanLastSaved, setFastScanLastSaved] = useState<string | null>(null);
+
+  // Items for live test barcode scanner simulator
+  const [testItems, setTestItems] = useState<Item[]>([]);
+  const [testScanInput, setTestScanInput] = useState('');
+  const [testScanResult, setTestScanResult] = useState<{ item: Item; timestamp: number } | null>(null);
+  const [testScanError, setTestScanError] = useState<string | null>(null);
+
   // Initialize and load settings from API when page mounts or tenant changes
   useEffect(() => {
     fetchSettings();
+    inventoryService.getItemsLookup().then(setTestItems).catch(() => {});
   }, [fetchSettings, currentTenantIdentifier]);
 
   // Sync Thank You and Default Bill Format state when store initialized or settings change
@@ -118,6 +142,10 @@ export const SettingsPage: React.FC = () => {
     setSupplyEnabled(supplySetting !== '' ? supplySetting === 'true' : orgSupply);
     setCarriageEnabled(getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true');
     setKotEnabled(getSetting(RESTAURANT_ENABLE_KOT_KEY, 'false') === 'true');
+    setFastScanEnabled(getSetting(BARCODE_FAST_SCAN_ENABLED_KEY, 'false') === 'true');
+    setFastScanIncrement(getSetting(BARCODE_FAST_SCAN_INCREMENT_KEY, 'true') !== 'false');
+    setFastScanSound(getSetting(BARCODE_FAST_SCAN_SOUND_KEY, 'true') !== 'false');
+    setFastScanAutoFocus(getSetting(BARCODE_FAST_SCAN_AUTOFOCUS_KEY, 'true') !== 'false');
   }, [initialized, settings, getSetting]);
 
   const handleSaveThankYou = async () => {
@@ -193,6 +221,76 @@ export const SettingsPage: React.FC = () => {
       message.error(err?.response?.data?.message || 'Failed to save restaurant settings.');
     } finally {
       setSavingKot(false);
+    }
+  };
+
+  const handleSaveBarcodeSettings = async () => {
+    setSavingFastScan(true);
+    try {
+      await updateSetting(
+        BARCODE_FAST_SCAN_ENABLED_KEY,
+        fastScanEnabled ? 'true' : 'false',
+        'Enable Barcode Fast Scan input box on top of transaction grids',
+        'Barcode'
+      );
+      await updateSetting(
+        BARCODE_FAST_SCAN_INCREMENT_KEY,
+        fastScanIncrement ? 'true' : 'false',
+        'Auto-increment item quantity on repeated barcode scan',
+        'Barcode'
+      );
+      await updateSetting(
+        BARCODE_FAST_SCAN_SOUND_KEY,
+        fastScanSound ? 'true' : 'false',
+        'Play audio beep tone on successful/failed barcode scans',
+        'Barcode'
+      );
+      await updateSetting(
+        BARCODE_FAST_SCAN_AUTOFOCUS_KEY,
+        fastScanAutoFocus ? 'true' : 'false',
+        'Keep barcode scan input focused for continuous hands-free scanning',
+        'Barcode'
+      );
+      setFastScanLastSaved(new Date().toLocaleTimeString());
+      message.success('Barcode fast scan settings saved successfully!');
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to save barcode settings.');
+    } finally {
+      setSavingFastScan(false);
+    }
+  };
+
+  const handleTestScan = (rawInput?: string) => {
+    const code = (rawInput !== undefined ? rawInput : testScanInput).trim();
+    if (!code) return;
+
+    setTestScanError(null);
+    let matchedItem = testItems.find(
+      (i) => i.barcode && i.barcode.trim().toLowerCase() === code.toLowerCase()
+    );
+    if (!matchedItem) {
+      matchedItem = testItems.find(
+        (i) =>
+          String(i.id).toLowerCase() === code.toLowerCase() ||
+          (i.itemKey && i.itemKey.toLowerCase() === code.toLowerCase()) ||
+          (i.title && i.title.toLowerCase() === code.toLowerCase())
+      );
+    }
+
+    if (matchedItem) {
+      if (fastScanSound) {
+        playScanSuccessTone();
+      }
+      setTestScanResult({ item: matchedItem, timestamp: Date.now() });
+      setTestScanInput('');
+      message.success(`Matched Item: "${matchedItem.title}"`);
+    } else {
+      if (fastScanSound) {
+        playScanErrorTone();
+      }
+      setTestScanResult(null);
+      setTestScanError(`Barcode "${code}" was not found in current inventory.`);
+      message.warning(`Barcode "${code}" was not found in current inventory.`);
     }
   };
 
@@ -912,6 +1010,275 @@ export const SettingsPage: React.FC = () => {
                           Save Restaurant Settings
                         </Button>
                       </div>
+                    </Card>
+                  </Col>
+                </Row>
+              </Spin>
+            )
+          },
+          {
+            key: 'barcode-settings',
+            label: (
+              <span>
+                <BarcodeOutlined style={{ marginRight: 8 }} />
+                Barcode Fast Scan
+              </span>
+            ),
+            children: (
+              <Spin spinning={loading && !initialized}>
+                <Row gutter={[24, 24]}>
+                  {/* Left Column: Fast Scan Configuration */}
+                  <Col xs={24} lg={15}>
+                    <Card
+                      className="shadow-sm border-gray-100 rounded-xl"
+                      title={
+                        <Space>
+                          <BarcodeOutlined style={{ color: '#16a34a', fontSize: 20 }} />
+                          <span style={{ fontWeight: 600 }}>Barcode Fast Scan Configuration</span>
+                        </Space>
+                      }
+                      extra={
+                        fastScanLastSaved && (
+                          <Tag icon={<CheckCircleOutlined />} color="success">
+                            Saved at {fastScanLastSaved}
+                          </Tag>
+                        )
+                      }
+                    >
+                      <Paragraph type="secondary" style={{ marginBottom: 20 }}>
+                        Configure high-speed barcode scanning for transaction grids (Sales, Purchases, Returns). When enabled, a dedicated quick scan bar appears directly on top of the items grid for seamless hands-free item addition.
+                      </Paragraph>
+
+                      {/* 1. Fast Scan on Grid Toggle */}
+                      <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <Row align="middle" justify="space-between">
+                          <Col span={18}>
+                            <Space align="center" style={{ marginBottom: 4 }}>
+                              <ThunderboltOutlined style={{ color: '#16a34a' }} />
+                              <Text strong style={{ fontSize: 15 }}>
+                                Enable Barcode Fast Scan Input on Top of Grid
+                              </Text>
+                            </Space>
+                            <Text type="secondary" style={{ fontSize: 13, display: 'block' }}>
+                              Displays an optimized quick-scan input box above the table grid in Sales and Purchase vouchers. Cashiers can point-and-scan items rapidly or press <Tag color="green">F2</Tag> to focus without clicking &quot;Add Row&quot;.
+                            </Text>
+                          </Col>
+                          <Col span={6} style={{ textAlign: 'right' }}>
+                            <Switch
+                              checked={fastScanEnabled}
+                              onChange={setFastScanEnabled}
+                              checkedChildren="Enabled"
+                              unCheckedChildren="Disabled"
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+
+                      {/* 2. Auto-Increment Quantity on Repeated Scan */}
+                      <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <Row align="middle" justify="space-between">
+                          <Col span={18}>
+                            <Text strong style={{ fontSize: 15, display: 'block' }}>
+                              Auto-Increment Quantity on Duplicate Scan
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                              When an item is scanned again, automatically increments its line quantity (+1) instead of adding a separate row. (Recommended for retail checkout).
+                            </Text>
+                          </Col>
+                          <Col span={6} style={{ textAlign: 'right' }}>
+                            <Switch
+                              checked={fastScanIncrement}
+                              onChange={setFastScanIncrement}
+                              checkedChildren="+1 Qty"
+                              unCheckedChildren="New Row"
+                              disabled={!fastScanEnabled}
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+
+                      {/* 3. Audio Feedback Tone */}
+                      <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <Row align="middle" justify="space-between">
+                          <Col span={18}>
+                            <Space align="center" style={{ marginBottom: 4 }}>
+                              <SoundOutlined style={{ color: '#0ea5e9' }} />
+                              <Text strong style={{ fontSize: 15 }}>
+                                Audio Beep Tone Feedback
+                              </Text>
+                            </Space>
+                            <Text type="secondary" style={{ fontSize: 13, display: 'block' }}>
+                              Plays an authentic high-pitched confirmation beep on successful scan, and a low warning tone if a barcode is not found in the inventory.
+                            </Text>
+                          </Col>
+                          <Col span={6} style={{ textAlign: 'right' }}>
+                            <Switch
+                              checked={fastScanSound}
+                              onChange={setFastScanSound}
+                              checkedChildren="Sound On"
+                              unCheckedChildren="Muted"
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+
+                      {/* 4. Continuous Auto-Focus */}
+                      <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <Row align="middle" justify="space-between">
+                          <Col span={18}>
+                            <Text strong style={{ fontSize: 15, display: 'block' }}>
+                              Continuous Hands-Free Auto-Focus
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                              Automatically refocuses the scanner input immediately after each scan so cashiers never need to reach for the mouse.
+                            </Text>
+                          </Col>
+                          <Col span={6} style={{ textAlign: 'right' }}>
+                            <Switch
+                              checked={fastScanAutoFocus}
+                              onChange={setFastScanAutoFocus}
+                              checkedChildren="Auto-Focus"
+                              unCheckedChildren="Manual"
+                              disabled={!fastScanEnabled}
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+
+                      <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
+                        <Button
+                          type="primary"
+                          icon={<SaveOutlined />}
+                          size="large"
+                          loading={savingFastScan}
+                          onClick={handleSaveBarcodeSettings}
+                          style={{
+                            fontWeight: 600,
+                            borderRadius: 8,
+                            paddingLeft: 24,
+                            paddingRight: 24,
+                            backgroundColor: '#16a34a',
+                            borderColor: '#16a34a'
+                          }}
+                        >
+                          Save Barcode Settings
+                        </Button>
+                      </div>
+                    </Card>
+                  </Col>
+
+                  {/* Right Column: Live Scanner Simulator & Test Box */}
+                  <Col xs={24} lg={9}>
+                    <Card
+                      className="shadow-sm border-gray-100 rounded-xl"
+                      title={
+                        <Space>
+                          <ThunderboltOutlined style={{ color: '#0ea5e9', fontSize: 18 }} />
+                          <span style={{ fontWeight: 600 }}>Scanner Hardware Test Box</span>
+                        </Space>
+                      }
+                      style={{ backgroundColor: '#f8fafc' }}
+                    >
+                      <Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 16 }}>
+                        Point your physical USB/Bluetooth handheld barcode scanner gun at any product barcode and test it here live:
+                      </Paragraph>
+
+                      <div style={{ marginBottom: 16 }}>
+                        <Input
+                          size="large"
+                          prefix={<BarcodeOutlined style={{ color: '#16a34a', fontSize: 18 }} />}
+                          placeholder="Scan or type barcode and press Enter..."
+                          value={testScanInput}
+                          onChange={(e) => setTestScanInput(e.target.value)}
+                          onPressEnter={() => handleTestScan()}
+                          style={{ borderRadius: 8, borderColor: '#86efac' }}
+                          suffix={
+                            <Button
+                              type="primary"
+                              size="small"
+                              onClick={() => handleTestScan()}
+                              style={{ backgroundColor: '#16a34a', borderColor: '#16a34a', borderRadius: 4 }}
+                            >
+                              Test Scan
+                            </Button>
+                          }
+                        />
+                      </div>
+
+                      {/* Result Box */}
+                      {testScanResult ? (
+                        <div
+                          style={{
+                            backgroundColor: '#ecfdf5',
+                            border: '1.5px solid #a7f3d0',
+                            borderRadius: 8,
+                            padding: 14,
+                            marginBottom: 16
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                            <CheckCircleOutlined style={{ color: '#10b981', fontSize: 18 }} />
+                            <Text strong style={{ color: '#065f46', fontSize: 14 }}>
+                              Item Successfully Identified!
+                            </Text>
+                          </div>
+                          <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>
+                            {testScanResult.item.title}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                            Barcode: <Text code>{testScanResult.item.barcode || 'N/A'}</Text> • Retail Rate: <Text strong style={{ color: '#16a34a' }}>Rs. {testScanResult.item.priRate || 0}</Text>
+                          </div>
+                        </div>
+                      ) : testScanError ? (
+                        <Alert
+                          type="warning"
+                          showIcon
+                          message={testScanError}
+                          style={{ marginBottom: 16, borderRadius: 8 }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            padding: 20,
+                            textAlign: 'center',
+                            backgroundColor: '#ffffff',
+                            border: '1px dashed #cbd5e1',
+                            borderRadius: 8,
+                            marginBottom: 16
+                          }}
+                        >
+                          <BarcodeOutlined style={{ fontSize: 32, color: '#94a3b8', marginBottom: 8 }} />
+                          <div style={{ fontSize: 13, color: '#64748b' }}>
+                            Ready for test scan. Scanner tone will sound when scanned.
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sample Products for Quick Testing */}
+                      {testItems.filter(i => i.barcode).length > 0 && (
+                        <div>
+                          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                            Quick test with inventory items:
+                          </Text>
+                          <Space wrap size={[6, 6]}>
+                            {testItems.filter(i => i.barcode).slice(0, 4).map(item => (
+                              <Tag
+                                key={item.id}
+                                style={{
+                                  cursor: 'pointer',
+                                  padding: '4px 8px',
+                                  borderRadius: 6,
+                                  backgroundColor: '#ffffff',
+                                  border: '1px solid #cbd5e1'
+                                }}
+                                onClick={() => handleTestScan(item.barcode)}
+                              >
+                                🔍 {item.title.slice(0, 15)}... ({item.barcode})
+                              </Tag>
+                            ))}
+                          </Space>
+                        </div>
+                      )}
                     </Card>
                   </Col>
                 </Row>

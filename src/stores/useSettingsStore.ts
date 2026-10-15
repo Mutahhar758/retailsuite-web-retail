@@ -48,6 +48,12 @@ export const MANUFACTURING_ENABLE_KEY = 'Manufacturing.EnableManufacturing';
 // Transaction setting keys
 export const TRANSACTION_ENABLE_CARRIAGE_KEY = 'Transaction.EnableCarriage';
 
+// Barcode Fast Scan setting keys
+export const BARCODE_FAST_SCAN_ENABLED_KEY   = 'Barcode.FastScanEnabled';
+export const BARCODE_FAST_SCAN_INCREMENT_KEY = 'Barcode.FastScanIncrementQty';
+export const BARCODE_FAST_SCAN_SOUND_KEY     = 'Barcode.FastScanSound';
+export const BARCODE_FAST_SCAN_AUTOFOCUS_KEY = 'Barcode.FastScanAutoFocus';
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: {
     [BILL_THANK_YOU_KEY]: BILL_THANK_YOU_DEFAULT,

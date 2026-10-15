@@ -14,8 +14,9 @@ import { inventoryService, type Item } from '../../services/inventoryService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 import { useAppStore } from '../../stores/useAppStore';
-import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, MOBILE_SHOP_ENABLE_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, MOBILE_SHOP_ENABLE_KEY, BARCODE_FAST_SCAN_INCREMENT_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
+import { BarcodeFastScanBar } from '../../components/common/BarcodeFastScanBar';
 
 const { Title, Text } = Typography;
 
@@ -272,6 +273,116 @@ export const NormalPurchaseForm: React.FC = () => {
         }];
       }
       return updatedLines;
+    });
+  };
+
+  const handleBarcodeScanned = (scannedItem: Item, scanQty: number = 1) => {
+    const autoIncrement = getSetting(BARCODE_FAST_SCAN_INCREMENT_KEY, 'true') !== 'false';
+
+    setPurchaseLines(prev => {
+      const existingIndex = prev.findIndex(l => String(l.itemId) === String(scannedItem.id));
+
+      if (autoIncrement && existingIndex >= 0) {
+        const updatedLines = [...prev];
+        const existing = updatedLines[existingIndex];
+        const newQty = (existing.qty || 0) + scanQty;
+        const rate = existing.rate || 0;
+        const addLess = existing.addLess || 0;
+        const secQty = existing.secQty || 0;
+        const secRate = existing.secRate || 0;
+        const amount = round(((newQty * rate) + (secQty * secRate)) + addLess, 2);
+
+        updatedLines[existingIndex] = {
+          ...existing,
+          qty: newQty,
+          amount
+        };
+        return updatedLines;
+      }
+
+      const emptyRowIndex = prev.findIndex(l => !l.itemId);
+      const pSize = Number(scannedItem.qtyInPack || (scannedItem as any).QtyInPack || (scannedItem as any).qty_in_pack || 0);
+      const rate = scannedItem.priRate || 0;
+      const secRate = scannedItem.secRate || (rate * (pSize > 0 ? pSize : 1));
+      const amount = round(scanQty * rate, 2);
+
+      if (emptyRowIndex >= 0) {
+        const updatedLines = [...prev];
+        updatedLines[emptyRowIndex] = {
+          ...updatedLines[emptyRowIndex],
+          itemId: scannedItem.id,
+          unit: scannedItem.defaultUnit || scannedItem.primaryUnit,
+          rate,
+          secUnit: scannedItem.secondaryUnit,
+          secRate,
+          secQty: 0,
+          qty: scanQty,
+          addLess: 0,
+          amount
+        };
+
+        if (emptyRowIndex === updatedLines.length - 1) {
+          const maxSeq = updatedLines.reduce((max, row) => Math.max(max, row.seq || 0), 0);
+          updatedLines.push({
+            key: Date.now() + 1,
+            seq: maxSeq + 1,
+            itemId: undefined,
+            unit: undefined,
+            qty: 1,
+            rate: 0,
+            addLess: 0,
+            imei: '',
+            imei2: '',
+            ptaStatus: undefined,
+            batteryHealth: undefined,
+            conditionNote: '',
+            amount: 0,
+            secQty: 0,
+            secRate: 0
+          });
+        }
+        return updatedLines;
+      } else {
+        const maxSeq = prev.reduce((max, row) => Math.max(max, row.seq || 0), 0);
+        return [
+          ...prev,
+          {
+            key: Date.now(),
+            seq: maxSeq + 1,
+            itemId: scannedItem.id,
+            unit: scannedItem.defaultUnit || scannedItem.primaryUnit,
+            rate,
+            secUnit: scannedItem.secondaryUnit,
+            secRate,
+            secQty: 0,
+            qty: scanQty,
+            addLess: 0,
+            imei: '',
+            imei2: '',
+            ptaStatus: undefined,
+            batteryHealth: undefined,
+            conditionNote: '',
+            amount,
+          },
+          {
+            key: Date.now() + 1,
+            seq: maxSeq + 2,
+            itemId: undefined,
+            unit: undefined,
+            qty: 1,
+            rate: 0,
+            addLess: 0,
+            imei: '',
+            imei2: '',
+            ptaStatus: undefined,
+            batteryHealth: undefined,
+            conditionNote: '',
+            amount: 0,
+            secQty: 0,
+            secRate: 0
+          }
+        ];
+      }
     });
   };
 
@@ -652,6 +763,11 @@ export const NormalPurchaseForm: React.FC = () => {
           <Title level={5} style={{ margin: 0 }}>Purchase Items</Title>
           <Button type="dashed" icon={<PlusOutlined />} onClick={addRow}>Add Row</Button>
         </div>
+
+        <BarcodeFastScanBar
+          items={items}
+          onScanItem={handleBarcodeScanned}
+        />
 
         <Table
           dataSource={purchaseLines}
