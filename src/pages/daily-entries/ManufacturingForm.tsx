@@ -5,7 +5,7 @@ import {
   Statistic, Tag, Alert 
 } from 'antd';
 import { 
-  PlusOutlined, DeleteOutlined, ArrowLeftOutlined, SaveOutlined, 
+  PlusOutlined, DeleteOutlined, ArrowLeftOutlined, 
   SettingOutlined, CheckCircleOutlined, ClockCircleOutlined, 
   ThunderboltOutlined, SyncOutlined 
 } from '@ant-design/icons';
@@ -24,7 +24,6 @@ import { narrationService, type NarrationDto } from '../../services/narrationSer
 
 const { Title, Text } = Typography;
 const { Option } = Select;
-const { TextArea } = Input;
 
 interface ProductionLineRow {
   key: string;
@@ -69,7 +68,7 @@ export const ManufacturingForm: React.FC = () => {
         const [itemList, unitList, narrationList] = await Promise.all([
           inventoryService.getItemsLookup(),
           unitService.getActiveUnits(),
-          narrationService.getAll()
+          narrationService.getActiveNarrations()
         ]);
         setItems(itemList || []);
         setUnits(unitList || []);
@@ -468,6 +467,9 @@ export const ManufacturingForm: React.FC = () => {
               <div>
                 <Title level={4} style={{ margin: 0 }}>
                   {isEdit ? `Edit Manufacturing Voucher (${voucherNo})` : 'New Manufacturing / Assembly Run'}
+                  <Tag color={currentStatus === ProductionStatusEnum.Completed ? 'green' : currentStatus === ProductionStatusEnum.InProgress ? 'orange' : 'blue'} style={{ marginLeft: 8 }}>
+                    {currentStatus}
+                  </Tag>
                 </Title>
                 <Text type="secondary">Issue materials to WIP or complete finished goods batch</Text>
               </div>
@@ -517,7 +519,7 @@ export const ManufacturingForm: React.FC = () => {
           />
         )}
 
-        <Row orientation="horizontal" gutter={16}>
+        <Row gutter={16}>
           {/* Main Form Fields */}
           <Col span={16}>
             <Card title="Production Specification" loading={loading} style={{ marginBottom: 16 }}>
@@ -626,7 +628,7 @@ export const ManufacturingForm: React.FC = () => {
                   <Form.Item label="Narration / Department" name="narration">
                     <Select placeholder="Select Narration" allowClear>
                       {narrations.map(n => (
-                        <Option key={n.id} value={n.id}>{n.title}</Option>
+                        <Option key={n.code} value={n.code}>{n.title}</Option>
                       ))}
                     </Select>
                   </Form.Item>

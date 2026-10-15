@@ -379,7 +379,7 @@ export const BomForm: React.FC = () => {
           </Col>
         </Row>
 
-        <Row orientation="horizontal" gutter={16}>
+        <Row gutter={16}>
           {/* Main Info */}
           <Col span={16}>
             <Card title="Product & Formula Specification" loading={loading} style={{ marginBottom: 16 }}>

@@ -6,7 +6,7 @@ import {
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, 
   ReloadOutlined, SearchOutlined, CheckCircleOutlined, 
-  ClockCircleOutlined, CloseCircleOutlined, SettingOutlined 
+  ClockCircleOutlined, SettingOutlined 
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';

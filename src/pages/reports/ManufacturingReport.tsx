@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import { 
   PrinterOutlined, ReloadOutlined, 
-  BarChartOutlined, ExperimentOutlined, AppstoreOutlined 
+  BarChartOutlined, AppstoreOutlined 
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { 
