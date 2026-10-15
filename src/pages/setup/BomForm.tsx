@@ -50,6 +50,17 @@ export const BomForm: React.FC = () => {
   const [overheadCost, setOverheadCost] = useState<number>(0);
   const [packagingCost, setPackagingCost] = useState<number>(0);
   const [outputQty, setOutputQty] = useState<number>(1);
+  const watchedUnitId = Form.useWatch('unitId', form);
+
+  const getUnitTitle = useCallback((code?: string) => {
+    if (!code) return '';
+    const matched = units.find(u => 
+      u.code?.toLowerCase() === code?.toLowerCase() || 
+      u.title?.toLowerCase() === code?.toLowerCase()
+    );
+    if (matched) return matched.title;
+    return isNaN(Number(code)) ? code : '';
+  }, [units]);
 
   // Helper to extract allowed units for a given item (whitelisted strictly from item details)
   const getItemAllowedUnits = useCallback((item?: Item) => {
@@ -58,18 +69,18 @@ export const BomForm: React.FC = () => {
       .filter((u): u is string => Boolean(u && typeof u === 'string' && u.trim().length > 0));
     const uniqueCodes = Array.from(new Set(rawCodes));
     if (uniqueCodes.length === 0) {
-      return units.map(u => ({ code: u.code, title: u.title || u.code }));
+      return units.map(u => ({ code: u.code, title: u.title || '' })).filter(u => Boolean(u.title));
     }
     return uniqueCodes.map(code => {
       const matched = units.find(u => 
-        u.code.toLowerCase() === code.toLowerCase() || 
-        u.title.toLowerCase() === code.toLowerCase()
+        u.code?.toLowerCase() === code?.toLowerCase() || 
+        u.title?.toLowerCase() === code?.toLowerCase()
       );
       return {
         code,
-        title: matched?.title && matched.title !== code ? `${matched.title} (${code})` : (matched?.title || code)
+        title: matched?.title || (isNaN(Number(code)) ? code : '')
       };
-    });
+    }).filter(u => Boolean(u.title));
   }, [units]);
 
   // Load existing BOM if in edit mode
@@ -112,8 +123,11 @@ export const BomForm: React.FC = () => {
       const rows: IngredientRow[] = bom.lines.map((l, index) => {
         const item = currentItems.find(i => i.id === l.rawItemId);
         const pSize = Number(item?.qtyInPack || 0);
-        const secQty = pSize > 0 ? Math.floor(l.qty / pSize) : 0;
-        const primaryQty = pSize > 0 ? Math.round((l.qty - (secQty * pSize)) * 1000) / 1000 : l.qty;
+        const priUnit = item?.primaryUnit || item?.defaultUnit;
+        const secUnit = item?.secondaryUnit;
+        const hasSec = Boolean(secUnit && secUnit !== priUnit && pSize > 1);
+        const secQty = hasSec && pSize > 0 ? Math.floor(l.qty / pSize) : 0;
+        const primaryQty = hasSec && pSize > 0 ? Math.round((l.qty - (secQty * pSize)) * 1000) / 1000 : l.qty;
 
         return {
           key: `row-${index}`,
@@ -194,20 +208,25 @@ export const BomForm: React.FC = () => {
   const handleRowQtyChange = (key: string, field: 'primaryQty' | 'secQty' | 'qty', val: number) => {
     setIngredients(prev => prev.map(row => {
       if (row.key === key) {
-        const pSize = Number(row.qtyInPack || 0);
+        const item = items.find(i => i.id === row.rawItemId);
+        const pSize = Number(item?.qtyInPack || row.qtyInPack || 0);
+        const priCode = item?.primaryUnit || item?.defaultUnit || row.unitId;
+        const secCode = item?.secondaryUnit || row.secUnit;
+        const hasSec = Boolean(secCode && secCode !== priCode && pSize > 1);
+
         let primaryQty = row.primaryQty ?? 0;
         let secQty = row.secQty ?? 0;
         let qty = row.qty ?? 0;
 
         if (field === 'primaryQty') {
           primaryQty = val;
-          qty = pSize > 0 ? (val + (secQty * pSize)) : val;
+          qty = hasSec && pSize > 0 ? (val + (secQty * pSize)) : val;
         } else if (field === 'secQty') {
           secQty = val;
-          qty = pSize > 0 ? (primaryQty + (val * pSize)) : (primaryQty || val);
+          qty = hasSec && pSize > 0 ? (primaryQty + (val * pSize)) : (primaryQty || val);
         } else if (field === 'qty') {
           qty = val;
-          if (pSize > 0) {
+          if (hasSec && pSize > 0) {
             secQty = Math.floor(val / pSize);
             primaryQty = Math.round((val - (secQty * pSize)) * 1000) / 1000;
           } else {
@@ -372,7 +391,8 @@ export const BomForm: React.FC = () => {
       width: 130,
       render: (_: any, record: IngredientRow) => {
         const item = items.find(i => i.id === record.rawItemId);
-        const priUnit = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
+        const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
+        const priUnit = getUnitTitle(priCode);
         return (
           <InputNumber
             min={0}
@@ -391,14 +411,17 @@ export const BomForm: React.FC = () => {
       width: 130,
       render: (_: any, record: IngredientRow) => {
         const item = items.find(i => i.id === record.rawItemId);
-        const secUnit = item?.secondaryUnit || record.secUnit || '';
-        const hasSecUnit = Boolean(secUnit);
+        const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
+        const secCode = item?.secondaryUnit || record.secUnit || '';
+        const pSize = Number(item?.qtyInPack || record.qtyInPack || 0);
+        const hasSecUnit = Boolean(secCode && secCode !== priCode && pSize > 1);
+        const secUnit = hasSecUnit ? getUnitTitle(secCode) : '';
         return (
           <InputNumber
             min={0}
             step={1}
             disabled={!hasSecUnit}
-            value={record.secQty}
+            value={hasSecUnit ? record.secQty : undefined}
             placeholder={hasSecUnit ? '0' : '—'}
             addonAfter={secUnit ? <span style={{ fontSize: '11px' }}>{secUnit}</span> : undefined}
             onChange={(val) => handleRowQtyChange(record.key, 'secQty', val || 0)}
@@ -615,10 +638,12 @@ export const BomForm: React.FC = () => {
                     {(() => {
                       const curItem = items.find(i => i.id === (finishedItemId || form.getFieldValue('finishedItemId')));
                       const pSize = Number(curItem?.qtyInPack || 0);
-                      const secUnit = curItem?.secondaryUnit;
-                      if (pSize > 0 && secUnit) {
+                      const priCode = curItem?.primaryUnit || curItem?.defaultUnit;
+                      const secCode = curItem?.secondaryUnit;
+                      const hasSec = Boolean(secCode && secCode !== priCode && pSize > 1);
+                      if (hasSec) {
                         const secVal = (outputQty / pSize).toFixed(2);
-                        return <Tag color="blue" style={{ marginTop: 4 }}>≈ {secVal} {secUnit}</Tag>;
+                        return <Tag color="blue" style={{ marginTop: 4 }}>≈ {secVal} {getUnitTitle(secCode)}</Tag>;
                       }
                       return <Text type="secondary" style={{ display: 'inline-block', marginTop: 4 }}>—</Text>;
                     })()}
@@ -743,11 +768,11 @@ export const BomForm: React.FC = () => {
                     />
                     <div style={{ marginTop: 8 }}>
                       <Text type="secondary">Yield: </Text>
-                      <Text strong>{outputQty} units</Text>
+                      <Text strong>{outputQty} {getUnitTitle(watchedUnitId) || 'units'}</Text>
                     </div>
                     <Divider style={{ margin: '8px 0' }} />
                     <Statistic
-                      title="Est. Cost per Unit"
+                      title={`Est. Cost per ${getUnitTitle(watchedUnitId) || 'Unit'}`}
                       value={unitProductionCost}
                       precision={2}
                       valueStyle={{ color: '#52c41a', fontSize: 22, fontWeight: 'bold' }}

@@ -64,8 +64,9 @@ export const InventoryItemList: React.FC = () => {
 
   const getUnitTitle = (code?: string) => {
     if (!code) return '-';
-    const unit = units.find(u => u.code === code);
-    return unit ? unit.title : code;
+    const unit = units.find(u => u.code === code || u.title?.toLowerCase() === code.toLowerCase());
+    if (unit) return unit.title;
+    return isNaN(Number(code)) ? code : '-';
   };
 
   const filteredData = data.filter(item => 

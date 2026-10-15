@@ -65,6 +65,17 @@ export const ManufacturingForm: React.FC = () => {
   const [overheadCost, setOverheadCost] = useState<number>(0);
   const [packagingCost, setPackagingCost] = useState<number>(0);
   const [currentStatus, setCurrentStatus] = useState<ProductionStatus>(ProductionStatusEnum.Completed);
+  const watchedUnitId = Form.useWatch('unitId', form);
+
+  const getUnitTitle = useCallback((code?: string) => {
+    if (!code) return '';
+    const matched = units.find(u => 
+      u.code?.toLowerCase() === code?.toLowerCase() || 
+      u.title?.toLowerCase() === code?.toLowerCase()
+    );
+    if (matched) return matched.title;
+    return isNaN(Number(code)) ? code : '';
+  }, [units]);
 
   // Helper to extract allowed units for a given item (whitelisted strictly from item details)
   const getItemAllowedUnits = useCallback((item?: Item) => {
@@ -73,18 +84,18 @@ export const ManufacturingForm: React.FC = () => {
       .filter((u): u is string => Boolean(u && typeof u === 'string' && u.trim().length > 0));
     const uniqueCodes = Array.from(new Set(rawCodes));
     if (uniqueCodes.length === 0) {
-      return units.map(u => ({ code: u.code, title: u.title || u.code }));
+      return units.map(u => ({ code: u.code, title: u.title || '' })).filter(u => Boolean(u.title));
     }
     return uniqueCodes.map(code => {
       const matched = units.find(u => 
-        u.code.toLowerCase() === code.toLowerCase() || 
-        u.title.toLowerCase() === code.toLowerCase()
+        u.code?.toLowerCase() === code?.toLowerCase() || 
+        u.title?.toLowerCase() === code?.toLowerCase()
       );
       return {
         code,
-        title: matched?.title && matched.title !== code ? `${matched.title} (${code})` : (matched?.title || code)
+        title: matched?.title || (isNaN(Number(code)) ? code : '')
       };
-    });
+    }).filter(u => Boolean(u.title));
   }, [units]);
 
   // Load existing voucher if edit mode
@@ -137,8 +148,11 @@ export const ManufacturingForm: React.FC = () => {
       const rows: ProductionLineRow[] = data.lines.map((l, index) => {
         const item = currentItems.find(i => i.id === l.rawItemId);
         const pSize = Number(item?.qtyInPack || 0);
-        const secQty = pSize > 0 ? Math.floor(l.actualQty / pSize) : 0;
-        const primaryQty = pSize > 0 ? Math.round((l.actualQty - (secQty * pSize)) * 1000) / 1000 : l.actualQty;
+        const priUnit = item?.primaryUnit || item?.defaultUnit;
+        const secUnit = item?.secondaryUnit;
+        const hasSec = Boolean(secUnit && secUnit !== priUnit && pSize > 1);
+        const secQty = hasSec && pSize > 0 ? Math.floor(l.actualQty / pSize) : 0;
+        const primaryQty = hasSec && pSize > 0 ? Math.round((l.actualQty - (secQty * pSize)) * 1000) / 1000 : l.actualQty;
 
         return {
           key: `row-${index}`,
@@ -235,8 +249,11 @@ export const ManufacturingForm: React.FC = () => {
       const newRows: ProductionLineRow[] = estimate.lines.map((l, index) => {
         const item = items.find(i => i.id === l.rawItemId);
         const pSize = Number(item?.qtyInPack || 0);
-        const secQty = pSize > 0 ? Math.floor(l.requiredQty / pSize) : 0;
-        const primaryQty = pSize > 0 ? Math.round((l.requiredQty - (secQty * pSize)) * 1000) / 1000 : l.requiredQty;
+        const priUnit = item?.primaryUnit || item?.defaultUnit;
+        const secUnit = item?.secondaryUnit;
+        const hasSec = Boolean(secUnit && secUnit !== priUnit && pSize > 1);
+        const secQty = hasSec && pSize > 0 ? Math.floor(l.requiredQty / pSize) : 0;
+        const primaryQty = hasSec && pSize > 0 ? Math.round((l.requiredQty - (secQty * pSize)) * 1000) / 1000 : l.requiredQty;
 
         return {
           key: `est-${index}`,
@@ -278,20 +295,25 @@ export const ManufacturingForm: React.FC = () => {
   const handleRowQtyChange = (key: string, field: 'primaryQty' | 'secQty' | 'actualQty', val: number) => {
     setLines(prev => prev.map(row => {
       if (row.key === key) {
-        const pSize = Number(row.qtyInPack || 0);
+        const item = items.find(i => i.id === row.rawItemId);
+        const pSize = Number(item?.qtyInPack || row.qtyInPack || 0);
+        const priCode = item?.primaryUnit || item?.defaultUnit || row.unitId;
+        const secCode = item?.secondaryUnit || row.secUnit;
+        const hasSec = Boolean(secCode && secCode !== priCode && pSize > 1);
+
         let primaryQty = row.primaryQty ?? 0;
         let secQty = row.secQty ?? 0;
         let actualQty = row.actualQty ?? 0;
 
         if (field === 'primaryQty') {
           primaryQty = val;
-          actualQty = pSize > 0 ? (val + (secQty * pSize)) : val;
+          actualQty = hasSec && pSize > 0 ? (val + (secQty * pSize)) : val;
         } else if (field === 'secQty') {
           secQty = val;
-          actualQty = pSize > 0 ? (primaryQty + (val * pSize)) : (primaryQty || val);
+          actualQty = hasSec && pSize > 0 ? (primaryQty + (val * pSize)) : (primaryQty || val);
         } else if (field === 'actualQty') {
           actualQty = val;
-          if (pSize > 0) {
+          if (hasSec && pSize > 0) {
             secQty = Math.floor(val / pSize);
             primaryQty = Math.round((val - (secQty * pSize)) * 1000) / 1000;
           } else {
@@ -490,11 +512,17 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Planned Qty',
       key: 'plannedQty',
-      width: 110,
+      width: 120,
       align: 'right' as const,
-      render: (_: any, record: ProductionLineRow) => (
-        <Text type="secondary">{record.plannedQty?.toFixed(2) || '0.00'}</Text>
-      )
+      render: (_: any, record: ProductionLineRow) => {
+        const uTitle = getUnitTitle(record.unitId);
+        return (
+          <Space size={4}>
+            <Text type="secondary">{record.plannedQty?.toFixed(2) || '0.00'}</Text>
+            {uTitle && <Text type="secondary" style={{ fontSize: '11px' }}>{uTitle}</Text>}
+          </Space>
+        );
+      }
     },
     {
       title: 'Primary Qty',
@@ -502,7 +530,8 @@ export const ManufacturingForm: React.FC = () => {
       width: 120,
       render: (_: any, record: ProductionLineRow) => {
         const item = items.find(i => i.id === record.rawItemId);
-        const priUnit = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
+        const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
+        const priUnit = getUnitTitle(priCode);
         return (
           <InputNumber
             min={0}
@@ -521,14 +550,17 @@ export const ManufacturingForm: React.FC = () => {
       width: 120,
       render: (_: any, record: ProductionLineRow) => {
         const item = items.find(i => i.id === record.rawItemId);
-        const secUnit = item?.secondaryUnit || record.secUnit || '';
-        const hasSecUnit = Boolean(secUnit);
+        const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
+        const secCode = item?.secondaryUnit || record.secUnit || '';
+        const pSize = Number(item?.qtyInPack || record.qtyInPack || 0);
+        const hasSecUnit = Boolean(secCode && secCode !== priCode && pSize > 1);
+        const secUnit = hasSecUnit ? getUnitTitle(secCode) : '';
         return (
           <InputNumber
             min={0}
             step={1}
             disabled={!hasSecUnit}
-            value={record.secQty}
+            value={hasSecUnit ? record.secQty : undefined}
             placeholder={hasSecUnit ? '0' : '—'}
             addonAfter={secUnit ? <span style={{ fontSize: '11px' }}>{secUnit}</span> : undefined}
             onChange={(val) => handleRowQtyChange(record.key, 'secQty', val || 0)}
@@ -575,13 +607,14 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Stock Available',
       key: 'availableStock',
-      width: 120,
+      width: 130,
       align: 'right' as const,
       render: (_: any, record: ProductionLineRow) => {
         const isShort = record.availableStock < record.actualQty;
+        const uTitle = getUnitTitle(record.unitId);
         return (
           <Tag color={isShort ? 'error' : 'default'}>
-            {record.availableStock?.toFixed(2)}
+            {record.availableStock?.toFixed(2)} {uTitle}
           </Tag>
         );
       }
@@ -754,9 +787,11 @@ export const ManufacturingForm: React.FC = () => {
                     extra={(() => {
                       const curItem = items.find(i => i.id === (finishedItemId || form.getFieldValue('finishedItemId')));
                       const pSize = Number(curItem?.qtyInPack || 0);
-                      const secUnit = curItem?.secondaryUnit;
-                      if (pSize > 0 && secUnit) {
-                        return <Text type="secondary" style={{ fontSize: '11px' }}>≈ {(targetQty / pSize).toFixed(2)} {secUnit}</Text>;
+                      const priCode = curItem?.primaryUnit || curItem?.defaultUnit;
+                      const secCode = curItem?.secondaryUnit;
+                      const hasSec = Boolean(secCode && secCode !== priCode && pSize > 1);
+                      if (hasSec) {
+                        return <Text type="secondary" style={{ fontSize: '11px' }}>≈ {(targetQty / pSize).toFixed(2)} {getUnitTitle(secCode)}</Text>;
                       }
                       return null;
                     })()}
@@ -776,9 +811,11 @@ export const ManufacturingForm: React.FC = () => {
                     extra={(() => {
                       const curItem = items.find(i => i.id === (finishedItemId || form.getFieldValue('finishedItemId')));
                       const pSize = Number(curItem?.qtyInPack || 0);
-                      const secUnit = curItem?.secondaryUnit;
-                      if (pSize > 0 && secUnit) {
-                        return <Text type="secondary" style={{ fontSize: '11px' }}>≈ {(producedQty / pSize).toFixed(2)} {secUnit}</Text>;
+                      const priCode = curItem?.primaryUnit || curItem?.defaultUnit;
+                      const secCode = curItem?.secondaryUnit;
+                      const hasSec = Boolean(secCode && secCode !== priCode && pSize > 1);
+                      if (hasSec) {
+                        return <Text type="secondary" style={{ fontSize: '11px' }}>≈ {(producedQty / pSize).toFixed(2)} {getUnitTitle(secCode)}</Text>;
                       }
                       return null;
                     })()}
@@ -941,11 +978,11 @@ export const ManufacturingForm: React.FC = () => {
                     />
                     <div style={{ marginTop: 8 }}>
                       <Text type="secondary">Output: </Text>
-                      <Text strong>{producedQty} units</Text>
+                      <Text strong>{producedQty} {getUnitTitle(watchedUnitId) || 'units'}</Text>
                     </div>
                     <Divider style={{ margin: '8px 0' }} />
                     <Statistic
-                      title="Finished Good Unit Valuation"
+                      title={`Finished Good Valuation (per ${getUnitTitle(watchedUnitId) || 'unit'})`}
                       value={unitProductionCost}
                       precision={2}
                       valueStyle={{ color: '#52c41a', fontSize: 22, fontWeight: 'bold' }}
