@@ -31,8 +31,12 @@ interface ProductionLineRow {
   rawItemId: string;
   rawItemTitle?: string;
   plannedQty: number;
+  primaryQty: number;
+  secQty: number;
   actualQty: number;
   unitId?: string;
+  secUnit?: string;
+  qtyInPack?: number;
   unitCost: number;
   totalCost: number;
   availableStock: number;
@@ -52,6 +56,7 @@ export const ManufacturingForm: React.FC = () => {
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [availableBoms, setAvailableBoms] = useState<BomResponse[]>([]);
   const [lines, setLines] = useState<ProductionLineRow[]>([]);
+  const [finishedItemId, setFinishedItemId] = useState<string>('');
 
   // Overhead & Production values
   const [targetQty, setTargetQty] = useState<number>(1);
@@ -61,27 +66,29 @@ export const ManufacturingForm: React.FC = () => {
   const [packagingCost, setPackagingCost] = useState<number>(0);
   const [currentStatus, setCurrentStatus] = useState<ProductionStatus>(ProductionStatusEnum.Completed);
 
-  // Lookups
-  useEffect(() => {
-    const loadLookups = async () => {
-      try {
-        const [itemList, unitList, narrationList] = await Promise.all([
-          inventoryService.getItemsLookup(),
-          unitService.getActiveUnits(),
-          narrationService.getActiveNarrations()
-        ]);
-        setItems(itemList || []);
-        setUnits(unitList || []);
-        setNarrations(narrationList || []);
-      } catch (err) {
-        message.error('Failed to load item and unit lookups');
-      }
-    };
-    loadLookups();
-  }, []);
+  // Helper to extract allowed units for a given item (whitelisted strictly from item details)
+  const getItemAllowedUnits = useCallback((item?: Item) => {
+    if (!item) return [];
+    const rawCodes = [item.defaultUnit, item.primaryUnit, item.secondaryUnit]
+      .filter((u): u is string => Boolean(u && typeof u === 'string' && u.trim().length > 0));
+    const uniqueCodes = Array.from(new Set(rawCodes));
+    if (uniqueCodes.length === 0) {
+      return units.map(u => ({ code: u.code, title: u.title || u.code }));
+    }
+    return uniqueCodes.map(code => {
+      const matched = units.find(u => 
+        u.code.toLowerCase() === code.toLowerCase() || 
+        u.title.toLowerCase() === code.toLowerCase()
+      );
+      return {
+        code,
+        title: matched?.title && matched.title !== code ? `${matched.title} (${code})` : (matched?.title || code)
+      };
+    });
+  }, [units]);
 
   // Load existing voucher if edit mode
-  const fetchVoucher = useCallback(async () => {
+  const fetchVoucher = useCallback(async (currentItems: Item[]) => {
     if (!isEdit || !voucherNo) {
       form.setFieldsValue({
         date: dayjs(),
@@ -116,6 +123,7 @@ export const ManufacturingForm: React.FC = () => {
         currentStage: data.currentStage
       });
 
+      setFinishedItemId(data.finishedItemId);
       setTargetQty(data.targetQty);
       setProducedQty(data.producedQty);
       setCurrentStatus(data.status);
@@ -126,19 +134,30 @@ export const ManufacturingForm: React.FC = () => {
         setAvailableBoms(boms);
       }
 
-      const rows: ProductionLineRow[] = data.lines.map((l, index) => ({
-        key: `row-${index}`,
-        seq: l.seq,
-        rawItemId: l.rawItemId,
-        rawItemTitle: l.rawItemTitle,
-        plannedQty: l.plannedQty,
-        actualQty: l.actualQty,
-        unitId: l.unitId,
-        unitCost: l.unitCost,
-        totalCost: l.totalCost,
-        availableStock: l.availableStock,
-        isIssued: l.isIssued
-      }));
+      const rows: ProductionLineRow[] = data.lines.map((l, index) => {
+        const item = currentItems.find(i => i.id === l.rawItemId);
+        const pSize = Number(item?.qtyInPack || 0);
+        const secQty = pSize > 0 ? Math.floor(l.actualQty / pSize) : 0;
+        const primaryQty = pSize > 0 ? Math.round((l.actualQty - (secQty * pSize)) * 1000) / 1000 : l.actualQty;
+
+        return {
+          key: `row-${index}`,
+          seq: l.seq,
+          rawItemId: l.rawItemId,
+          rawItemTitle: l.rawItemTitle,
+          plannedQty: l.plannedQty,
+          primaryQty,
+          secQty,
+          actualQty: l.actualQty,
+          unitId: l.unitId || item?.defaultUnit || item?.primaryUnit,
+          secUnit: item?.secondaryUnit,
+          qtyInPack: pSize,
+          unitCost: l.unitCost,
+          totalCost: l.totalCost,
+          availableStock: l.availableStock,
+          isIssued: l.isIssued
+        };
+      });
       setLines(rows);
     } catch (err) {
       message.error('Failed to load manufacturing voucher');
@@ -147,15 +166,35 @@ export const ManufacturingForm: React.FC = () => {
     }
   }, [isEdit, voucherNo, form]);
 
+  // Lookups
   useEffect(() => {
-    fetchVoucher();
+    const loadLookups = async () => {
+      try {
+        const [itemList, unitList, narrationList] = await Promise.all([
+          inventoryService.getItemsLookup(),
+          unitService.getActiveUnits(),
+          narrationService.getActiveNarrations()
+        ]);
+        const validItems = itemList || [];
+        setItems(validItems);
+        setUnits(unitList || []);
+        setNarrations(narrationList || []);
+        fetchVoucher(validItems);
+      } catch (err) {
+        message.error('Failed to load item and unit lookups');
+      }
+    };
+    loadLookups();
   }, [fetchVoucher]);
 
   // When Finished Item is selected, fetch associated BOMs and auto-apply default
   const handleFinishedItemChange = async (itemId: string) => {
     const item = items.find(i => i.id === itemId);
+    setFinishedItemId(itemId);
     if (item) {
-      form.setFieldValue('unitId', item.defaultUnit || item.primaryUnit);
+      const allowed = getItemAllowedUnits(item);
+      const defUnit = item.defaultUnit || item.primaryUnit || (allowed[0]?.code);
+      form.setFieldValue('unitId', defUnit);
     }
 
     try {
@@ -193,19 +232,30 @@ export const ManufacturingForm: React.FC = () => {
         packagingCost: estimate.estimatedPackagingCost || 0
       });
 
-      const newRows: ProductionLineRow[] = estimate.lines.map((l, index) => ({
-        key: `est-${index}`,
-        seq: l.seq,
-        rawItemId: l.rawItemId,
-        rawItemTitle: l.rawItemTitle,
-        plannedQty: l.requiredQty,
-        actualQty: l.requiredQty,
-        unitId: l.unitId,
-        unitCost: l.estimatedUnitCost,
-        totalCost: l.estimatedTotalCost,
-        availableStock: l.availableStock,
-        isIssued: true
-      }));
+      const newRows: ProductionLineRow[] = estimate.lines.map((l, index) => {
+        const item = items.find(i => i.id === l.rawItemId);
+        const pSize = Number(item?.qtyInPack || 0);
+        const secQty = pSize > 0 ? Math.floor(l.requiredQty / pSize) : 0;
+        const primaryQty = pSize > 0 ? Math.round((l.requiredQty - (secQty * pSize)) * 1000) / 1000 : l.requiredQty;
+
+        return {
+          key: `est-${index}`,
+          seq: l.seq,
+          rawItemId: l.rawItemId,
+          rawItemTitle: l.rawItemTitle,
+          plannedQty: l.requiredQty,
+          primaryQty,
+          secQty,
+          actualQty: l.requiredQty,
+          unitId: l.unitId || item?.defaultUnit || item?.primaryUnit,
+          secUnit: item?.secondaryUnit,
+          qtyInPack: pSize,
+          unitCost: l.estimatedUnitCost,
+          totalCost: l.estimatedTotalCost,
+          availableStock: l.availableStock,
+          isIssued: true
+        };
+      });
       setLines(newRows);
     } catch (err: any) {
       message.warning('Could not calculate estimate from recipe');
@@ -223,6 +273,63 @@ export const ManufacturingForm: React.FC = () => {
     if (bomId && itemId) {
       applyBomEstimate(bomId, itemId, newQty);
     }
+  };
+
+  const handleRowQtyChange = (key: string, field: 'primaryQty' | 'secQty' | 'actualQty', val: number) => {
+    setLines(prev => prev.map(row => {
+      if (row.key === key) {
+        const pSize = Number(row.qtyInPack || 0);
+        let primaryQty = row.primaryQty ?? 0;
+        let secQty = row.secQty ?? 0;
+        let actualQty = row.actualQty ?? 0;
+
+        if (field === 'primaryQty') {
+          primaryQty = val;
+          actualQty = pSize > 0 ? (val + (secQty * pSize)) : val;
+        } else if (field === 'secQty') {
+          secQty = val;
+          actualQty = pSize > 0 ? (primaryQty + (val * pSize)) : (primaryQty || val);
+        } else if (field === 'actualQty') {
+          actualQty = val;
+          if (pSize > 0) {
+            secQty = Math.floor(val / pSize);
+            primaryQty = Math.round((val - (secQty * pSize)) * 1000) / 1000;
+          } else {
+            primaryQty = val;
+            secQty = 0;
+          }
+        }
+
+        const totalCost = Math.round(actualQty * (row.unitCost || 0) * 100) / 100;
+        return {
+          ...row,
+          primaryQty,
+          secQty,
+          actualQty,
+          totalCost
+        };
+      }
+      return row;
+    }));
+  };
+
+  const handleUnitChange = (key: string, newUnitId: string) => {
+    setLines(prev => prev.map(row => {
+      if (row.key === key) {
+        const item = items.find(i => i.id === row.rawItemId);
+        let unitCost = row.unitCost;
+        if (item) {
+          if (newUnitId === item.secondaryUnit && item.secRate) {
+            unitCost = item.secRate;
+          } else if (newUnitId === item.primaryUnit || newUnitId === item.defaultUnit) {
+            unitCost = item.priRate || item.opnRate || 0;
+          }
+        }
+        const totalCost = Math.round((row.actualQty || 0) * unitCost * 100) / 100;
+        return { ...row, unitId: newUnitId, unitCost, totalCost };
+      }
+      return row;
+    }));
   };
 
   const handleRowChange = (key: string, field: keyof ProductionLineRow, val: any) => {
@@ -245,6 +352,8 @@ export const ManufacturingForm: React.FC = () => {
       seq: newSeq,
       rawItemId: '',
       plannedQty: 1,
+      primaryQty: 1,
+      secQty: 0,
       actualQty: 1,
       unitCost: 0,
       totalCost: 0,
@@ -335,7 +444,7 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Raw Material / Ingredient',
       key: 'rawItemId',
-      width: 260,
+      width: 250,
       render: (_: any, record: ProductionLineRow) => (
         <Select
           showSearch
@@ -344,10 +453,26 @@ export const ManufacturingForm: React.FC = () => {
           onChange={(val) => {
             const item = items.find(i => i.id === val);
             const rate = item ? (item.priRate || item.opnRate || 0) : 0;
-            const unit = item ? (item.defaultUnit || item.primaryUnit) : undefined;
-            handleRowChange(record.key, 'rawItemId', val);
-            handleRowChange(record.key, 'unitCost', rate);
-            if (unit) handleRowChange(record.key, 'unitId', unit);
+            const allowed = getItemAllowedUnits(item);
+            const unit = item ? (item.defaultUnit || item.primaryUnit || allowed[0]?.code) : undefined;
+            const pSize = Number(item?.qtyInPack || 0);
+            setLines(prev => prev.map(row => {
+              if (row.key === record.key) {
+                return {
+                  ...row,
+                  rawItemId: val,
+                  unitCost: rate,
+                  unitId: unit,
+                  secUnit: item?.secondaryUnit,
+                  qtyInPack: pSize,
+                  primaryQty: 1,
+                  secQty: 0,
+                  actualQty: 1,
+                  totalCost: rate
+                };
+              }
+              return row;
+            }));
           }}
           filterOption={(input, option) =>
             (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
@@ -372,14 +497,55 @@ export const ManufacturingForm: React.FC = () => {
       )
     },
     {
+      title: 'Primary Qty',
+      key: 'primaryQty',
+      width: 120,
+      render: (_: any, record: ProductionLineRow) => {
+        const item = items.find(i => i.id === record.rawItemId);
+        const priUnit = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
+        return (
+          <InputNumber
+            min={0}
+            step={1}
+            value={record.primaryQty}
+            addonAfter={priUnit ? <span style={{ fontSize: '11px' }}>{priUnit}</span> : undefined}
+            onChange={(val) => handleRowQtyChange(record.key, 'primaryQty', val || 0)}
+            style={{ width: '100%' }}
+          />
+        );
+      }
+    },
+    {
+      title: 'Sec Qty',
+      key: 'secQty',
+      width: 120,
+      render: (_: any, record: ProductionLineRow) => {
+        const item = items.find(i => i.id === record.rawItemId);
+        const secUnit = item?.secondaryUnit || record.secUnit || '';
+        const hasSecUnit = Boolean(secUnit);
+        return (
+          <InputNumber
+            min={0}
+            step={1}
+            disabled={!hasSecUnit}
+            value={record.secQty}
+            placeholder={hasSecUnit ? '0' : '—'}
+            addonAfter={secUnit ? <span style={{ fontSize: '11px' }}>{secUnit}</span> : undefined}
+            onChange={(val) => handleRowQtyChange(record.key, 'secQty', val || 0)}
+            style={{ width: '100%' }}
+          />
+        );
+      }
+    },
+    {
       title: 'Actual Consumed',
       key: 'actualQty',
-      width: 140,
+      width: 130,
       render: (_: any, record: ProductionLineRow) => (
         <InputNumber
           min={0.0001}
           value={record.actualQty}
-          onChange={(val) => handleRowChange(record.key, 'actualQty', val || 0)}
+          onChange={(val) => handleRowQtyChange(record.key, 'actualQty', val || 0)}
           style={{ width: '100%' }}
         />
       )
@@ -387,25 +553,29 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Unit',
       key: 'unitId',
-      width: 120,
-      render: (_: any, record: ProductionLineRow) => (
-        <Select
-          placeholder="Unit"
-          value={record.unitId || undefined}
-          onChange={(val) => handleRowChange(record.key, 'unitId', val)}
-          allowClear
-          style={{ width: '100%' }}
-        >
-          {units.map(u => (
-            <Option key={u.code} value={u.code}>{u.title}</Option>
-          ))}
-        </Select>
-      )
+      width: 130,
+      render: (_: any, record: ProductionLineRow) => {
+        const item = items.find(i => i.id === record.rawItemId);
+        const allowedUnits = getItemAllowedUnits(item);
+        return (
+          <Select
+            placeholder="Unit"
+            value={record.unitId || undefined}
+            onChange={(val) => handleUnitChange(record.key, val)}
+            style={{ width: '100%' }}
+            disabled={allowedUnits.length === 0}
+          >
+            {allowedUnits.map(u => (
+              <Option key={u.code} value={u.code}>{u.title}</Option>
+            ))}
+          </Select>
+        );
+      }
     },
     {
       title: 'Stock Available',
       key: 'availableStock',
-      width: 130,
+      width: 120,
       align: 'right' as const,
       render: (_: any, record: ProductionLineRow) => {
         const isShort = record.availableStock < record.actualQty;
@@ -419,7 +589,7 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Unit Cost',
       key: 'unitCost',
-      width: 120,
+      width: 110,
       align: 'right' as const,
       render: (_: any, record: ProductionLineRow) => (
         <InputNumber
@@ -433,7 +603,7 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Total Cost',
       key: 'totalCost',
-      width: 120,
+      width: 110,
       align: 'right' as const,
       render: (_: any, record: ProductionLineRow) => (
         <Text strong>{(record.totalCost || 0).toFixed(2)}</Text>
@@ -581,6 +751,15 @@ export const ManufacturingForm: React.FC = () => {
                     label="Target Batch Qty"
                     name="targetQty"
                     rules={[{ required: true, message: 'Enter target qty' }]}
+                    extra={(() => {
+                      const curItem = items.find(i => i.id === (finishedItemId || form.getFieldValue('finishedItemId')));
+                      const pSize = Number(curItem?.qtyInPack || 0);
+                      const secUnit = curItem?.secondaryUnit;
+                      if (pSize > 0 && secUnit) {
+                        return <Text type="secondary" style={{ fontSize: '11px' }}>≈ {(targetQty / pSize).toFixed(2)} {secUnit}</Text>;
+                      }
+                      return null;
+                    })()}
                   >
                     <InputNumber
                       min={0.0001}
@@ -594,6 +773,15 @@ export const ManufacturingForm: React.FC = () => {
                     label="Actual Produced Qty"
                     name="producedQty"
                     rules={[{ required: true, message: 'Enter produced qty' }]}
+                    extra={(() => {
+                      const curItem = items.find(i => i.id === (finishedItemId || form.getFieldValue('finishedItemId')));
+                      const pSize = Number(curItem?.qtyInPack || 0);
+                      const secUnit = curItem?.secondaryUnit;
+                      if (pSize > 0 && secUnit) {
+                        return <Text type="secondary" style={{ fontSize: '11px' }}>≈ {(producedQty / pSize).toFixed(2)} {secUnit}</Text>;
+                      }
+                      return null;
+                    })()}
                   >
                     <InputNumber
                       min={0.0001}
@@ -603,12 +791,18 @@ export const ManufacturingForm: React.FC = () => {
                   </Form.Item>
                 </Col>
                 <Col span={6}>
-                  <Form.Item label="Output Unit" name="unitId">
-                    <Select placeholder="Unit" allowClear>
-                      {units.map(u => (
-                        <Option key={u.code} value={u.code}>{u.title}</Option>
-                      ))}
-                    </Select>
+                  <Form.Item label="Output Unit (Item Detail)" name="unitId">
+                    {(() => {
+                      const curItem = items.find(i => i.id === (finishedItemId || form.getFieldValue('finishedItemId')));
+                      const allowed = getItemAllowedUnits(curItem);
+                      return (
+                        <Select placeholder="Unit" allowClear disabled={allowed.length === 0}>
+                          {allowed.map(u => (
+                            <Option key={u.code} value={u.code}>{u.title}</Option>
+                          ))}
+                        </Select>
+                      );
+                    })()}
                   </Form.Item>
                 </Col>
                 <Col span={6}>

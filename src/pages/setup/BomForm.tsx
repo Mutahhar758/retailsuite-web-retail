@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Card, Form, Input, InputNumber, Button, Space, Typography, 
-  Select, Switch, Table, Row, Col, Divider, message, Popconfirm, Statistic 
+  Select, Switch, Table, Row, Col, Divider, message, Popconfirm, Statistic, Tag 
 } from 'antd';
 import { 
   PlusOutlined, DeleteOutlined, ArrowLeftOutlined, SaveOutlined, 
@@ -20,8 +20,12 @@ interface IngredientRow {
   key: string;
   seq: number;
   rawItemId: string;
+  primaryQty: number;
+  secQty: number;
   qty: number;
   unitId?: string;
+  secUnit?: string;
+  qtyInPack?: number;
   scrapPercentage: number;
   isOptional: boolean;
   rate: number;
@@ -39,6 +43,7 @@ export const BomForm: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [units, setUnits] = useState<UnitDto[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
+  const [finishedItemId, setFinishedItemId] = useState<string>('');
 
   // Overhead values from form state
   const [laborCost, setLaborCost] = useState<number>(0);
@@ -46,25 +51,29 @@ export const BomForm: React.FC = () => {
   const [packagingCost, setPackagingCost] = useState<number>(0);
   const [outputQty, setOutputQty] = useState<number>(1);
 
-  // Load items and units
-  useEffect(() => {
-    const loadLookups = async () => {
-      try {
-        const [itemList, unitList] = await Promise.all([
-          inventoryService.getItemsLookup(),
-          unitService.getActiveUnits()
-        ]);
-        setItems(itemList || []);
-        setUnits(unitList || []);
-      } catch (err) {
-        message.error('Failed to load item lookup');
-      }
-    };
-    loadLookups();
-  }, []);
+  // Helper to extract allowed units for a given item (whitelisted strictly from item details)
+  const getItemAllowedUnits = useCallback((item?: Item) => {
+    if (!item) return [];
+    const rawCodes = [item.defaultUnit, item.primaryUnit, item.secondaryUnit]
+      .filter((u): u is string => Boolean(u && typeof u === 'string' && u.trim().length > 0));
+    const uniqueCodes = Array.from(new Set(rawCodes));
+    if (uniqueCodes.length === 0) {
+      return units.map(u => ({ code: u.code, title: u.title || u.code }));
+    }
+    return uniqueCodes.map(code => {
+      const matched = units.find(u => 
+        u.code.toLowerCase() === code.toLowerCase() || 
+        u.title.toLowerCase() === code.toLowerCase()
+      );
+      return {
+        code,
+        title: matched?.title && matched.title !== code ? `${matched.title} (${code})` : (matched?.title || code)
+      };
+    });
+  }, [units]);
 
   // Load existing BOM if in edit mode
-  const fetchBom = useCallback(async () => {
+  const fetchBom = useCallback(async (currentItems: Item[]) => {
     if (!isEdit) {
       form.setFieldsValue({
         outputQty: 1,
@@ -94,22 +103,34 @@ export const BomForm: React.FC = () => {
         notes: bom.notes
       });
 
+      setFinishedItemId(bom.finishedItemId);
       setOutputQty(bom.outputQty || 1);
       setLaborCost(bom.laborCost || 0);
       setOverheadCost(bom.overheadCost || 0);
       setPackagingCost(bom.packagingCost || 0);
 
-      const rows: IngredientRow[] = bom.lines.map((l, index) => ({
-        key: `row-${index}`,
-        seq: l.seq,
-        rawItemId: l.rawItemId,
-        qty: l.qty,
-        unitId: l.unitId,
-        scrapPercentage: l.scrapPercentage,
-        isOptional: l.isOptional,
-        rate: l.currentRate || 0,
-        totalCost: l.totalEstimatedCost || (l.qty * (1 + l.scrapPercentage / 100) * (l.currentRate || 0))
-      }));
+      const rows: IngredientRow[] = bom.lines.map((l, index) => {
+        const item = currentItems.find(i => i.id === l.rawItemId);
+        const pSize = Number(item?.qtyInPack || 0);
+        const secQty = pSize > 0 ? Math.floor(l.qty / pSize) : 0;
+        const primaryQty = pSize > 0 ? Math.round((l.qty - (secQty * pSize)) * 1000) / 1000 : l.qty;
+
+        return {
+          key: `row-${index}`,
+          seq: l.seq,
+          rawItemId: l.rawItemId,
+          primaryQty,
+          secQty,
+          qty: l.qty,
+          unitId: l.unitId || item?.defaultUnit || item?.primaryUnit,
+          secUnit: item?.secondaryUnit,
+          qtyInPack: pSize,
+          scrapPercentage: l.scrapPercentage,
+          isOptional: l.isOptional,
+          rate: l.currentRate || 0,
+          totalCost: l.totalEstimatedCost || (l.qty * (1 + l.scrapPercentage / 100) * (l.currentRate || 0))
+        };
+      });
       setIngredients(rows);
     } catch (err) {
       message.error('Failed to load recipe details');
@@ -118,8 +139,23 @@ export const BomForm: React.FC = () => {
     }
   }, [id, isEdit, form]);
 
+  // Load items and units
   useEffect(() => {
-    fetchBom();
+    const loadLookups = async () => {
+      try {
+        const [itemList, unitList] = await Promise.all([
+          inventoryService.getItemsLookup(),
+          unitService.getActiveUnits()
+        ]);
+        const validItems = itemList || [];
+        setItems(validItems);
+        setUnits(unitList || []);
+        fetchBom(validItems);
+      } catch (err) {
+        message.error('Failed to load item lookup');
+      }
+    };
+    loadLookups();
   }, [fetchBom]);
 
   // Recalculate row total
@@ -131,17 +167,80 @@ export const BomForm: React.FC = () => {
 
   const handleItemSelect = (rawItemId: string, key: string) => {
     const found = items.find(i => i.id === rawItemId);
+    const allowed = getItemAllowedUnits(found);
+    const unitId = found ? (found.defaultUnit || found.primaryUnit || allowed[0]?.code) : undefined;
+    const pSize = Number(found?.qtyInPack || 0);
     const rate = found ? (found.priRate || found.opnRate || 0) : 0;
-    const unitId = found ? (found.defaultUnit || found.primaryUnit) : undefined;
 
     setIngredients(prev => prev.map(row => {
       if (row.key === key) {
-        const updated = {
+        const updated: IngredientRow = {
           ...row,
           rawItemId,
+          primaryQty: 1,
+          secQty: 0,
+          qty: 1,
           rate,
-          unitId: unitId || row.unitId
+          unitId,
+          secUnit: found?.secondaryUnit,
+          qtyInPack: pSize
         };
+        return updateRowCost(updated);
+      }
+      return row;
+    }));
+  };
+
+  const handleRowQtyChange = (key: string, field: 'primaryQty' | 'secQty' | 'qty', val: number) => {
+    setIngredients(prev => prev.map(row => {
+      if (row.key === key) {
+        const pSize = Number(row.qtyInPack || 0);
+        let primaryQty = row.primaryQty ?? 0;
+        let secQty = row.secQty ?? 0;
+        let qty = row.qty ?? 0;
+
+        if (field === 'primaryQty') {
+          primaryQty = val;
+          qty = pSize > 0 ? (val + (secQty * pSize)) : val;
+        } else if (field === 'secQty') {
+          secQty = val;
+          qty = pSize > 0 ? (primaryQty + (val * pSize)) : (primaryQty || val);
+        } else if (field === 'qty') {
+          qty = val;
+          if (pSize > 0) {
+            secQty = Math.floor(val / pSize);
+            primaryQty = Math.round((val - (secQty * pSize)) * 1000) / 1000;
+          } else {
+            primaryQty = val;
+            secQty = 0;
+          }
+        }
+
+        const updated = {
+          ...row,
+          primaryQty,
+          secQty,
+          qty
+        };
+        return updateRowCost(updated);
+      }
+      return row;
+    }));
+  };
+
+  const handleUnitChange = (key: string, newUnitId: string) => {
+    setIngredients(prev => prev.map(row => {
+      if (row.key === key) {
+        const item = items.find(i => i.id === row.rawItemId);
+        let rate = row.rate;
+        if (item) {
+          if (newUnitId === item.secondaryUnit && item.secRate) {
+            rate = item.secRate;
+          } else if (newUnitId === item.primaryUnit || newUnitId === item.defaultUnit) {
+            rate = item.priRate || item.opnRate || 0;
+          }
+        }
+        const updated = { ...row, unitId: newUnitId, rate };
         return updateRowCost(updated);
       }
       return row;
@@ -164,6 +263,8 @@ export const BomForm: React.FC = () => {
       key: `row-${Date.now()}`,
       seq: newSeq,
       rawItemId: '',
+      primaryQty: 1,
+      secQty: 0,
       qty: 1,
       scrapPercentage: 0,
       isOptional: false,
@@ -245,7 +346,7 @@ export const BomForm: React.FC = () => {
     {
       title: 'Raw Material / Ingredient',
       key: 'rawItemId',
-      width: 280,
+      width: 260,
       render: (_: any, record: IngredientRow) => (
         <Select
           showSearch
@@ -266,15 +367,56 @@ export const BomForm: React.FC = () => {
       )
     },
     {
-      title: 'Quantity',
-      key: 'qty',
+      title: 'Primary Qty',
+      key: 'primaryQty',
       width: 130,
+      render: (_: any, record: IngredientRow) => {
+        const item = items.find(i => i.id === record.rawItemId);
+        const priUnit = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
+        return (
+          <InputNumber
+            min={0}
+            step={1}
+            value={record.primaryQty}
+            addonAfter={priUnit ? <span style={{ fontSize: '11px' }}>{priUnit}</span> : undefined}
+            onChange={(val) => handleRowQtyChange(record.key, 'primaryQty', val || 0)}
+            style={{ width: '100%' }}
+          />
+        );
+      }
+    },
+    {
+      title: 'Sec Qty',
+      key: 'secQty',
+      width: 130,
+      render: (_: any, record: IngredientRow) => {
+        const item = items.find(i => i.id === record.rawItemId);
+        const secUnit = item?.secondaryUnit || record.secUnit || '';
+        const hasSecUnit = Boolean(secUnit);
+        return (
+          <InputNumber
+            min={0}
+            step={1}
+            disabled={!hasSecUnit}
+            value={record.secQty}
+            placeholder={hasSecUnit ? '0' : '—'}
+            addonAfter={secUnit ? <span style={{ fontSize: '11px' }}>{secUnit}</span> : undefined}
+            onChange={(val) => handleRowQtyChange(record.key, 'secQty', val || 0)}
+            style={{ width: '100%' }}
+          />
+        );
+      }
+    },
+    {
+      title: 'Total Qty',
+      key: 'qty',
+      width: 120,
       render: (_: any, record: IngredientRow) => (
         <InputNumber
           min={0.0001}
           step={0.1}
           value={record.qty}
-          onChange={(val) => handleRowChange(record.key, 'qty', val || 0)}
+          onChange={(val) => handleRowQtyChange(record.key, 'qty', val || 0)}
           style={{ width: '100%' }}
         />
       )
@@ -283,24 +425,28 @@ export const BomForm: React.FC = () => {
       title: 'Unit',
       key: 'unitId',
       width: 140,
-      render: (_: any, record: IngredientRow) => (
-        <Select
-          placeholder="Unit"
-          value={record.unitId || undefined}
-          onChange={(val) => handleRowChange(record.key, 'unitId', val)}
-          allowClear
-          style={{ width: '100%' }}
-        >
-          {units.map(u => (
-            <Option key={u.code} value={u.code}>{u.title}</Option>
-          ))}
-        </Select>
-      )
+      render: (_: any, record: IngredientRow) => {
+        const item = items.find(i => i.id === record.rawItemId);
+        const allowedUnits = getItemAllowedUnits(item);
+        return (
+          <Select
+            placeholder="Unit"
+            value={record.unitId || undefined}
+            onChange={(val) => handleUnitChange(record.key, val)}
+            style={{ width: '100%' }}
+            disabled={allowedUnits.length === 0}
+          >
+            {allowedUnits.map(u => (
+              <Option key={u.code} value={u.code}>{u.title}</Option>
+            ))}
+          </Select>
+        );
+      }
     },
     {
       title: 'Scrap / Wastage %',
       key: 'scrapPercentage',
-      width: 130,
+      width: 120,
       render: (_: any, record: IngredientRow) => (
         <InputNumber
           min={0}
@@ -405,7 +551,7 @@ export const BomForm: React.FC = () => {
               </Row>
 
               <Row gutter={16}>
-                <Col span={12}>
+                <Col span={10}>
                   <Form.Item
                     label="Target Finished Product"
                     name="finishedItemId"
@@ -419,8 +565,11 @@ export const BomForm: React.FC = () => {
                       }
                       onChange={(val) => {
                         const item = items.find(i => i.id === val);
+                        setFinishedItemId(val);
                         if (item) {
-                          form.setFieldValue('unitId', item.defaultUnit || item.primaryUnit);
+                          const allowed = getItemAllowedUnits(item);
+                          const defUnit = item.defaultUnit || item.primaryUnit || (allowed[0]?.code);
+                          form.setFieldValue('unitId', defUnit);
                         }
                       }}
                     >
@@ -432,9 +581,9 @@ export const BomForm: React.FC = () => {
                     </Select>
                   </Form.Item>
                 </Col>
-                <Col span={6}>
+                <Col span={5}>
                   <Form.Item
-                    label="Output Batch Yield"
+                    label="Output Yield (Primary)"
                     name="outputQty"
                     rules={[{ required: true, message: 'Enter yield' }]}
                   >
@@ -446,13 +595,33 @@ export const BomForm: React.FC = () => {
                     />
                   </Form.Item>
                 </Col>
-                <Col span={6}>
-                  <Form.Item label="Yield Unit" name="unitId">
-                    <Select placeholder="Unit" allowClear>
-                      {units.map(u => (
-                        <Option key={u.code} value={u.code}>{u.title}</Option>
-                      ))}
-                    </Select>
+                <Col span={5}>
+                  <Form.Item label="Yield Unit (Item Detail)" name="unitId">
+                    {(() => {
+                      const curItem = items.find(i => i.id === (finishedItemId || form.getFieldValue('finishedItemId')));
+                      const allowed = getItemAllowedUnits(curItem);
+                      return (
+                        <Select placeholder="Unit" allowClear disabled={allowed.length === 0}>
+                          {allowed.map(u => (
+                            <Option key={u.code} value={u.code}>{u.title}</Option>
+                          ))}
+                        </Select>
+                      );
+                    })()}
+                  </Form.Item>
+                </Col>
+                <Col span={4}>
+                  <Form.Item label="Sec Yield Info">
+                    {(() => {
+                      const curItem = items.find(i => i.id === (finishedItemId || form.getFieldValue('finishedItemId')));
+                      const pSize = Number(curItem?.qtyInPack || 0);
+                      const secUnit = curItem?.secondaryUnit;
+                      if (pSize > 0 && secUnit) {
+                        const secVal = (outputQty / pSize).toFixed(2);
+                        return <Tag color="blue" style={{ marginTop: 4 }}>≈ {secVal} {secUnit}</Tag>;
+                      }
+                      return <Text type="secondary" style={{ display: 'inline-block', marginTop: 4 }}>—</Text>;
+                    })()}
                   </Form.Item>
                 </Col>
               </Row>
