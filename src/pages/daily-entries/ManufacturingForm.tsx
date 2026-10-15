@@ -335,25 +335,6 @@ export const ManufacturingForm: React.FC = () => {
     }));
   };
 
-  const handleUnitChange = (key: string, newUnitId: string) => {
-    setLines(prev => prev.map(row => {
-      if (row.key === key) {
-        const item = items.find(i => i.id === row.rawItemId);
-        let unitCost = row.unitCost;
-        if (item) {
-          if (newUnitId === item.secondaryUnit && item.secRate) {
-            unitCost = item.secRate;
-          } else if (newUnitId === item.primaryUnit || newUnitId === item.defaultUnit) {
-            unitCost = item.priRate || item.opnRate || 0;
-          }
-        }
-        const totalCost = Math.round((row.actualQty || 0) * unitCost * 100) / 100;
-        return { ...row, unitId: newUnitId, unitCost, totalCost };
-      }
-      return row;
-    }));
-  };
-
   const handleRowChange = (key: string, field: keyof ProductionLineRow, val: any) => {
     setLines(prev => prev.map(row => {
       if (row.key === key) {
@@ -512,7 +493,7 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Planned Qty',
       key: 'plannedQty',
-      width: 120,
+      width: 130,
       align: 'right' as const,
       render: (_: any, record: ProductionLineRow) => {
         const uTitle = getUnitTitle(record.unitId);
@@ -527,7 +508,7 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Primary Qty',
       key: 'primaryQty',
-      width: 120,
+      width: 140,
       render: (_: any, record: ProductionLineRow) => {
         const item = items.find(i => i.id === record.rawItemId);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
@@ -547,7 +528,7 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Sec Qty',
       key: 'secQty',
-      width: 120,
+      width: 140,
       render: (_: any, record: ProductionLineRow) => {
         const item = items.find(i => i.id === record.rawItemId);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
@@ -572,42 +553,26 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Actual Consumed',
       key: 'actualQty',
-      width: 130,
-      render: (_: any, record: ProductionLineRow) => (
-        <InputNumber
-          min={0.0001}
-          value={record.actualQty}
-          onChange={(val) => handleRowQtyChange(record.key, 'actualQty', val || 0)}
-          style={{ width: '100%' }}
-        />
-      )
-    },
-    {
-      title: 'Unit',
-      key: 'unitId',
-      width: 130,
+      width: 140,
       render: (_: any, record: ProductionLineRow) => {
         const item = items.find(i => i.id === record.rawItemId);
-        const allowedUnits = getItemAllowedUnits(item);
+        const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
+        const priUnit = getUnitTitle(priCode);
         return (
-          <Select
-            placeholder="Unit"
-            value={record.unitId || undefined}
-            onChange={(val) => handleUnitChange(record.key, val)}
+          <InputNumber
+            min={0.0001}
+            value={record.actualQty}
+            addonAfter={priUnit ? <span style={{ fontSize: '11px' }}>{priUnit}</span> : undefined}
+            onChange={(val) => handleRowQtyChange(record.key, 'actualQty', val || 0)}
             style={{ width: '100%' }}
-            disabled={allowedUnits.length === 0}
-          >
-            {allowedUnits.map(u => (
-              <Option key={u.code} value={u.code}>{u.title}</Option>
-            ))}
-          </Select>
+          />
         );
       }
     },
     {
       title: 'Stock Available',
       key: 'availableStock',
-      width: 130,
+      width: 135,
       align: 'right' as const,
       render: (_: any, record: ProductionLineRow) => {
         const isShort = record.availableStock < record.actualQty;
@@ -622,7 +587,7 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Unit Cost',
       key: 'unitCost',
-      width: 110,
+      width: 125,
       align: 'right' as const,
       render: (_: any, record: ProductionLineRow) => (
         <InputNumber
@@ -636,7 +601,7 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Total Cost',
       key: 'totalCost',
-      width: 110,
+      width: 125,
       align: 'right' as const,
       render: (_: any, record: ProductionLineRow) => (
         <Text strong>{(record.totalCost || 0).toFixed(2)}</Text>

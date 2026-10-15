@@ -247,25 +247,6 @@ export const BomForm: React.FC = () => {
     }));
   };
 
-  const handleUnitChange = (key: string, newUnitId: string) => {
-    setIngredients(prev => prev.map(row => {
-      if (row.key === key) {
-        const item = items.find(i => i.id === row.rawItemId);
-        let rate = row.rate;
-        if (item) {
-          if (newUnitId === item.secondaryUnit && item.secRate) {
-            rate = item.secRate;
-          } else if (newUnitId === item.primaryUnit || newUnitId === item.defaultUnit) {
-            rate = item.priRate || item.opnRate || 0;
-          }
-        }
-        const updated = { ...row, unitId: newUnitId, rate };
-        return updateRowCost(updated);
-      }
-      return row;
-    }));
-  };
-
   const handleRowChange = (key: string, field: keyof IngredientRow, val: any) => {
     setIngredients(prev => prev.map(row => {
       if (row.key === key) {
@@ -365,7 +346,7 @@ export const BomForm: React.FC = () => {
     {
       title: 'Raw Material / Ingredient',
       key: 'rawItemId',
-      width: 260,
+      width: 290,
       render: (_: any, record: IngredientRow) => (
         <Select
           showSearch
@@ -388,7 +369,7 @@ export const BomForm: React.FC = () => {
     {
       title: 'Primary Qty',
       key: 'primaryQty',
-      width: 130,
+      width: 140,
       render: (_: any, record: IngredientRow) => {
         const item = items.find(i => i.id === record.rawItemId);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
@@ -408,7 +389,7 @@ export const BomForm: React.FC = () => {
     {
       title: 'Sec Qty',
       key: 'secQty',
-      width: 130,
+      width: 140,
       render: (_: any, record: IngredientRow) => {
         const item = items.find(i => i.id === record.rawItemId);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
@@ -433,43 +414,27 @@ export const BomForm: React.FC = () => {
     {
       title: 'Total Qty',
       key: 'qty',
-      width: 120,
-      render: (_: any, record: IngredientRow) => (
-        <InputNumber
-          min={0.0001}
-          step={0.1}
-          value={record.qty}
-          onChange={(val) => handleRowQtyChange(record.key, 'qty', val || 0)}
-          style={{ width: '100%' }}
-        />
-      )
-    },
-    {
-      title: 'Unit',
-      key: 'unitId',
       width: 140,
       render: (_: any, record: IngredientRow) => {
         const item = items.find(i => i.id === record.rawItemId);
-        const allowedUnits = getItemAllowedUnits(item);
+        const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
+        const priUnit = getUnitTitle(priCode);
         return (
-          <Select
-            placeholder="Unit"
-            value={record.unitId || undefined}
-            onChange={(val) => handleUnitChange(record.key, val)}
+          <InputNumber
+            min={0.0001}
+            step={0.1}
+            value={record.qty}
+            addonAfter={priUnit ? <span style={{ fontSize: '11px' }}>{priUnit}</span> : undefined}
+            onChange={(val) => handleRowQtyChange(record.key, 'qty', val || 0)}
             style={{ width: '100%' }}
-            disabled={allowedUnits.length === 0}
-          >
-            {allowedUnits.map(u => (
-              <Option key={u.code} value={u.code}>{u.title}</Option>
-            ))}
-          </Select>
+          />
         );
       }
     },
     {
       title: 'Scrap / Wastage %',
       key: 'scrapPercentage',
-      width: 120,
+      width: 130,
       render: (_: any, record: IngredientRow) => (
         <InputNumber
           min={0}
@@ -485,7 +450,7 @@ export const BomForm: React.FC = () => {
     {
       title: 'Est. Rate',
       key: 'rate',
-      width: 110,
+      width: 120,
       align: 'right' as const,
       render: (_: any, record: IngredientRow) => (
         <InputNumber
@@ -499,7 +464,7 @@ export const BomForm: React.FC = () => {
     {
       title: 'Total Cost',
       key: 'totalCost',
-      width: 120,
+      width: 130,
       align: 'right' as const,
       render: (_: any, record: IngredientRow) => (
         <Text strong>{record.totalCost.toFixed(2)}</Text>
