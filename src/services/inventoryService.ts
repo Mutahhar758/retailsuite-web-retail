@@ -10,8 +10,11 @@ export interface Item {
   priRate: number;
   secRate: number;
   primaryUnit?: string;
+  primaryUnitTitle?: string;
   secondaryUnit?: string;
+  secondaryUnitTitle?: string;
   defaultUnit?: string;
+  defaultUnitTitle?: string;
   qtyInPack?: number;
   alert: boolean;
   lowStockAlert?: boolean;

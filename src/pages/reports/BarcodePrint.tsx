@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Card, Typography, Select, InputNumber, Button, Space,
   Row, Col, message, Switch, Radio,
-  Popconfirm, Spin, Empty, Tooltip
+  Popconfirm, Spin, Empty, Tooltip, Tag
 } from 'antd';
 import {
   PrinterOutlined, PlusOutlined, DeleteOutlined,
@@ -14,6 +14,7 @@ import { useSearchParams } from 'react-router-dom';
 import { reportService, type BarcodePrintItem, type BarcodePrintRequest } from '../../services/reportService';
 import { inventoryService } from '../../services/inventoryService';
 import { itemCategoryService } from '../../services/itemCategoryService';
+import { unitService, type UnitDto } from '../../services/unitService';
 import { useAppStore } from '../../stores/useAppStore';
 
 const { Title, Text } = Typography;
@@ -25,6 +26,10 @@ interface ProductOption {
   priRate: number;
   itemCategoryCode: string;
   itemType?: string;
+  primaryUnit?: string;
+  primaryUnitTitle?: string;
+  defaultUnit?: string;
+  defaultUnitTitle?: string;
 }
 
 interface CategoryOption {
@@ -42,6 +47,7 @@ export const BarcodePrint: React.FC = () => {
   // Products and Categories
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [units, setUnits] = useState<UnitDto[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>(undefined);
 
@@ -51,7 +57,12 @@ export const BarcodePrint: React.FC = () => {
   const [printPrice, setPrintPrice] = useState<number>(0);
   const [copies, setCopies] = useState<number>(10);
 
-  // Layout & Content Options
+  // Variable Qty / Weight & Rate Mode (Prints on Primary Unit)
+  const [isVariableWeight, setIsVariableWeight] = useState<boolean>(false);
+  const [printQty, setPrintQty] = useState<number>(1);
+  const [totalAmount, setTotalAmount] = useState<number>(0);
+
+  // Batch Print Queue
   const [layout, setLayout] = useState<'Roll4Inch3Up' | 'ThermalRoll' | 'SheetA4'>('Roll4Inch3Up');
   const [includeCompanyName, setIncludeCompanyName] = useState<boolean>(true);
   const [includeTitle, setIncludeTitle] = useState<boolean>(true);
@@ -97,10 +108,19 @@ export const BarcodePrint: React.FC = () => {
           }
         }
 
+        // 3. Fetch units
+        let unitList: UnitDto[] = [];
+        try {
+          unitList = await unitService.getActiveUnits();
+        } catch (e) {
+          console.warn('Could not load units via service', e);
+        }
+
         if (!isMounted) return;
 
         setCategories(cats || []);
         setProducts(items || []);
+        setUnits(unitList || []);
 
         // 3. Handle item selection
         const paramItemId = searchParams.get('itemId');
@@ -154,13 +174,54 @@ export const BarcodePrint: React.FC = () => {
     }
   };
 
+  // Resolve user-friendly unit title (e.g. 'kg', 'g', 'Pcs') instead of raw code/ID (e.g. '1')
+  const getUnitTitle = (item?: ProductOption | null): string => {
+    if (!item) return 'kg';
+    if (item.primaryUnitTitle && item.primaryUnitTitle.trim()) return item.primaryUnitTitle.trim();
+    if (item.defaultUnitTitle && item.defaultUnitTitle.trim()) return item.defaultUnitTitle.trim();
+    const code = item.primaryUnit || item.defaultUnit;
+    if (code) {
+      const match = units.find(u => u.code === code || u.title?.toLowerCase() === code.toLowerCase());
+      if (match?.title) return match.title;
+      if (isNaN(Number(code))) return code;
+    }
+    return 'kg';
+  };
+
+  const primaryUnit = getUnitTitle(selectedItem);
+
   // Handle product selection
   const handleSelectProduct = (itemId: string) => {
     setSelectedProductId(itemId);
     const prod = products.find(p => p.id === itemId) || null;
     setSelectedItem(prod);
     if (prod) {
-      setPrintPrice(prod.priRate || 0);
+      const rate = Math.round(prod.priRate || 0);
+      setPrintPrice(rate);
+      setTotalAmount(Math.round(printQty * rate));
+    }
+  };
+
+  const handleQtyChange = (val: number | null) => {
+    const q = val !== null && val !== undefined ? val : 1;
+    setPrintQty(q);
+    setTotalAmount(Math.round(q * printPrice));
+  };
+
+  const handlePriceChange = (val: number | null) => {
+    const r = val !== null && val !== undefined ? Math.round(val) : 0;
+    setPrintPrice(r);
+    if (isVariableWeight) {
+      setTotalAmount(Math.round(printQty * r));
+    }
+  };
+
+  const handleTotalAmountChange = (val: number | null) => {
+    const amt = val !== null && val !== undefined ? Math.round(val) : 0;
+    setTotalAmount(amt);
+    if (printPrice > 0) {
+      const calculatedQty = Math.round((amt / printPrice + Number.EPSILON) * 1000) / 1000;
+      setPrintQty(calculatedQty);
     }
   };
 
@@ -171,16 +232,29 @@ export const BarcodePrint: React.FC = () => {
       return;
     }
 
+    const baseCode = selectedItem.barcode || selectedItem.id;
+    const finalBarcode = isVariableWeight
+      ? `VW-${baseCode}-Q${printQty}-R${printPrice}`
+      : baseCode;
+
     const newItem: BarcodePrintItem = {
       itemId: selectedItem.id,
       title: selectedItem.title,
-      barcode: selectedItem.barcode || selectedItem.id,
+      barcode: finalBarcode,
       rate: printPrice,
-      copies: Math.max(1, copies)
+      copies: Math.max(1, copies),
+      qty: isVariableWeight ? printQty : undefined,
+      unit: isVariableWeight ? primaryUnit : undefined,
+      totalAmount: isVariableWeight ? totalAmount : undefined,
+      isVariableWeight
     };
 
     setBatchQueue(prev => [...prev, newItem]);
-    message.success(`Added ${copies}x "${selectedItem.title}" to queue`);
+    message.success(
+      isVariableWeight
+        ? `Added ${copies}x "${selectedItem.title}" (${printQty} ${primaryUnit} @ Rs. ${printPrice}) to queue`
+        : `Added ${copies}x "${selectedItem.title}" to queue`
+    );
   };
 
   // Remove from batch
@@ -200,12 +274,21 @@ export const BarcodePrint: React.FC = () => {
     if (batchQueue.length > 0) {
       itemsToPrint = [...batchQueue];
     } else if (selectedItem) {
+      const baseCode = selectedItem.barcode || selectedItem.id;
+      const finalBarcode = isVariableWeight
+        ? `VW-${baseCode}-Q${printQty}-R${printPrice}`
+        : baseCode;
+
       itemsToPrint = [{
         itemId: selectedItem.id,
         title: selectedItem.title,
-        barcode: selectedItem.barcode || selectedItem.id,
+        barcode: finalBarcode,
         rate: printPrice,
-        copies: Math.max(1, copies)
+        copies: Math.max(1, copies),
+        qty: isVariableWeight ? printQty : undefined,
+        unit: isVariableWeight ? primaryUnit : undefined,
+        totalAmount: isVariableWeight ? totalAmount : undefined,
+        isVariableWeight
       }];
     }
 
@@ -259,6 +342,9 @@ export const BarcodePrint: React.FC = () => {
     selectedItem?.barcode,
     printPrice,
     copies,
+    isVariableWeight,
+    printQty,
+    totalAmount,
     layout,
     includeCompanyName,
     includeTitle,
@@ -456,11 +542,108 @@ export const BarcodePrint: React.FC = () => {
                 />
               </div>
 
-              {/* Copies & Rate */}
+              {/* Variable Qty / Weight & Rate Mode Switch */}
+              <div style={{
+                marginBottom: 12,
+                padding: '10px',
+                background: isVariableWeight ? '#eff6ff' : '#f8fafc',
+                border: isVariableWeight ? '1px solid #93c5fd' : '1px solid #e2e8f0',
+                borderRadius: 8
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b' }}>
+                      Variable Qty & Rate
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>
+                      Embed weight/qty & rate in barcode
+                    </div>
+                  </div>
+                  <Switch
+                    size="small"
+                    checked={isVariableWeight}
+                    onChange={val => {
+                      setIsVariableWeight(val);
+                      if (val && selectedItem) {
+                        const r = printPrice || selectedItem.priRate || 0;
+                        setTotalAmount(Math.round((printQty * r + Number.EPSILON) * 100) / 100);
+                      }
+                    }}
+                  />
+                </div>
+
+                {isVariableWeight && (
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, color: '#475569' }}>Primary Unit:</span>
+                      <Tag color="blue" style={{ margin: 0, fontWeight: 600 }}>{primaryUnit}</Tag>
+                    </div>
+
+                    <Row gutter={8}>
+                      <Col span={12}>
+                        <div style={{ fontSize: 11, fontWeight: 500, marginBottom: 3, color: '#334155' }}>
+                          Qty ({primaryUnit})
+                        </div>
+                        <InputNumber
+                          min={0.001}
+                          step={0.1}
+                          value={printQty}
+                          onChange={handleQtyChange}
+                          style={{ width: '100%' }}
+                          placeholder={`Qty in ${primaryUnit}`}
+                        />
+                      </Col>
+                      <Col span={12}>
+                        <div style={{ fontSize: 11, fontWeight: 500, marginBottom: 3, color: '#334155' }}>
+                          Unit Rate (Rs/{primaryUnit})
+                        </div>
+                        <InputNumber
+                          min={0}
+                          precision={0}
+                          step={1}
+                          value={printPrice}
+                          onChange={handlePriceChange}
+                          style={{ width: '100%' }}
+                          placeholder="Rate"
+                        />
+                      </Col>
+                    </Row>
+
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 500, marginBottom: 3, color: '#334155' }}>
+                        Total Amount (Rs.)
+                      </div>
+                      <InputNumber
+                        min={0}
+                        precision={0}
+                        step={1}
+                        value={totalAmount}
+                        onChange={handleTotalAmountChange}
+                        style={{ width: '100%' }}
+                        placeholder="Total amount"
+                      />
+                    </div>
+
+                    <div style={{
+                      fontSize: 10,
+                      background: '#dbeafe',
+                      padding: '4px 8px',
+                      borderRadius: 4,
+                      color: '#1e40af',
+                      fontFamily: 'monospace',
+                      wordBreak: 'break-all'
+                    }}>
+                      Barcode: VW-{selectedItem ? (selectedItem.barcode || selectedItem.id) : 'CODE'}-Q{printQty}-R{printPrice}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Copies & Standard Rate */}
               <Row gutter={10} style={{ marginBottom: 12 }}>
-                <Col span={12}>
+                <Col span={isVariableWeight ? 24 : 12}>
                   <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4, color: '#334155' }}>
-                    Copies
+                    Sticker Copies
                   </div>
                   <InputNumber
                     min={1}
@@ -470,17 +653,21 @@ export const BarcodePrint: React.FC = () => {
                     style={{ width: '100%' }}
                   />
                 </Col>
-                <Col span={12}>
-                  <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4, color: '#334155' }}>
-                    Print Price (Rs)
-                  </div>
-                  <InputNumber
-                    min={0}
-                    value={printPrice}
-                    onChange={val => setPrintPrice(val || 0)}
-                    style={{ width: '100%' }}
-                  />
-                </Col>
+                {!isVariableWeight && (
+                  <Col span={12}>
+                    <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4, color: '#334155' }}>
+                      Print Price (Rs)
+                    </div>
+                    <InputNumber
+                      min={0}
+                      precision={0}
+                      step={1}
+                      value={printPrice}
+                      onChange={handlePriceChange}
+                      style={{ width: '100%' }}
+                    />
+                  </Col>
+                )}
               </Row>
 
               {/* Print Format Selector */}
@@ -589,8 +776,13 @@ export const BarcodePrint: React.FC = () => {
                         fontSize: 11,
                         borderBottom: '1px dashed #cbd5e1'
                       }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
                           {item.copies}x {item.title}
+                          {item.isVariableWeight && item.qty && (
+                            <Tag color="cyan" style={{ fontSize: 10, marginLeft: 4, padding: '0 4px', lineHeight: '16px' }}>
+                              {item.qty} {item.unit} @ Rs. {item.rate}
+                            </Tag>
+                          )}
                         </span>
                         <Button
                           type="text"

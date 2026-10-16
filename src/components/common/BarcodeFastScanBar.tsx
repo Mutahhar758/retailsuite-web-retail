@@ -16,10 +16,17 @@ import {
   BARCODE_FAST_SCAN_AUTOFOCUS_KEY
 } from '../../stores/useSettingsStore';
 import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
+import { parseBarcodePayload } from '../../utils/barcodeParser';
 
 export interface BarcodeFastScanBarProps {
   items: Item[];
-  onScanItem: (item: Item, scanQty: number) => void;
+  onScanItem: (
+    item: Item,
+    scanQty: number,
+    customRate?: number,
+    customAmount?: number,
+    isVariableWeight?: boolean
+  ) => void;
   placeholder?: string;
   autoFocus?: boolean;
   className?: string;
@@ -31,6 +38,10 @@ export interface BarcodeFastScanBarProps {
 export interface LastScannedState {
   item: Item;
   qty: number;
+  rate?: number;
+  amount?: number;
+  isVariableWeight?: boolean;
+  unit?: string;
   timestamp: number;
 }
 
@@ -96,68 +107,25 @@ export const BarcodeFastScanBar: React.FC<BarcodeFastScanBarProps> = ({
       // Reset transient status
       setErrorNotice(null);
 
-      // Support multiplier syntax, e.g. "5*890123" or "890123*5"
-      let scanQty = 1;
-      let cleanCode = raw;
+      // Parse barcode using unified smart parser (Variable Code-128, EAN-13 Scale, Multiplier, Standard)
+      const parseResult = parseBarcodePayload(raw, items);
 
-      if (raw.includes('*')) {
-        const parts = raw.split('*');
-        if (parts.length === 2) {
-          const firstNum = parseFloat(parts[0]);
-          const secondNum = parseFloat(parts[1]);
-          if (!isNaN(firstNum) && firstNum > 0 && isNaN(secondNum)) {
-            scanQty = firstNum;
-            cleanCode = parts[1].trim();
-          } else if (isNaN(firstNum) && !isNaN(secondNum) && secondNum > 0) {
-            scanQty = secondNum;
-            cleanCode = parts[0].trim();
-          }
-        }
-      }
+      if (parseResult) {
+        const { matchedItem, qty, rate, amount, isVariableWeight, unit } = parseResult;
 
-      if (!cleanCode) return;
-
-      // 1. Exact barcode match (case-insensitive)
-      let matchedItem = items.find(
-        (i) => i.barcode && i.barcode.trim().toLowerCase() === cleanCode.toLowerCase()
-      );
-
-      // 2. Exact item ID / Code match
-      if (!matchedItem) {
-        matchedItem = items.find(
-          (i) =>
-            String(i.id).trim().toLowerCase() === cleanCode.toLowerCase() ||
-            (i.itemKey && i.itemKey.trim().toLowerCase() === cleanCode.toLowerCase())
-        );
-      }
-
-      // 3. Exact item title match
-      if (!matchedItem) {
-        matchedItem = items.find(
-          (i) => i.title && i.title.trim().toLowerCase() === cleanCode.toLowerCase()
-        );
-      }
-
-      // 4. Fallback: single partial match on barcode or title if length >= 3
-      if (!matchedItem && cleanCode.length >= 3) {
-        const partialMatches = items.filter(
-          (i) =>
-            (i.barcode && i.barcode.toLowerCase().includes(cleanCode.toLowerCase())) ||
-            (i.title && i.title.toLowerCase().includes(cleanCode.toLowerCase()))
-        );
-        if (partialMatches.length === 1) {
-          matchedItem = partialMatches[0];
-        }
-      }
-
-      if (matchedItem) {
         if (soundEnabled) {
           playScanSuccessTone();
         }
-        onScanItem(matchedItem, scanQty);
+
+        onScanItem(matchedItem, qty, rate, amount, isVariableWeight);
+
         setLastScanned({
           item: matchedItem,
-          qty: scanQty,
+          qty,
+          rate,
+          amount,
+          isVariableWeight,
+          unit,
           timestamp: Date.now()
         });
         setInputValue('');
@@ -172,8 +140,8 @@ export const BarcodeFastScanBar: React.FC<BarcodeFastScanBarProps> = ({
         if (soundEnabled) {
           playScanErrorTone();
         }
-        setErrorNotice(`Barcode "${cleanCode}" not found`);
-        message.warning(`Barcode "${cleanCode}" not found in inventory.`);
+        setErrorNotice(`Barcode "${raw}" not found`);
+        message.warning(`Barcode "${raw}" not found in inventory.`);
         inputRef.current?.select();
       }
     },
@@ -297,14 +265,22 @@ export const BarcodeFastScanBar: React.FC<BarcodeFastScanBarProps> = ({
               padding: '4px 10px',
               borderRadius: 6,
               fontWeight: 600,
-              maxWidth: 340,
+              maxWidth: 380,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap'
             }}
           >
-            Added: {lastScanned.item.title} {lastScanned.qty > 1 ? `(x${lastScanned.qty})` : ''} • Rs.{' '}
-            {lastScanned.item.priRate || 0}
+            {lastScanned.isVariableWeight ? (
+              <>
+                Added: {lastScanned.item.title} ({lastScanned.qty} {lastScanned.unit ?? 'kg'} @ Rs. {Number(lastScanned.rate || 0).toLocaleString()} = Rs. {Number(lastScanned.amount || 0).toLocaleString()})
+              </>
+            ) : (
+              <>
+                Added: {lastScanned.item.title} {lastScanned.qty > 1 ? `(x${lastScanned.qty})` : ''} • Rs.{' '}
+                {Number(lastScanned.rate ?? lastScanned.item.priRate ?? 0).toLocaleString()}
+              </>
+            )}
           </Tag>
         ) : (
           <Tag

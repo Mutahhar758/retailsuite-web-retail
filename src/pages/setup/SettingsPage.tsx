@@ -58,6 +58,7 @@ import { PrinterSettings } from './PrinterSettings';
 import { buildEmvCoPayload, normalizeToIban, isValidIban, formatIban } from '../../utils/emvcoQr';
 import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
 import { inventoryService, type Item } from '../../services/inventoryService';
+import { parseBarcodePayload, type ParsedBarcodeResult } from '../../utils/barcodeParser';
 import QRCode from 'qrcode';
 
 const { Title, Text, Paragraph } = Typography;
@@ -110,7 +111,7 @@ export const SettingsPage: React.FC = () => {
   // Items for live test barcode scanner simulator
   const [testItems, setTestItems] = useState<Item[]>([]);
   const [testScanInput, setTestScanInput] = useState('');
-  const [testScanResult, setTestScanResult] = useState<{ item: Item; timestamp: number } | null>(null);
+  const [testScanResult, setTestScanResult] = useState<ParsedBarcodeResult | null>(null);
   const [testScanError, setTestScanError] = useState<string | null>(null);
 
   // Initialize and load settings from API when page mounts or tenant changes
@@ -265,25 +266,15 @@ export const SettingsPage: React.FC = () => {
     if (!code) return;
 
     setTestScanError(null);
-    let matchedItem = testItems.find(
-      (i) => i.barcode && i.barcode.trim().toLowerCase() === code.toLowerCase()
-    );
-    if (!matchedItem) {
-      matchedItem = testItems.find(
-        (i) =>
-          String(i.id).toLowerCase() === code.toLowerCase() ||
-          (i.itemKey && i.itemKey.toLowerCase() === code.toLowerCase()) ||
-          (i.title && i.title.toLowerCase() === code.toLowerCase())
-      );
-    }
+    const parsed = parseBarcodePayload(code, testItems);
 
-    if (matchedItem) {
+    if (parsed) {
       if (fastScanSound) {
         playScanSuccessTone();
       }
-      setTestScanResult({ item: matchedItem, timestamp: Date.now() });
+      setTestScanResult(parsed);
       setTestScanInput('');
-      message.success(`Matched Item: "${matchedItem.title}"`);
+      message.success(`Matched Item: "${parsed.matchedItem.title}"`);
     } else {
       if (fastScanSound) {
         playScanErrorTone();
@@ -1216,17 +1207,34 @@ export const SettingsPage: React.FC = () => {
                             marginBottom: 16
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                            <CheckCircleOutlined style={{ color: '#10b981', fontSize: 18 }} />
-                            <Text strong style={{ color: '#065f46', fontSize: 14 }}>
-                              Item Successfully Identified!
-                            </Text>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <CheckCircleOutlined style={{ color: '#10b981', fontSize: 18 }} />
+                              <Text strong style={{ color: '#065f46', fontSize: 14 }}>
+                                Item Successfully Identified!
+                              </Text>
+                            </div>
+                            {testScanResult.isVariableWeight && (
+                              <Tag color="cyan" style={{ margin: 0, fontWeight: 600 }}>
+                                Variable Qty & Rate Barcode
+                              </Tag>
+                            )}
                           </div>
                           <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>
-                            {testScanResult.item.title}
+                            {testScanResult.matchedItem.title}
                           </div>
                           <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                            Barcode: <Text code>{testScanResult.item.barcode || 'N/A'}</Text> • Retail Rate: <Text strong style={{ color: '#16a34a' }}>Rs. {testScanResult.item.priRate || 0}</Text>
+                            {testScanResult.isVariableWeight ? (
+                              <>
+                                Qty: <Text strong style={{ color: '#0f172a' }}>{testScanResult.qty} {testScanResult.unit ?? testScanResult.matchedItem.defaultUnit ?? 'kg'}</Text> •{' '}
+                                Rate: <Text strong style={{ color: '#16a34a' }}>Rs. {Number(testScanResult.rate || 0).toLocaleString()}</Text> •{' '}
+                                Total Amount: <Text strong style={{ color: '#0284c7' }}>Rs. {Number(testScanResult.amount || (testScanResult.qty * (testScanResult.rate || 0))).toLocaleString()}</Text>
+                              </>
+                            ) : (
+                              <>
+                                Barcode: <Text code>{testScanResult.matchedItem.barcode || 'N/A'}</Text> • Retail Rate: <Text strong style={{ color: '#16a34a' }}>Rs. {testScanResult.matchedItem.priRate || 0}</Text>
+                              </>
+                            )}
                           </div>
                         </div>
                       ) : testScanError ? (

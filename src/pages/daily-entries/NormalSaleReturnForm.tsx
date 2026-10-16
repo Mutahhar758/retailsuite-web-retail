@@ -149,11 +149,20 @@ export const NormalSaleReturnForm: React.FC = () => {
     });
   };
 
-  const handleBarcodeScanned = (scannedItem: Item, scanQty: number = 1) => {
+  const handleBarcodeScanned = (
+    scannedItem: Item,
+    scanQty: number = 1,
+    customRate?: number,
+    customAmount?: number,
+    isVariableWeight?: boolean
+  ) => {
     const autoIncrement = getSetting(BARCODE_FAST_SCAN_INCREMENT_KEY, 'true') !== 'false';
+    const effectiveRate = customRate !== undefined ? customRate : (scannedItem.priRate || 0);
 
     setSaleLines(prev => {
-      const existingIndex = prev.findIndex(l => String(l.itemId) === String(scannedItem.id));
+      const existingIndex = prev.findIndex(
+        l => String(l.itemId) === String(scannedItem.id) && Math.abs((l.rate || 0) - effectiveRate) < 0.001
+      );
 
       if (autoIncrement && existingIndex >= 0) {
         const updatedLines = [...prev];
@@ -175,9 +184,9 @@ export const NormalSaleReturnForm: React.FC = () => {
 
       const emptyRowIndex = prev.findIndex(l => !l.itemId);
       const pSize = Number(scannedItem.qtyInPack || (scannedItem as any).QtyInPack || (scannedItem as any).qty_in_pack || 0);
-      const rate = scannedItem.priRate || 0;
+      const rate = effectiveRate;
       const secRate = scannedItem.secRate || (rate * (pSize > 0 ? pSize : 1));
-      const amount = round(scanQty * rate, 2);
+      const amount = customAmount !== undefined ? customAmount : round(scanQty * rate, 2);
 
       if (emptyRowIndex >= 0) {
         const updatedLines = [...prev];

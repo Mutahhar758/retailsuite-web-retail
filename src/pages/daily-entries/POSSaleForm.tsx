@@ -35,6 +35,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { kotService, type DiningTableDto, type KotOrderResponse } from '../../services/kotService';
 import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT, RESTAURANT_ENABLE_KOT_KEY, BARCODE_FAST_SCAN_SOUND_KEY } from '../../stores/useSettingsStore';
 import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
+import { parseBarcodePayload } from '../../utils/barcodeParser';
 
 const { Title, Text } = Typography;
 
@@ -284,22 +285,37 @@ export const POSSaleForm: React.FC = () => {
     c.account.includes(searchCustomerQuery)
   );
 
-  const handleAddToCart = (item: Item) => {
+  const handleAddToCart = (item: Item, scanQty: number = 1, customRate?: number, customUnit?: string) => {
+    const effectiveRate = customRate !== undefined ? customRate : (item.priRate || 0);
+
     setCart(prev => {
-      const existing = prev.find(i => i.item.id === item.id);
+      // If same record with SAME price exists in cart, increment quantity; otherwise add new row
+      const existing = prev.find(
+        i => i.item.id === item.id && Math.abs((i.rate || 0) - effectiveRate) < 0.001
+      );
+
       if (existing) {
-        return prev.map(i => i.item.id === item.id ? { ...i, qty: i.qty + 1 } : i);
+        return prev.map(i =>
+          (i.item.id === item.id && Math.abs((i.rate || 0) - effectiveRate) < 0.001)
+            ? { ...i, qty: Math.round(((i.qty + scanQty) + Number.EPSILON) * 1000) / 1000 }
+            : i
+        );
       } else {
         return [...prev, {
           item,
-          qty: 1,
-          rate: item.priRate || 0,
+          qty: scanQty,
+          rate: effectiveRate,
           discount: 0,
-          unit: item.defaultUnit || item.primaryUnit || ''
+          unit: customUnit || item.defaultUnit || item.primaryUnit || ''
         }];
       }
     });
-    message.success(`${item.title} added to cart`);
+
+    if (scanQty !== 1 || customRate !== undefined) {
+      message.success(`Added: ${item.title} (${scanQty} ${customUnit || item.defaultUnit || item.primaryUnit || 'unit'} @ Rs. ${effectiveRate})`);
+    } else {
+      message.success(`${item.title} added to cart`);
+    }
   };
 
   const handleUpdateQty = (itemId: string, increment: boolean) => {
@@ -1144,21 +1160,23 @@ export const POSSaleForm: React.FC = () => {
                 const query = searchItemQuery.trim();
                 if (!query) return;
 
-                let matched = items.find(i => i.barcode && i.barcode.toLowerCase() === query.toLowerCase());
-                if (!matched) {
-                  matched = items.find(i => String(i.id).toLowerCase() === query.toLowerCase() || (i.itemKey && i.itemKey.toLowerCase() === query.toLowerCase()));
-                }
-                if (!matched && filteredItems.length === 1) {
-                  matched = filteredItems[0];
-                }
+                // Use unified barcode parser (Smart Code-128, EAN-13 Scale, Multiplier, Standard)
+                const parseResult = parseBarcodePayload(query, items);
 
-                if (matched) {
-                  handleAddToCart(matched);
+                if (parseResult) {
+                  const { matchedItem, qty, rate, unit } = parseResult;
+                  handleAddToCart(matchedItem, qty, rate, unit);
                   setSearchItemQuery('');
                   if (getSetting(BARCODE_FAST_SCAN_SOUND_KEY, 'true') !== 'false') {
                     playScanSuccessTone();
                   }
-                  message.success(`Added: ${matched.title}`);
+                } else if (filteredItems.length === 1) {
+                  // Fallback: single item left in filtered search results
+                  handleAddToCart(filteredItems[0]);
+                  setSearchItemQuery('');
+                  if (getSetting(BARCODE_FAST_SCAN_SOUND_KEY, 'true') !== 'false') {
+                    playScanSuccessTone();
+                  }
                 } else {
                   if (getSetting(BARCODE_FAST_SCAN_SOUND_KEY, 'true') !== 'false') {
                     playScanErrorTone();

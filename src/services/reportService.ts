@@ -558,6 +558,10 @@ export interface BarcodePrintItem {
   barcode?: string;
   rate: number;
   copies: number;
+  qty?: number;
+  unit?: string;
+  totalAmount?: number;
+  isVariableWeight?: boolean;
 }
 
 export interface BarcodePrintRequest {
