@@ -5,10 +5,11 @@ import {
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, ReloadOutlined, 
-  UserOutlined, SearchOutlined, PhoneOutlined, MailOutlined
+  UserOutlined, SearchOutlined, PhoneOutlined, MailOutlined, FileExcelOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { customerService, type CustomerResponse } from '../../services/customerService';
+import { BulkOperationModal } from '../../components/bulk/BulkOperationModal';
 
 const { Title, Text } = Typography;
 
@@ -16,6 +17,7 @@ export const CustomerList: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<CustomerResponse[]>([]);
   const [searchText, setSearchText] = useState('');
+  const [bulkModalVisible, setBulkModalVisible] = useState(false);
   const navigate = useNavigate();
 
   const fetchData = useCallback(async () => {
@@ -172,6 +174,12 @@ export const CustomerList: React.FC = () => {
             Refresh
           </Button>
           <Button 
+            icon={<FileExcelOutlined style={{ color: '#52c41a' }} />} 
+            onClick={() => setBulkModalVisible(true)}
+          >
+            Bulk Operations
+          </Button>
+          <Button 
             type="primary" 
             icon={<PlusOutlined />} 
             onClick={handleAdd}
@@ -195,6 +203,13 @@ export const CustomerList: React.FC = () => {
         }}
         className="border border-gray-100 rounded-lg overflow-hidden"
         scroll={{ x: 900 }}
+      />
+
+      <BulkOperationModal
+        visible={bulkModalVisible}
+        onClose={() => setBulkModalVisible(false)}
+        onSuccess={fetchData}
+        entityType="customers"
       />
     </Card>
   );

@@ -5,12 +5,13 @@ import {
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, 
-  ReloadOutlined, ShoppingOutlined, SearchOutlined, BarcodeOutlined
+  ReloadOutlined, ShoppingOutlined, SearchOutlined, BarcodeOutlined, FileExcelOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCategoryService';
 import { unitService, type UnitDto } from '../../services/unitService';
+import { BulkOperationModal } from '../../components/bulk/BulkOperationModal';
 
 const { Title, Text } = Typography;
 
@@ -20,6 +21,7 @@ export const InventoryItemList: React.FC = () => {
   const [categories, setCategories] = useState<ItemCategoryDto[]>([]);
   const [units, setUnits] = useState<UnitDto[]>([]);
   const [searchText, setSearchText] = useState('');
+  const [bulkModalVisible, setBulkModalVisible] = useState(false);
   const navigate = useNavigate();
 
   const fetchData = useCallback(async () => {
@@ -247,6 +249,12 @@ export const InventoryItemList: React.FC = () => {
             Refresh
           </Button>
           <Button 
+            icon={<FileExcelOutlined style={{ color: '#52c41a' }} />} 
+            onClick={() => setBulkModalVisible(true)}
+          >
+            Bulk Operations
+          </Button>
+          <Button 
             type="primary" 
             icon={<PlusOutlined />} 
             onClick={handleAdd}
@@ -263,6 +271,13 @@ export const InventoryItemList: React.FC = () => {
         rowKey="id"
         pagination={{ pageSize: 10 }}
         className="border border-gray-100 rounded-lg overflow-hidden"
+      />
+
+      <BulkOperationModal
+        visible={bulkModalVisible}
+        onClose={() => setBulkModalVisible(false)}
+        onSuccess={fetchData}
+        entityType="products"
       />
     </Card>
   );

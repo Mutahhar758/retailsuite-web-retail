@@ -1,4 +1,5 @@
 import api from './api';
+import type { BulkOperationResult } from './customerService';
 
 export interface HRInfoResponse {
   id: string;
@@ -77,5 +78,33 @@ export const hrInfoService = {
       throw new Error(response?.data?.metadata?.message || 'Server did not return a valid upload URL for the media.');
     }
     return data as { fileId: string; uploadUrl: string; expiresAt: string };
+  },
+
+  async bulkUpsert(data: HRInfoBulkUpsertRequest) {
+    const response = await api.post('/api/hrinfo/bulk', data);
+    return response.data.body as BulkOperationResult;
   }
 };
+
+export interface HRInfoBulkItemDto {
+  id?: string;
+  name: string;
+  fatherName?: string;
+  gender?: string;
+  dob?: string;
+  maritialStatus?: string;
+  cnic?: string;
+  appointmentDate?: string;
+  joiningDate?: string;
+  designation?: string;
+  salaryType?: string;
+  salary?: number;
+  leaveCharges?: number;
+  overtime?: number;
+  expenseAccount?: string;
+  payableAccount?: string;
+}
+
+export interface HRInfoBulkUpsertRequest {
+  employees: HRInfoBulkItemDto[];
+}

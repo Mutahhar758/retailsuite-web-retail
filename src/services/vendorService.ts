@@ -1,4 +1,5 @@
 import api from './api';
+import type { BulkOperationResult } from './customerService';
 
 export interface VendorResponse {
   account: string;
@@ -83,5 +84,32 @@ export const vendorService = {
       throw new Error(response?.data?.metadata?.message || 'Server did not return a valid upload URL for the media.');
     }
     return data as { fileId: string; uploadUrl: string; expiresAt: string };
+  },
+
+  async bulkUpsert(data: VendorBulkUpsertRequest) {
+    const response = await api.post('/api/vendors/bulk', data);
+    return response.data.body as BulkOperationResult;
   }
 };
+
+export interface VendorBulkItemDto {
+  account?: string;
+  title: string;
+  phone1?: string;
+  phone2?: string;
+  email?: string;
+  cnic?: string;
+  address?: string;
+  qualification?: string;
+  fax?: string;
+  smsNumber?: string;
+  iban?: string;
+  smsAlert?: boolean;
+  emailAlert?: boolean;
+  active?: boolean;
+  showInSales?: boolean;
+}
+
+export interface VendorBulkUpsertRequest {
+  vendors: VendorBulkItemDto[];
+}

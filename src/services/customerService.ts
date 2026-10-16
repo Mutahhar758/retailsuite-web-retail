@@ -105,6 +105,44 @@ export const customerService = {
   async getSupplyItems(params?: { customerId?: string; itemId?: string }) {
     const response = await api.get('/api/customers/supply-items', { params });
     return response.data.body as CustomerSupplyItemDto[];
+  },
+
+  async bulkUpsert(data: CustomerBulkUpsertRequest) {
+    const response = await api.post('/api/customers/bulk', data);
+    return response.data.body as BulkOperationResult;
   }
 };
+
+export interface CustomerBulkItemDto {
+  account?: string;
+  title: string;
+  phone1?: string;
+  phone2?: string;
+  email?: string;
+  cnic?: string;
+  address?: string;
+  qualification?: string;
+  fax?: string;
+  smsNumber?: string;
+  iban?: string;
+  smsAlert?: boolean;
+  emailAlert?: boolean;
+  active?: boolean;
+}
+
+export interface CustomerBulkUpsertRequest {
+  customers: CustomerBulkItemDto[];
+}
+
+export interface BulkOperationResult {
+  totalProcessed: number;
+  createdCount: number;
+  updatedCount: number;
+  failedCount: number;
+  errors: Array<{
+    rowIndex: number;
+    identifier: string;
+    errorMessage: string;
+  }>;
+}
 

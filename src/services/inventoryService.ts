@@ -1,4 +1,5 @@
 import api from './api';
+import type { BulkOperationResult } from './customerService';
 
 export interface Item {
   id: string;
@@ -109,6 +110,41 @@ export const inventoryService = {
       throw new Error(response?.data?.metadata?.message || 'Server did not return a valid upload URL for the media.');
     }
     return data as { fileId: string; uploadUrl: string; expiresAt: string };
+  },
+
+  async bulkUpsert(data: InventoryItemBulkUpsertRequest) {
+    const response = await api.post('/api/inventory/items/bulk', data);
+    return response.data.body as BulkOperationResult;
   }
 };
+
+export interface InventoryItemBulkItemDto {
+  id?: string;
+  barcode?: string;
+  itemCategoryCode: string;
+  title: string;
+  itemKey?: string;
+  priRate: number;
+  secRate: number;
+  primaryUnit: string;
+  secondaryUnit?: string;
+  defaultUnit?: string;
+  qtyInPack?: number;
+  alert?: boolean;
+  lowStockAlert?: boolean;
+  opnStock?: number;
+  opnRate?: number;
+  itemType?: string;
+  quickQtyPresets?: string;
+  requireImei?: boolean;
+  brandId?: string;
+  modelName?: string;
+  storage?: string;
+  ram?: string;
+  color?: string;
+}
+
+export interface InventoryItemBulkUpsertRequest {
+  items: InventoryItemBulkItemDto[];
+}
 
