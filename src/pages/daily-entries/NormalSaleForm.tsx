@@ -517,7 +517,7 @@ export const NormalSaleForm: React.FC = () => {
     scanQty: number = 1,
     customRate?: number,
     customAmount?: number,
-    isVariableWeight?: boolean
+    _isVariableWeight?: boolean
   ) => {
     const autoIncrement = getSetting(BARCODE_FAST_SCAN_INCREMENT_KEY, 'true') !== 'false';
     const effectiveRate = customRate !== undefined ? customRate : (scannedItem.priRate || 0);
