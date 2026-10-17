@@ -233,8 +233,9 @@ export const BarcodePrint: React.FC = () => {
     }
 
     const baseCode = (selectedItem.barcode || selectedItem.id)?.replace(/[\r\n]/g, '').trim();
+    const defaultRate = Math.round(selectedItem.priRate || 0);
     const finalBarcode = isVariableWeight
-      ? `VW-${baseCode}-Q${printQty}-R${printPrice}`
+      ? (printPrice === defaultRate ? `${baseCode}*${printQty}` : `${baseCode}*${printQty}*${printPrice}`)
       : baseCode;
 
     const newItem: BarcodePrintItem = {
@@ -275,8 +276,9 @@ export const BarcodePrint: React.FC = () => {
       itemsToPrint = [...batchQueue];
     } else if (selectedItem) {
       const baseCode = (selectedItem.barcode || selectedItem.id)?.replace(/[\r\n]/g, '').trim();
+      const defaultRate = Math.round(selectedItem.priRate || 0);
       const finalBarcode = isVariableWeight
-        ? `VW-${baseCode}-Q${printQty}-R${printPrice}`
+        ? (printPrice === defaultRate ? `${baseCode}*${printQty}` : `${baseCode}*${printQty}*${printPrice}`)
         : baseCode;
 
       itemsToPrint = [{

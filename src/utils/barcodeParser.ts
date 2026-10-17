@@ -86,14 +86,14 @@ export function parseBarcodePayload(
   }
 
   // -------------------------------------------------------------
-  // 2. Delimited 3-Part Syntax: {ItemCode}*{qty}*{rate}
+  // 2. Delimited Syntax: {ItemCode}*{qty} or {ItemCode}*{qty}*{rate} (No VW, Q, R needed)
   // -------------------------------------------------------------
   if (raw.includes('*')) {
     const starParts = raw.split('*');
-    if (starParts.length === 3) {
+    if (starParts.length === 3 || starParts.length === 2) {
       const codePart = starParts[0].trim();
       const qVal = parseFloat(starParts[1].trim());
-      const rVal = parseFloat(starParts[2].trim());
+      const rVal = starParts.length === 3 ? parseFloat(starParts[2].trim()) : NaN;
       const item = findItemByCode(codePart, items);
 
       if (item && !isNaN(qVal) && qVal > 0) {
