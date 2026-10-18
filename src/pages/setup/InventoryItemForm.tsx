@@ -275,9 +275,12 @@ export const InventoryItemForm: React.FC = () => {
             icon={<SaveOutlined />} 
             onClick={handleSave} 
             loading={loading}
-            style={{ backgroundColor: '#1677ff', borderColor: '#1677ff' }}
+            style={{ 
+              backgroundColor: !isEdit && catRates.some(r => r.priRate > 0) ? '#ea580c' : '#1677ff', 
+              borderColor: !isEdit && catRates.some(r => r.priRate > 0) ? '#ea580c' : '#1677ff' 
+            }}
           >
-            {isEdit ? 'Update Product' : 'Save Product'}
+            {isEdit ? 'Update Product' : (!isEdit && catRates.some(r => r.priRate > 0) ? '* Save Product' : 'Save Product')}
           </Button>
           {isEdit && (
             <Popconfirm
