@@ -46,6 +46,7 @@ import {
   BILL_QR_INCLUDE_AMOUNT,
   INVENTORY_ENABLE_SECONDARY_QTY_KEY,
   RESTAURANT_ENABLE_KOT_KEY,
+  RESTAURANT_ENABLE_DINE_IN_KEY,
   SUPPLY_ENABLE_KEY,
   TRANSACTION_ENABLE_CARRIAGE_KEY,
   BARCODE_FAST_SCAN_ENABLED_KEY,
@@ -95,8 +96,9 @@ export const SettingsPage: React.FC = () => {
   const [savingInventory, setSavingInventory] = useState(false);
   const [inventoryLastSaved, setInventoryLastSaved] = useState<string | null>(null);
 
-  // Local state for Restaurant & KOT settings
+  // Local state for Restaurant, Dine-In & KOT settings
   const [kotEnabled, setKotEnabled] = useState(false);
+  const [dineInEnabled, setDineInEnabled] = useState(false);
   const [savingKot, setSavingKot] = useState(false);
   const [kotLastSaved, setKotLastSaved] = useState<string | null>(null);
 
@@ -141,8 +143,10 @@ export const SettingsPage: React.FC = () => {
     const supplySetting = getSetting(SUPPLY_ENABLE_KEY, '');
     const orgSupply = licenses.find((l) => l.tenantIdentifier === currentTenantIdentifier)?.hasSupplyFeature ?? false;
     setSupplyEnabled(supplySetting !== '' ? supplySetting === 'true' : orgSupply);
-    setCarriageEnabled(getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true');
-    setKotEnabled(getSetting(RESTAURANT_ENABLE_KOT_KEY, 'false') === 'true');
+    const kotVal = getSetting(RESTAURANT_ENABLE_KOT_KEY, 'false') === 'true';
+    setKotEnabled(kotVal);
+    const dineInSetting = getSetting(RESTAURANT_ENABLE_DINE_IN_KEY, '');
+    setDineInEnabled(dineInSetting !== '' ? dineInSetting === 'true' : kotVal);
     setFastScanEnabled(getSetting(BARCODE_FAST_SCAN_ENABLED_KEY, 'false') === 'true');
     setFastScanIncrement(getSetting(BARCODE_FAST_SCAN_INCREMENT_KEY, 'true') !== 'false');
     setFastScanSound(getSetting(BARCODE_FAST_SCAN_SOUND_KEY, 'true') !== 'false');
@@ -213,11 +217,17 @@ export const SettingsPage: React.FC = () => {
       await updateSetting(
         RESTAURANT_ENABLE_KOT_KEY,
         kotEnabled ? 'true' : 'false',
-        'Enable Kitchen Order Tickets (KOT), Dining Tables, and Kitchen Display System (KDS)',
+        'Enable Kitchen Order Tickets (KOT) and Kitchen Display System (KDS)',
+        'Restaurant'
+      );
+      await updateSetting(
+        RESTAURANT_ENABLE_DINE_IN_KEY,
+        dineInEnabled ? 'true' : 'false',
+        'Enable Dine-In table management and Dining Table assignment',
         'Restaurant'
       );
       setKotLastSaved(new Date().toLocaleTimeString());
-      message.success('Restaurant & KOT settings saved successfully!');
+      message.success('Restaurant, Dine-In & KOT settings saved successfully!');
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Failed to save restaurant settings.');
     } finally {
@@ -965,23 +975,46 @@ export const SettingsPage: React.FC = () => {
                       }
                     >
                       <Paragraph type="secondary" style={{ marginBottom: 20 }}>
-                        Configure dining table management, Kitchen Order Tickets (KOT), and Kitchen Display System (KDS) for restaurant or cafe workflows.
+                        Configure dining table management, Kitchen Order Tickets (KOT), and Kitchen Display System (KDS) for restaurant, cafe, or takeaway workflows.
                       </Paragraph>
 
+                      {/* 1. KOT & KDS Feature */}
                       <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
                         <Row align="middle" justify="space-between">
                           <Col span={18}>
                             <Text strong style={{ fontSize: 15, display: 'block' }}>
-                              Enable Kitchen Order Tickets (KOT) & Dining Tables
+                              Kitchen Order Tickets (KOT) & Kitchen Display (KDS)
                             </Text>
                             <Text type="secondary" style={{ fontSize: 13 }}>
-                              When enabled, the POS Touch interface displays Dining Table assignment and KOT printing. The Dining Tables setup menu and Kitchen Display (KDS) menu become available in navigation.
+                              When enabled, orders can be dispatched to the kitchen via "Send to Kitchen" (KOT), tickets can be printed, and the Kitchen Display System (KDS) screen is accessible. Works for both Takeaway and Dine-In!
                             </Text>
                           </Col>
                           <Col span={6} style={{ textAlign: 'right' }}>
                             <Switch
                               checked={kotEnabled}
                               onChange={setKotEnabled}
+                              checkedChildren="Enabled"
+                              unCheckedChildren="Disabled"
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+
+                      {/* 2. Dine-In & Dining Tables Feature */}
+                      <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <Row align="middle" justify="space-between">
+                          <Col span={18}>
+                            <Text strong style={{ fontSize: 15, display: 'block' }}>
+                              Dine-In & Dining Tables Management
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                              When enabled, the "Dining Tables" management screen appears in Setup, and POS Touch allows choosing Dine-In and selecting tables. If disabled, orders default strictly to Takeaway without table prompts (ideal for takeaways, counters, food trucks, and cloud kitchens).
+                            </Text>
+                          </Col>
+                          <Col span={6} style={{ textAlign: 'right' }}>
+                            <Switch
+                              checked={dineInEnabled}
+                              onChange={setDineInEnabled}
                               checkedChildren="Enabled"
                               unCheckedChildren="Disabled"
                             />

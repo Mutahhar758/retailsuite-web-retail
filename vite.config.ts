@@ -1,11 +1,38 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import fs from 'fs';
+import path from 'path';
+import pkg from './package.json' with { type: 'json' };
+
+const appVersion = pkg.version || '1.1.0';
+const buildTime = new Date().toISOString();
 
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __BUILD_TIME__: JSON.stringify(buildTime),
+  },
   plugins: [
     react(),
+    {
+      name: 'generate-version-json',
+      buildStart() {
+        const versionData = {
+          version: appVersion,
+          buildTime: buildTime,
+        };
+        const publicDir = path.resolve(__dirname, 'public');
+        if (!fs.existsSync(publicDir)) {
+          fs.mkdirSync(publicDir, { recursive: true });
+        }
+        fs.writeFileSync(
+          path.resolve(publicDir, 'version.json'),
+          JSON.stringify(versionData, null, 2)
+        );
+      },
+    },
     VitePWA({
       injectRegister: 'inline',
       registerType: 'autoUpdate',
@@ -44,6 +71,11 @@ export default defineConfig({
         // API requests: never cache via SW — we handle offline via IndexedDB
         navigateFallback: 'index.html',
         runtimeCaching: [
+          {
+            // version.json MUST never be cached so auto-update checks always get fresh data
+            urlPattern: /\/version\.json$/,
+            handler: 'NetworkOnly',
+          },
           {
             // JS/CSS: NetworkFirst so new deploys are picked up immediately
             urlPattern: /\.(?:js|css)$/,

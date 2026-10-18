@@ -5,10 +5,12 @@ import {
 } from 'antd';
 import { 
   ReloadOutlined, SoundOutlined, ClockCircleOutlined, 
-  CheckCircleOutlined, PlayCircleOutlined, FireOutlined, TableOutlined, ShopOutlined
+  CheckCircleOutlined, PlayCircleOutlined, FireOutlined, TableOutlined, ShopOutlined,
+  PrinterOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { kotService, type KotOrderResponse, type PrepStationDto } from '../../services/kotService';
+import { printKotSlip } from '../../utils/kotPrint';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -250,8 +252,17 @@ export const KitchenDisplay: React.FC = () => {
                           />
                           <Text type="secondary" style={{ fontSize: 12 }}>ID: {order.id}</Text>
                         </div>
-                        <div style={{ marginTop: 8 }}>
+                        <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
                           {getOrderTypeTag(order.orderType, order.tableName)}
+                          {order.saleVoucherNo ? (
+                            <Tag color="success" style={{ fontWeight: 800 }}>
+                              PAID
+                            </Tag>
+                          ) : (
+                            <Tag color="warning" style={{ fontWeight: 700 }}>
+                              UNPAID
+                            </Tag>
+                          )}
                         </div>
                       </div>
                       <Space direction="vertical" align="end" size={2}>
@@ -327,56 +338,62 @@ export const KitchenDisplay: React.FC = () => {
                     </div>
 
                     {/* Card Actions */}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                      {allReady ? (
-                        <Button 
-                          type="primary" 
-                          icon={<CheckCircleOutlined />} 
-                          block
-                          style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                          onClick={() => handleOrderStatusChange(order.id, 'Served')}
-                        >
-                          Mark Served / Complete
-                        </Button>
-                      ) : (
+                      <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+                        {allReady ? (
+                          <Button 
+                            type="primary" 
+                            icon={<CheckCircleOutlined />} 
+                            style={{ flex: 1, backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                            onClick={() => handleOrderStatusChange(order.id, 'Served')}
+                          >
+                            Served
+                          </Button>
+                        ) : (
+                          <Popconfirm
+                            title="Ready?"
+                            description="Mark all items in this ticket as Ready?"
+                            onConfirm={async () => {
+                              try {
+                                await Promise.all(
+                                  order.lines
+                                    .filter(l => l.status !== 'Ready' && l.status !== 'Served')
+                                    .map(l => kotService.updateItemStatus(order.id, l.id, 'Ready'))
+                                );
+                                message.success('All items marked as Ready');
+                                fetchOrders(selectedStation);
+                              } catch (err) {
+                                message.error('Failed to update all items');
+                              }
+                            }}
+                            okText="Yes"
+                            cancelText="No"
+                          >
+                            <Button style={{ flex: 1 }}>
+                              All Ready
+                            </Button>
+                          </Popconfirm>
+                        )}
+
+                        <Tooltip title="Print / Reprint KOT Ticket">
+                          <Button 
+                            icon={<PrinterOutlined />} 
+                            onClick={() => printKotSlip(order, undefined, { isDuplicate: true })}
+                          />
+                        </Tooltip>
+                        
                         <Popconfirm
-                          title="Ready?"
-                          description="Mark all items in this ticket as Ready?"
-                          onConfirm={async () => {
-                            try {
-                              await Promise.all(
-                                order.lines
-                                  .filter(l => l.status !== 'Ready' && l.status !== 'Served')
-                                  .map(l => kotService.updateItemStatus(order.id, l.id, 'Ready'))
-                              );
-                              message.success('All items marked as Ready');
-                              fetchOrders(selectedStation);
-                            } catch (err) {
-                              message.error('Failed to update all items');
-                            }
-                          }}
+                          title="Cancel Order?"
+                          description="Are you sure you want to cancel this order?"
+                          onConfirm={() => handleOrderStatusChange(order.id, 'Cancelled')}
                           okText="Yes"
                           cancelText="No"
+                          okButtonProps={{ danger: true }}
                         >
-                          <Button block>
-                            Mark All Ready
+                          <Button danger type="text">
+                            Cancel
                           </Button>
                         </Popconfirm>
-                      )}
-                      
-                      <Popconfirm
-                        title="Cancel Order?"
-                        description="Are you sure you want to cancel this order?"
-                        onConfirm={() => handleOrderStatusChange(order.id, 'Cancelled')}
-                        okText="Yes"
-                        cancelText="No"
-                        okButtonProps={{ danger: true }}
-                      >
-                        <Button danger type="text">
-                          Cancel
-                        </Button>
-                      </Popconfirm>
-                    </div>
+                      </div>
                   </Card>
                 </Col>
               );

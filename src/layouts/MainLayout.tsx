@@ -23,11 +23,12 @@ import {
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useAppStore } from '../stores/useAppStore';
-import { useSettingsStore, RESTAURANT_ENABLE_KOT_KEY, SUPPLY_ENABLE_KEY, MOBILE_SHOP_ENABLE_KEY, MANUFACTURING_ENABLE_KEY } from '../stores/useSettingsStore';
+import { useSettingsStore, RESTAURANT_ENABLE_KOT_KEY, RESTAURANT_ENABLE_DINE_IN_KEY, SUPPLY_ENABLE_KEY, MOBILE_SHOP_ENABLE_KEY, MANUFACTURING_ENABLE_KEY } from '../stores/useSettingsStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useOfflineStore } from '../stores/useOfflineStore';
 import { profileService, logoutService } from '../services/profileService';
 import api from '../services/api';
+import { CURRENT_APP_VERSION } from '../utils/autoVersionRefresh';
 
 const { Header, Sider, Content } = Layout;
 
@@ -224,6 +225,8 @@ export const MainLayout: React.FC = () => {
   const hasSupplyFeature = settingSupply !== '' ? settingSupply === 'true' : (currentOrg?.hasSupplyFeature ?? false);
   const settingKot = useSettingsStore(state => state.getSetting(RESTAURANT_ENABLE_KOT_KEY, ''));
   const hasKotFeature = settingKot !== '' ? settingKot === 'true' : (currentOrg?.hasKotFeature ?? false);
+  const settingDineIn = useSettingsStore(state => state.getSetting(RESTAURANT_ENABLE_DINE_IN_KEY, ''));
+  const hasDineInFeature = settingDineIn !== '' ? settingDineIn === 'true' : hasKotFeature;
   const settingMobile = useSettingsStore(state => state.getSetting(MOBILE_SHOP_ENABLE_KEY, ''));
   const hasMobileShopFeature = settingMobile !== '' ? settingMobile === 'true' : (currentOrg?.hasMobileShopFeature ?? false);
   const settingManufacturing = useSettingsStore(state => state.getSetting(MANUFACTURING_ENABLE_KEY, ''));
@@ -253,7 +256,7 @@ export const MainLayout: React.FC = () => {
         { key: '/setup/settings', label: 'Settings' },
         { key: '/setup/printer-settings', label: 'Printer Settings' },
         { key: '/setup/opening-balance', label: 'Opening Balance' },
-        hasKotFeature ? { key: '/setup/dining-tables', label: 'Dining Tables' } : null,
+        hasDineInFeature ? { key: '/setup/dining-tables', label: 'Dining Tables' } : null,
       ].filter(Boolean) as any[]
     },
     { 
@@ -520,6 +523,22 @@ export const MainLayout: React.FC = () => {
                   )}
                 </span>
               )}
+            </div>
+          )}
+
+          {!collapsed && (
+            <div style={{
+              padding: '8px 16px',
+              fontSize: 11,
+              color: token.colorTextTertiary,
+              borderTop: `1px solid ${token.colorBorderSecondary}`,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              userSelect: 'none'
+            }}>
+              <span>RetailSuite</span>
+              <span style={{ fontWeight: 600 }}>v{CURRENT_APP_VERSION}</span>
             </div>
           )}
         </Sider>

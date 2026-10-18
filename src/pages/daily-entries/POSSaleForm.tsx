@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Row, Col, Typography, Button, Input, Space, message, Tag, Modal, List, Badge, Alert, Dropdown, Segmented, Select
+  Row, Col, Typography, Button, Input, Space, message, Tag, Modal, List, Badge, Alert, Dropdown, Segmented, Select, Tooltip
 } from 'antd';
 import {
   useThermalPrinter,
@@ -33,7 +33,8 @@ import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCa
 import type { NarrationDto } from '../../services/narrationService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { kotService, type DiningTableDto, type KotOrderResponse } from '../../services/kotService';
-import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT, RESTAURANT_ENABLE_KOT_KEY, BARCODE_FAST_SCAN_SOUND_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT, RESTAURANT_ENABLE_KOT_KEY, RESTAURANT_ENABLE_DINE_IN_KEY, BARCODE_FAST_SCAN_SOUND_KEY } from '../../stores/useSettingsStore';
+import { printKotSlip } from '../../utils/kotPrint';
 import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
 import { parseBarcodePayload } from '../../utils/barcodeParser';
 
@@ -61,6 +62,7 @@ interface InvoiceTab {
   orderType: string;
   selectedTableId: number | null;
   activeKotId: number | null;
+  activeSaleVoucherNo: string | null;
   remarks: string;
 }
 
@@ -75,6 +77,8 @@ export const POSSaleForm: React.FC = () => {
   const { getSetting, fetchSettings, initialized: settingsInitialized } = useSettingsStore();
   const settingKot = getSetting(RESTAURANT_ENABLE_KOT_KEY, '');
   const hasKotFeature = settingKot !== '' ? settingKot === 'true' : (currentOrg?.hasKotFeature ?? false);
+  const settingDineIn = getSetting(RESTAURANT_ENABLE_DINE_IN_KEY, '');
+  const hasDineInFeature = settingDineIn !== '' ? settingDineIn === 'true' : hasKotFeature;
 
   useEffect(() => {
     if (!settingsInitialized) {
@@ -96,6 +100,18 @@ export const POSSaleForm: React.FC = () => {
   const [activeKots, setActiveKots] = useState<KotOrderResponse[]>([]);
   const [kotLoading, setKotLoading] = useState(false);
 
+  const fetchActiveKots = useCallback(async () => {
+    try {
+      setKotLoading(true);
+      const data = await kotService.getActive();
+      setActiveKots(data.filter(k => k.status !== 'Paid' && k.status !== 'Cancelled'));
+    } catch (err) {
+      console.error('Failed to load active KOT orders', err);
+    } finally {
+      setKotLoading(false);
+    }
+  }, []);
+
   // Multi-tab states
   const [tabs, setTabs] = useState<InvoiceTab[]>(() => {
     const initialId = Date.now().toString();
@@ -113,6 +129,7 @@ export const POSSaleForm: React.FC = () => {
       orderType: 'Takeaway',
       selectedTableId: null,
       activeKotId: null,
+      activeSaleVoucherNo: null,
       remarks: ''
     }];
   });
@@ -132,6 +149,7 @@ export const POSSaleForm: React.FC = () => {
   const orderType = activeTab?.orderType || 'Takeaway';
   const selectedTableId = activeTab?.selectedTableId || null;
   const activeKotId = activeTab?.activeKotId || null;
+  const activeSaleVoucherNo = activeTab?.activeSaleVoucherNo || null;
   const remarks = activeTab?.remarks || '';
 
   // Helper to update active tab's properties
@@ -189,6 +207,10 @@ export const POSSaleForm: React.FC = () => {
     updateActiveTab(t => ({ ...t, activeKotId: typeof val === 'function' ? val(t.activeKotId) : val }));
   };
 
+  const setActiveSaleVoucherNo = (val: string | null | ((prev: string | null) => string | null)) => {
+    updateActiveTab(t => ({ ...t, activeSaleVoucherNo: typeof val === 'function' ? val(t.activeSaleVoucherNo) : val }));
+  };
+
   const setRemarks = (val: string | ((prev: string) => string)) => {
     updateActiveTab(t => ({ ...t, remarks: typeof val === 'function' ? val(t.remarks) : val }));
   };
@@ -199,6 +221,8 @@ export const POSSaleForm: React.FC = () => {
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [isPaymentModalVisible, setIsPaymentModalVisible] = useState(false);
   const [savedVoucherNo, setSavedVoucherNo] = useState<string>('');
+  const [savedTokenNo, setSavedTokenNo] = useState<number | null>(null);
+  const [savedOrderType, setSavedOrderType] = useState<string>('Takeaway');
   const [searchCustomerQuery, setSearchCustomerQuery] = useState<string>('');
 
   // Printer Configuration States
@@ -271,12 +295,26 @@ export const POSSaleForm: React.FC = () => {
       .then(setCategoryPrices)
       .catch(() => { /* Non-critical */ });
 
-    if (hasKotFeature) {
+    if (hasDineInFeature) {
       kotService.getDiningTables()
         .then(setDiningTables)
         .catch(console.error);
     }
-  }, []);
+
+    if (hasKotFeature) {
+      fetchActiveKots();
+    }
+  }, [hasDineInFeature, hasKotFeature, fetchActiveKots]);
+
+  // Periodic refresh of active KOTs every 20 seconds while POS screen is active
+  useEffect(() => {
+    if (!hasKotFeature) return;
+    fetchActiveKots();
+    const interval = setInterval(() => {
+      fetchActiveKots();
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [hasKotFeature, fetchActiveKots]);
 
   const resolveCustomerItemRate = (itemId: string, customerAccount?: string | null, unit?: string): number => {
     const item = items.find(i => i.id === itemId);
@@ -447,9 +485,16 @@ export const POSSaleForm: React.FC = () => {
   const cashReceived = Object.entries(noteCounts).reduce((sum, [note, count]) => sum + (Number(note) * count), 0);
   const cashBack = Math.max(0, cashReceived - netAmount);
 
-  const generateReceiptTextLines = (voucherNo: string): string[] => {
+  const generateReceiptTextLines = (
+    voucherNo: string,
+    tokenNoOverride?: number | null,
+    orderTypeOverride?: string | null
+  ): string[] => {
     const width = 48;
     const lines: string[] = [];
+
+    const activeToken = tokenNoOverride !== undefined ? tokenNoOverride : savedTokenNo;
+    const activeType = orderTypeOverride !== undefined ? orderTypeOverride : savedOrderType;
 
     const format4Columns = (col1: string, col2: string, col3: string, col4: string): string => {
       const w1 = 20;
@@ -481,6 +526,14 @@ export const POSSaleForm: React.FC = () => {
     // Header styling using ESC/POS native alignment and sizing (double-size only, without extra bold to avoid over-weight strokes)
     lines.push(ESC_ALIGN_CENTER + ESC_DOUBLE_ON + currentOrgName.toUpperCase());
     lines.push(ESC_DOUBLE_OFF + 'Sale Receipt');
+
+    if (activeToken) {
+      lines.push(divider('*', width));
+      lines.push(ESC_DOUBLE_ON + `TOKEN #${activeToken}` + ESC_DOUBLE_OFF);
+      lines.push(`[${(activeType || 'TAKEAWAY').toUpperCase()}]`);
+      lines.push(divider('*', width));
+    }
+
     lines.push(`Voucher: ${voucherNo}`);
     lines.push(`Date: ${dayjs().format('DD-MMM-YYYY HH:mm')}`);
     lines.push(ESC_ALIGN_LEFT + divider('-', width));
@@ -518,6 +571,10 @@ export const POSSaleForm: React.FC = () => {
     const thankYouMsg = getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT);
     if (thankYouMsg) {
       lines.push(ESC_ALIGN_CENTER + thankYouMsg);
+    }
+    if (savedTokenNo) {
+      lines.push(ESC_ALIGN_CENTER + ESC_BOLD_ON + `*** TOKEN #${savedTokenNo} ***`);
+      lines.push('Please collect your order at the Kitchen Counter' + ESC_BOLD_OFF);
     }
     lines.push(ESC_ALIGN_LEFT); // Reset alignment to default
     lines.push('');
@@ -596,6 +653,7 @@ export const POSSaleForm: React.FC = () => {
     setRemarks('');
     setSelectedTableId(null);
     setActiveKotId(null);
+    setActiveSaleVoucherNo(null);
     setOrderType('Takeaway');
   };
 
@@ -611,11 +669,13 @@ export const POSSaleForm: React.FC = () => {
 
     setLoading(true);
     try {
-      const request = {
+      const saleRequest = {
         date: dayjs().format('YYYY-MM-DD'),
         account: selectedCustomer.account,
         narration: selectedNarration?.code || undefined,
-        description: activeKotId ? `KOT Order Finalized (Token #${activeKots.find(k => k.id === activeKotId)?.tokenNo || ''})` : 'Touch Screen POS Sale',
+        description: activeKotId 
+          ? `KOT Order Paid (Token #${activeKots.find(k => k.id === activeKotId)?.tokenNo || ''})` 
+          : 'Touch Screen POS Sale',
         cashReceipt: cashReceived,
         cashBack: cashBack,
         lines: cart.map((line, idx) => ({
@@ -628,27 +688,92 @@ export const POSSaleForm: React.FC = () => {
         }))
       };
 
-      const newVno = await saleService.create(request, { offlineFallback: true });
-      
-      // Finalize KOT payment if loaded from an active KOT
-      if (activeKotId && !newVno.includes('-')) {
-        try {
-          await kotService.finalizePayment(activeKotId, newVno);
-        } catch (kotErr) {
-          console.error('Failed to finalize KOT payment', kotErr);
+      let finalVoucherNo = activeSaleVoucherNo;
+      let tokenNumber: number | null = null;
+
+      if (activeSaleVoucherNo && !activeSaleVoucherNo.includes('-')) {
+        // DINE-IN PAYMENT SETTLEMENT LATER:
+        // The sale invoice ALREADY exists and stock was already deducted when KOT was placed!
+        // DO NOT CREATE A NEW SALE! Just update existing voucher with cashReceipt and cashBack!
+        await saleService.update(activeSaleVoucherNo, saleRequest);
+        finalVoucherNo = activeSaleVoucherNo;
+
+        // Finalize KOT payment
+        if (activeKotId) {
+          try {
+            await kotService.finalizePayment(activeKotId, finalVoucherNo);
+            tokenNumber = activeKots.find(k => k.id === activeKotId)?.tokenNo || null;
+            fetchActiveKots();
+          } catch (kotErr) {
+            console.error('Failed to finalize KOT payment', kotErr);
+          }
+        }
+        // NO NEW KOT IS GENERATED — 1 BILL = 1 KOT!
+      } else {
+        // PREPAID COUNTER SALE (Takeaway / Direct Checkout):
+        // Create the sale invoice now (reduces stock immediately!)
+        finalVoucherNo = await saleService.create(saleRequest, { offlineFallback: true });
+
+        if (activeKotId && !finalVoucherNo.includes('-')) {
+          try {
+            await kotService.finalizePayment(activeKotId, finalVoucherNo);
+            tokenNumber = activeKots.find(k => k.id === activeKotId)?.tokenNo || null;
+            fetchActiveKots();
+          } catch (kotErr) {
+            console.error('Failed to finalize KOT payment', kotErr);
+          }
+        } else if (hasKotFeature && !finalVoucherNo.includes('-')) {
+          // Exactly 1 KOT order is created for this prepaid sale:
+          try {
+            const kotRequest = {
+              orderType: orderType || 'Takeaway',
+              tableId: orderType === 'DineIn' ? (selectedTableId || undefined) : undefined,
+              customerId: selectedCustomer.account || undefined,
+              remarks: remarks || undefined,
+              saleVoucherNo: finalVoucherNo,
+              lines: cart.map(line => ({
+                itemId: line.item.id,
+                qty: line.qty,
+                rate: line.rate,
+                notes: undefined
+              }))
+            };
+            const createdKot = await kotService.create(kotRequest);
+            tokenNumber = createdKot.tokenNo;
+            fetchActiveKots();
+
+            try {
+              await printKotSlip(createdKot, connectionMethod, { printerName, cutPaper });
+            } catch (kPrintErr) {
+              console.warn('Failed to print KOT slip', kPrintErr);
+            }
+          } catch (kotErr) {
+            console.error('Failed to auto-create prepaid KOT', kotErr);
+          }
         }
       }
 
-      const isOfflineResult = newVno.includes('-') && newVno.length <= 10;
+      setSavedTokenNo(tokenNumber);
+      setSavedOrderType(orderType || 'Takeaway');
+
+      // Auto-print customer bill receipt on sale creation (prints both KOT and Bill for takeaway)
+      try {
+        const billLines = generateReceiptTextLines(finalVoucherNo, tokenNumber, orderType || 'Takeaway');
+        await printDirect(billLines, connectionMethod, { printerName, openDrawer, cutPaper });
+      } catch (billPrintErr) {
+        console.warn('Failed to auto-print bill receipt', billPrintErr);
+      }
+
+      const isOfflineResult = finalVoucherNo ? (finalVoucherNo.includes('-') && finalVoucherNo.length <= 10) : false;
       setIsOfflineSaved(isOfflineResult);
-      setSavedVoucherNo(newVno);
+      setSavedVoucherNo(finalVoucherNo || '');
       setIsPaymentModalVisible(false);
       setSuccessModalVisible(true);
       
       if (isOfflineResult) {
-        message.warning(`Saved offline as ${newVno} — will sync when you reconnect`, 6);
+        message.warning(`Saved offline as ${finalVoucherNo} — will sync when you reconnect`, 6);
       } else {
-        message.success('POS Sale saved successfully');
+        message.success(tokenNumber ? `Payment settled for Token #${tokenNumber} (Bill #${finalVoucherNo})` : `Sale #${finalVoucherNo} saved successfully`);
       }
     } catch (error) {
       console.error(error);
@@ -658,106 +783,144 @@ export const POSSaleForm: React.FC = () => {
     }
   };
 
-  const printKotSlip = async (kotOrder: KotOrderResponse) => {
-    const width = 48;
-    const lines: string[] = [];
-    // Header styling using ESC/POS native alignment and sizing (double-size only, without extra bold to avoid over-weight strokes)
-    lines.push(ESC_ALIGN_CENTER + ESC_DOUBLE_ON + 'KITCHEN ORDER TICKET (KOT)');
-    lines.push(ESC_DOUBLE_OFF + `Token No: ${kotOrder.tokenNo}`);
-    lines.push(ESC_ALIGN_LEFT + divider('-', width));
-    lines.push(`Order ID: ${kotOrder.id}`);
-    lines.push(`Date: ${dayjs(`${kotOrder.orderDate}T${kotOrder.orderTime}`).format('DD-MMM-YYYY HH:mm')}`);
-    lines.push(`Type: ${kotOrder.orderType === 'DineIn' ? `Dine-In (${kotOrder.tableName || 'N/A'})` : 'Takeaway'}`);
-    if (kotOrder.customerName) {
-      lines.push(`Customer: ${kotOrder.customerName}`);
-    }
-    if (kotOrder.remarks) {
-      lines.push(`Remarks: ${kotOrder.remarks}`);
-    }
-    lines.push(divider('-', width));
-    
-    const formatKotLine = (item: string, qty: string) => {
-      const itemWidth = 38;
-      const qtyWidth = 10;
-      let left = item.trim();
-      if (left.length > itemWidth - 1) left = left.substring(0, itemWidth - 1);
-      left = left.padEnd(itemWidth, ' ');
-      
-      let right = qty.trim().padStart(qtyWidth, ' ');
-      return left + right;
-    };
-    
-    lines.push(formatKotLine('Item Description', 'Qty'));
-    lines.push(divider('-', width));
-    
-    kotOrder.lines.forEach(line => {
-      // Bold items and quantities in KOT
-      lines.push(ESC_BOLD_ON + formatKotLine(line.itemTitle, line.qty.toString()));
-      if (line.notes) {
-        lines.push(ESC_BOLD_OFF + `  * Note: ${line.notes}`);
-      }
-    });
-    
-    lines.push(ESC_BOLD_OFF + divider('=', width));
-    lines.push('');
-    lines.push('');
-    lines.push('');
 
-    try {
-      await printDirect(lines, connectionMethod, { printerName, cutPaper });
-    } catch (err) {
-      console.warn('Could not print thermal KOT', err);
-    }
-  };
 
   const handleSaveKot = async () => {
+    if (orderType === 'Takeaway') {
+      // For takeaway, payment and KOT are completed together in one step!
+      setIsPaymentModalVisible(true);
+      return;
+    }
+
     if (cart.length === 0) {
       message.error('Cart is empty. Please add items to order');
+      return;
+    }
+    if (!selectedCustomer) {
+      message.error('Please select a customer');
       return;
     }
 
     setLoading(true);
     try {
-      const request = {
-        orderType: orderType,
-        tableId: orderType === 'DineIn' ? (selectedTableId || undefined) : undefined,
-        customerId: selectedCustomer?.account || undefined,
-        remarks: remarks || undefined,
-        lines: cart.map(line => ({
+      let voucherNoToLink = activeSaleVoucherNo;
+
+      const saleRequest = {
+        date: dayjs().format('YYYY-MM-DD'),
+        account: selectedCustomer.account,
+        narration: selectedNarration?.code || undefined,
+        description: orderType === 'DineIn' 
+          ? `Dine-In Kitchen Order (Table: ${diningTables.find(t => t.id === selectedTableId)?.name || 'N/A'})` 
+          : 'Kitchen Order (Unpaid)',
+        cashReceipt: 0,
+        cashBack: 0,
+        lines: cart.map((line, idx) => ({
+          seq: idx + 1,
           itemId: line.item.id,
+          unit: line.item.itemType === 'Service' ? null : (line.unit || null),
           qty: line.qty,
           rate: line.rate,
-          notes: undefined
+          discount: line.discount
         }))
       };
 
-      const kotOrder = await kotService.create(request);
-      message.success(`KOT Created successfully! Token #${kotOrder.tokenNo}`);
-      
-      try {
-        await printKotSlip(kotOrder);
-      } catch (printErr) {
-        console.warn('Failed to print KOT slip', printErr);
+      if (activeSaleVoucherNo && !activeSaleVoucherNo.includes('-')) {
+        // Order was loaded and more items added: update existing sale invoice (deducts new items stock!)
+        await saleService.update(activeSaleVoucherNo, saleRequest);
+      } else {
+        // Create new Sale invoice immediately (reduces inventory stock right on order placement!)
+        voucherNoToLink = await saleService.create(saleRequest, { offlineFallback: true });
+      }
+
+      // Ensure exactly 1 KOT ticket is maintained for this sale invoice:
+      let kotOrder: KotOrderResponse;
+      let isRunning = false;
+      const newItemsToPrint: { itemTitle: string; qty: number; notes?: string }[] = [];
+
+      if (activeKotId) {
+        // EXISTING KOT: The user added more items to an existing order!
+        const existingDetail = await kotService.getByTokenOrId(activeKotId.toString());
+        const previousLines = existingDetail?.lines || [];
+
+        // Calculate ONLY the newly added items:
+        const existingQtyMap = new Map<string, number>();
+        previousLines.forEach(l => {
+          existingQtyMap.set(l.itemId, (existingQtyMap.get(l.itemId) || 0) + l.qty);
+        });
+
+        // Determine additional items/quantities
+        const additionalItemsRequest: { itemId: string; qty: number; rate: number; notes?: string }[] = [];
+        cart.forEach(c => {
+          const prevQty = existingQtyMap.get(c.item.id) || 0;
+          if (c.qty > prevQty) {
+            const addedQty = c.qty - prevQty;
+            additionalItemsRequest.push({
+              itemId: c.item.id,
+              qty: addedQty,
+              rate: c.rate,
+              notes: undefined
+            });
+            newItemsToPrint.push({
+              itemTitle: c.item.title,
+              qty: addedQty,
+              notes: undefined
+            });
+          }
+        });
+
+        if (additionalItemsRequest.length > 0) {
+          isRunning = true;
+          kotOrder = await kotService.appendLines(activeKotId, additionalItemsRequest);
+        } else {
+          kotOrder = existingDetail || ({ id: activeKotId, tokenNo: 0, lines: [] } as any);
+        }
+      } else {
+        // NEW ORDER:
+        const kotRequest = {
+          orderType: orderType,
+          tableId: orderType === 'DineIn' ? (selectedTableId || undefined) : undefined,
+          customerId: selectedCustomer?.account || undefined,
+          remarks: remarks || undefined,
+          saleVoucherNo: voucherNoToLink || undefined,
+          lines: cart.map(line => ({
+            itemId: line.item.id,
+            qty: line.qty,
+            rate: line.rate,
+            notes: undefined
+          }))
+        };
+        kotOrder = await kotService.create(kotRequest);
+      }
+
+      if (isRunning) {
+        message.success(`Running KOT #${kotOrder.tokenNo} sent to kitchen with ${newItemsToPrint.length} additional item(s)!`);
+        try {
+          // Print ONLY the newly added items on the kitchen slip!
+          await printKotSlip(kotOrder, connectionMethod, { 
+            printerName, 
+            cutPaper, 
+            isRunningKot: true, 
+            itemsToPrint: newItemsToPrint 
+          });
+        } catch (printErr) {
+          console.warn('Failed to print Running KOT slip', printErr);
+        }
+      } else {
+        message.success(`KOT #${kotOrder.tokenNo} sent to kitchen! (Bill #${voucherNoToLink} created, inventory deducted)`);
+        try {
+          await printKotSlip(kotOrder, connectionMethod, { printerName, cutPaper });
+        } catch (printErr) {
+          console.warn('Failed to print KOT slip', printErr);
+        }
       }
 
       handleResetAll();
+      fetchActiveKots();
     } catch (err) {
       console.error(err);
       message.error('Failed to send order to kitchen');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchActiveKots = async () => {
-    try {
-      setKotLoading(true);
-      const data = await kotService.getActive();
-      setActiveKots(data.filter(k => k.status !== 'Paid' && k.status !== 'Cancelled'));
-    } catch (err) {
-      message.error('Failed to load active KOT orders');
-    } finally {
-      setKotLoading(false);
     }
   };
 
@@ -798,6 +961,7 @@ export const POSSaleForm: React.FC = () => {
         orderType: detail.orderType,
         remarks: detail.remarks || '',
         activeKotId: detail.id,
+        activeSaleVoucherNo: detail.saleVoucherNo || null,
         cart: cartItems
       };
 
@@ -829,6 +993,8 @@ export const POSSaleForm: React.FC = () => {
   const handleCloseActiveTabAfterSave = () => {
     setSuccessModalVisible(false);
     setIsOfflineSaved(false);
+    setSavedTokenNo(null);
+    setSavedOrderType('Takeaway');
     
     const tabToCloseId = activeTabId;
     if (tabs.length === 1) {
@@ -864,6 +1030,7 @@ export const POSSaleForm: React.FC = () => {
       orderType: 'Takeaway',
       selectedTableId: null,
       activeKotId: null,
+      activeSaleVoucherNo: null,
       remarks: ''
     };
 
@@ -1237,9 +1404,9 @@ export const POSSaleForm: React.FC = () => {
               }
             />
 
-            {/* Recall KOT Button */}
+            {/* Active KOTs Button */}
             {hasKotFeature && (
-              <Badge count={activeKots.length} size="small" style={{ backgroundColor: '#f97316' }}>
+              <Badge count={activeKots.length} overflowCount={99} size="small" style={{ backgroundColor: '#f97316' }}>
                 <Button 
                   type="default" 
                   icon={<InboxOutlined style={{ fontSize: 16 }} />} 
@@ -1262,7 +1429,7 @@ export const POSSaleForm: React.FC = () => {
                     width: '100%'
                   }}
                 >
-                  Recall KOT
+                  Active KOTs
                 </Button>
               </Badge>
             )}
@@ -1582,7 +1749,21 @@ export const POSSaleForm: React.FC = () => {
           {/* Active KOT loaded Alert */}
           {hasKotFeature && activeKotId && (
             <Alert
-              message={`Loaded from KOT Order (Token #${activeKots.find(k => k.id === activeKotId)?.tokenNo || activeKotId})`}
+              message={
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span>
+                    <strong>Loaded KOT Order: Token #{activeKots.find(k => k.id === activeKotId)?.tokenNo || activeKotId}</strong>
+                  </span>
+                  {activeSaleVoucherNo && (
+                    <Tag color="blue" style={{ fontWeight: 700, margin: 0 }}>
+                      Bill #{activeSaleVoucherNo}
+                    </Tag>
+                  )}
+                  <Tag color="cyan" style={{ fontWeight: 700, margin: 0 }}>
+                    📦 Stock already deducted on order
+                  </Tag>
+                </div>
+              }
               type="info"
               showIcon
               closable
@@ -1595,25 +1776,27 @@ export const POSSaleForm: React.FC = () => {
           )}
 
           {/* Order Type & Dine-in Table Selection */}
-          {hasKotFeature && (
+          {(hasKotFeature || hasDineInFeature) && (
             <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0, padding: 12, backgroundColor: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text strong style={{ fontSize: 13, color: '#475569' }}>Order Type</Text>
-                <Segmented
-                  value={orderType}
-                  onChange={(val) => {
-                    setOrderType(val as string);
-                    if (val !== 'DineIn') setSelectedTableId(null);
-                  }}
-                  options={[
-                    { label: '🏃 Takeaway', value: 'Takeaway' },
-                    { label: '🍽️ Dine-In', value: 'DineIn' }
-                  ]}
-                  style={{ borderRadius: 8 }}
-                />
-              </div>
+              {hasDineInFeature && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text strong style={{ fontSize: 13, color: '#475569' }}>Order Type</Text>
+                  <Segmented
+                    value={orderType}
+                    onChange={(val) => {
+                      setOrderType(val as string);
+                      if (val !== 'DineIn') setSelectedTableId(null);
+                    }}
+                    options={[
+                      { label: '🏃 Takeaway', value: 'Takeaway' },
+                      { label: '🍽️ Dine-In', value: 'DineIn' }
+                    ]}
+                    style={{ borderRadius: 8 }}
+                  />
+                </div>
+              )}
 
-              {orderType === 'DineIn' && (
+              {hasDineInFeature && orderType === 'DineIn' && (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <Select
                     placeholder="Select Dining Table"
@@ -1640,15 +1823,17 @@ export const POSSaleForm: React.FC = () => {
                 </div>
               )}
 
-              <div>
-                <Input
-                  placeholder="Kitchen remarks/notes..."
-                  value={remarks}
-                  onChange={e => setRemarks(e.target.value)}
-                  style={{ borderRadius: 8 }}
-                  prefix={<BookOutlined style={{ color: '#94a3b8' }} />}
-                />
-              </div>
+              {hasKotFeature && (
+                <div>
+                  <Input
+                    placeholder="Kitchen remarks/notes..."
+                    value={remarks}
+                    onChange={e => setRemarks(e.target.value)}
+                    style={{ borderRadius: 8 }}
+                    prefix={<BookOutlined style={{ color: '#94a3b8' }} />}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -1778,8 +1963,8 @@ export const POSSaleForm: React.FC = () => {
               </div>
 
               {/* Payment Button Row */}
-              <div style={{ display: 'flex', gap: 6, width: '100%' }}>
-                {hasKotFeature && (
+              <div style={{ display: 'flex', gap: 6, width: '100%', alignItems: 'center' }}>
+                {hasKotFeature && orderType === 'DineIn' && (
                   <Button
                     type="default"
                     size="large"
@@ -1804,6 +1989,35 @@ export const POSSaleForm: React.FC = () => {
                   </Button>
                 )}
 
+                {hasKotFeature && (
+                  <Badge count={activeKots.length} overflowCount={99} offset={[-4, 4]}>
+                    <Button
+                      type="default"
+                      size="large"
+                      icon={<InboxOutlined style={{ fontSize: 16, color: '#0369a1' }} />}
+                      onClick={() => {
+                        fetchActiveKots();
+                        setIsKotModalVisible(true);
+                      }}
+                      style={{
+                        height: 48,
+                        borderRadius: 10,
+                        fontWeight: 800,
+                        color: '#0369a1',
+                        borderColor: '#bae6fd',
+                        backgroundColor: '#f0f9ff',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 4,
+                        padding: '0 10px'
+                      }}
+                    >
+                      <span style={{ fontSize: 13, fontWeight: 900 }}>Active KOTs</span>
+                    </Button>
+                  </Badge>
+                )}
+
                 <Button
                   className="pos-pay-btn"
                   type="primary"
@@ -1818,7 +2032,7 @@ export const POSSaleForm: React.FC = () => {
                   }}
                   disabled={cart.length === 0}
                   style={{
-                    flex: 1.3,
+                    flex: hasKotFeature && orderType === 'DineIn' ? 1.3 : 2,
                     height: 48,
                     borderRadius: 10,
                     fontWeight: 800,
@@ -1831,7 +2045,9 @@ export const POSSaleForm: React.FC = () => {
                     gap: 4
                   }}
                 >
-                  <span style={{ fontSize: 13, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Pay Now</span>
+                  <span style={{ fontSize: 13, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                    {hasKotFeature && orderType === 'Takeaway' ? 'Pay & Print (KOT + Bill)' : 'Pay Now'}
+                  </span>
                 </Button>
               </div>
             </div>
@@ -1984,6 +2200,26 @@ export const POSSaleForm: React.FC = () => {
             style={{ marginBottom: 16, marginTop: 12, textAlign: 'left', borderRadius: 10, fontSize: 14 }}
           />
         )}
+        {savedTokenNo && (
+          <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+            <Badge 
+              count={`TOKEN #${savedTokenNo}`} 
+              style={{ 
+                backgroundColor: '#ea580c', 
+                fontSize: 22, 
+                height: 42, 
+                lineHeight: '42px', 
+                padding: '0 24px', 
+                borderRadius: 21, 
+                fontWeight: 900,
+                boxShadow: '0 4px 12px rgba(234, 88, 12, 0.3)'
+              }} 
+            />
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>
+              Order sent to Kitchen Display ({savedOrderType})
+            </span>
+          </div>
+        )}
         <Text type="secondary" style={{ fontSize: 14, display: 'block', marginBottom: 20 }}>
           Voucher: <b style={{ color: '#0f172a' }}>{savedVoucherNo}</b>
         </Text>
@@ -2011,6 +2247,12 @@ export const POSSaleForm: React.FC = () => {
           <div style={{ textAlign: 'center', marginBottom: 12 }}>
             <h3 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 15 }}>{currentOrgName.toUpperCase()}</h3>
             <p style={{ margin: 0, fontSize: 11 }}>Sale Receipt</p>
+            {savedTokenNo && (
+              <div style={{ margin: '6px 0', border: '1px dashed #000', padding: '4px' }}>
+                <span style={{ fontSize: 16, fontWeight: 900 }}>*** TOKEN #{savedTokenNo} ***</span><br />
+                <span style={{ fontSize: 11, fontWeight: 700 }}>[{savedOrderType.toUpperCase()}]</span>
+              </div>
+            )}
             <p style={{ margin: 0, fontSize: 11 }}>Voucher: {savedVoucherNo}</p>
             <p style={{ margin: 0, fontSize: 11 }}>Date: {dayjs().format('DD-MMM-YYYY HH:mm')}</p>
           </div>
@@ -2340,16 +2582,31 @@ export const POSSaleForm: React.FC = () => {
                 gap: 6
               }}
             >
-              CONFIRM & SAVE TRANSACTION
+              {hasKotFeature && orderType === 'Takeaway' ? 'CONFIRM & PRINT (KOT + BILL)' : 'CONFIRM & SAVE TRANSACTION'}
             </Button>
           </div>
         </Space>
       </Modal>
 
-      {/* Recall KOT Modal */}
+      {/* Active KOTs Modal */}
       {hasKotFeature && (
         <Modal
-          title={<div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '1px solid #f1f5f9', paddingBottom: 12 }}>📥 Active Kitchen Orders (KOT)</div>}
+          title={
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: 12, paddingRight: 32 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>📥 Active Kitchen Orders</span>
+                <Badge count={activeKots.length} style={{ backgroundColor: '#f97316' }} />
+              </div>
+              <Button
+                size="small"
+                icon={<ReloadOutlined spin={kotLoading} />}
+                onClick={fetchActiveKots}
+                style={{ borderRadius: 6, fontWeight: 600 }}
+              >
+                Refresh
+              </Button>
+            </div>
+          }
           open={isKotModalVisible}
           onCancel={() => setIsKotModalVisible(false)}
           footer={null}
@@ -2380,6 +2637,17 @@ export const POSSaleForm: React.FC = () => {
                     <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
                       {kot.orderType === 'DineIn' ? `🍽️ Table: ${kot.tableName || 'N/A'}` : '🏃 Takeaway'}
                     </span>
+                    <Tag 
+                      color={kot.status === 'Ready' ? 'green' : kot.status === 'Served' ? 'purple' : kot.status === 'Preparing' ? 'blue' : 'orange'} 
+                      style={{ fontWeight: 700, borderRadius: 4, margin: 0 }}
+                    >
+                      {kot.status}
+                    </Tag>
+                    {kot.saleVoucherNo && (
+                      <Tag color="cyan" style={{ fontWeight: 700, borderRadius: 4, margin: 0 }}>
+                        Bill #{kot.saleVoucherNo}
+                      </Tag>
+                    )}
                     <span style={{ fontSize: 13, color: '#64748b' }}>
                       {dayjs(`${kot.orderDate}T${kot.orderTime}`).format('hh:mm A')}
                     </span>
@@ -2410,6 +2678,13 @@ export const POSSaleForm: React.FC = () => {
                   >
                     Load Order
                   </Button>
+                  <Tooltip title="Print / Reprint KOT Slip">
+                    <Button
+                      icon={<PrinterOutlined />}
+                      onClick={() => printKotSlip(kot, connectionMethod, { printerName, cutPaper, isDuplicate: true })}
+                      style={{ borderRadius: 8 }}
+                    />
+                  </Tooltip>
                 </div>
               </List.Item>
             )}

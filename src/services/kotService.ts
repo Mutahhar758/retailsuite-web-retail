@@ -57,86 +57,95 @@ export interface KotOrderCreateRequest {
   tableId?: number;
   customerId?: string;
   remarks?: string;
+  saleVoucherNo?: string | null;
   lines: KotOrderItemRequest[];
 }
 
 export const kotService = {
   // KOT Orders
   async create(data: KotOrderCreateRequest) {
-    const response = await api.post('/api/kot-orders', data);
-    return response.data.body as KotOrderResponse;
+    const response = await api.post('/api/kotorders', data);
+    return (response.data?.body ?? response.data) as KotOrderResponse;
   },
 
   async getActive(prepStationId?: string) {
-    const response = await api.get('/api/kot-orders/active', { params: { prepStationId } });
-    return response.data.body as KotOrderResponse[];
+    const response = await api.get('/api/kotorders/active', { params: { prepStationId } });
+    const list = response.data?.body ?? response.data;
+    return Array.isArray(list) ? (list as KotOrderResponse[]) : [];
   },
 
   async getByTokenOrId(query: string) {
-    const response = await api.get(`/api/kot-orders/token/${query}`);
-    return response.data.body as KotOrderResponse | null;
+    const response = await api.get(`/api/kotorders/token/${query}`);
+    return (response.data?.body ?? response.data ?? null) as KotOrderResponse | null;
   },
 
   async updateItemStatus(orderId: number, itemId: number, status: string) {
-    const response = await api.put(`/api/kot-orders/${orderId}/items/${itemId}/status`, JSON.stringify(status), {
+    const response = await api.put(`/api/kotorders/${orderId}/items/${itemId}/status`, JSON.stringify(status), {
       headers: { 'Content-Type': 'application/json' }
     });
-    return response.data.body;
+    return response.data?.body ?? response.data;
   },
 
   async updateOrderStatus(orderId: number, status: string) {
-    const response = await api.put(`/api/kot-orders/${orderId}/status`, JSON.stringify(status), {
+    const response = await api.put(`/api/kotorders/${orderId}/status`, JSON.stringify(status), {
       headers: { 'Content-Type': 'application/json' }
     });
-    return response.data.body;
+    return response.data?.body ?? response.data;
   },
 
   async finalizePayment(orderId: number, saleVoucherNo: string) {
-    const response = await api.put(`/api/kot-orders/${orderId}/finalize`, JSON.stringify(saleVoucherNo), {
+    const response = await api.put(`/api/kotorders/${orderId}/finalize`, JSON.stringify(saleVoucherNo), {
       headers: { 'Content-Type': 'application/json' }
     });
-    return response.data.body;
+    return response.data?.body ?? response.data;
+  },
+
+  async appendLines(orderId: number, lines: KotOrderItemRequest[]) {
+    const response = await api.post(`/api/kotorders/${orderId}/items`, lines);
+    return (response.data?.body ?? response.data) as KotOrderResponse;
   },
 
   // Prep Stations
   async getPrepStations() {
-    const response = await api.get('/api/prep-stations');
-    return response.data.body as PrepStationDto[];
+    const response = await api.get('/api/prepstations');
+    const list = response.data?.body ?? response.data;
+    return Array.isArray(list) ? (list as PrepStationDto[]) : [];
   },
 
   async createPrepStation(data: { id: string; name: string; active: boolean }) {
-    const response = await api.post('/api/prep-stations', data);
-    return response.data.body as PrepStationDto;
+    const response = await api.post('/api/prepstations', data);
+    return (response.data?.body ?? response.data) as PrepStationDto;
   },
 
   async updatePrepStation(id: string, data: { name: string; active: boolean }) {
-    const response = await api.put(`/api/prep-stations/${id}`, data);
-    return response.data.body;
+    const response = await api.put(`/api/prepstations/${id}`, data);
+    return response.data?.body ?? response.data;
   },
 
   async deletePrepStation(id: string) {
-    const response = await api.delete(`/api/prep-stations/${id}`);
-    return response.data.body;
+    const response = await api.delete(`/api/prepstations/${id}`);
+    return response.data?.body ?? response.data;
   },
 
   // Dining Tables
   async getDiningTables() {
-    const response = await api.get('/api/dining-tables');
-    return response.data.body as DiningTableDto[];
+    const response = await api.get('/api/diningtables');
+    const list = response.data?.body ?? response.data;
+    return Array.isArray(list) ? (list as DiningTableDto[]) : [];
   },
 
   async createDiningTable(data: { name: string; capacity: number; active: boolean }) {
-    const response = await api.post('/api/dining-tables', data);
-    return response.data.body as DiningTableDto;
+    const response = await api.post('/api/diningtables', data);
+    return (response.data?.body ?? response.data) as DiningTableDto;
   },
 
   async updateDiningTable(id: number, data: { name: string; capacity: number; status: string; active: boolean }) {
-    const response = await api.put(`/api/dining-tables/${id}`, data);
-    return response.data.body;
+    const response = await api.put(`/api/diningtables/${id}`, data);
+    return response.data?.body ?? response.data;
   },
 
   async deleteDiningTable(id: number) {
-    const response = await api.delete(`/api/dining-tables/${id}`);
-    return response.data.body;
+    const response = await api.delete(`/api/diningtables/${id}`);
+    return response.data?.body ?? response.data;
   },
 };
