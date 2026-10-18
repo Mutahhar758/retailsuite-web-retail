@@ -51,6 +51,7 @@ export const WandaSaleForm: React.FC = () => {
   const [saleLines, setSaleLines] = useState<any[]>([]);
   const [cacheMissError, setCacheMissError] = useState<string | null>(null);
   const prevTotalAmountRef = useRef(0);
+  const originalAccountIdRef = useRef<string | null>(null);
 
   // Multi-tab state management for rapid checkout drafts
   const [tabs, setTabs] = useState<SaleTab[]>(() => {
@@ -311,6 +312,7 @@ export const WandaSaleForm: React.FC = () => {
           saleLines: initialLines.length > 0 ? initialLines : t.saleLines
         } : t));
       } else {
+        originalAccountIdRef.current = null;
         setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
         form.setFieldsValue({ date: dayjs() });
       }
@@ -369,12 +371,21 @@ export const WandaSaleForm: React.FC = () => {
 
   const handleCustomerChange = (newAccount: string) => {
     form.setFieldValue('account', newAccount);
+    const isOriginal = originalAccountIdRef.current && String(newAccount) === String(originalAccountIdRef.current);
     setSaleLines(prev => prev.map(l => {
       if (!l.itemId) return l;
-      const { priRate, secRate } = resolveItemRates(l.itemId, newAccount);
-      const pSize = Number(l.packing || l.packQty || 0);
-      const bagR = secRate || (priRate * (pSize > 0 ? pSize : 1));
-      const kgR = (pSize > 0 && bagR > 0) ? round(bagR / pSize, 8) : priRate;
+      let kgR: number;
+      let bagR: number;
+
+      if (isOriginal && (l as any).savedRate !== undefined) {
+        kgR = (l as any).savedRate;
+        bagR = (l as any).savedSecRate ?? 0;
+      } else {
+        const { priRate, secRate } = resolveItemRates(l.itemId, newAccount);
+        const pSize = Number(l.packing || l.packQty || 0);
+        bagR = secRate || (priRate * (pSize > 0 ? pSize : 1));
+        kgR = (pSize > 0 && bagR > 0) ? round(bagR / pSize, 8) : priRate;
+      }
 
       const qty = l.qty || 1;
       const disc = l.discount || 0;
@@ -395,6 +406,7 @@ export const WandaSaleForm: React.FC = () => {
       const details = await saleService.getDetail(voucherNo!);
       if (details.length > 0) {
         const first = details[0];
+        originalAccountIdRef.current = first.accountId ? String(first.accountId) : null;
         form.setFieldsValue({
           date: dayjs(first.date),
           account: first.accountId,
@@ -408,12 +420,14 @@ export const WandaSaleForm: React.FC = () => {
           ...d,
           key: d.seq,
           rate: d.rate,
+          savedRate: d.rate,
           discount: d.discount,
           carriage: d.carriage || 0,
           amount: d.amount != null ? d.amount : ((d.qty * d.rate) - (d.discount || 0) + (d.carriage || 0)),
           secUnit: d.secUnit,
           secQty: d.secQty,
           secRate: d.secRate,
+          savedSecRate: d.secRate ?? 0,
           packQty: (d as any).qtyInPack || ((d.qty > 0 && d.secQty && d.secQty > 0) ? round(d.qty / d.secQty, 2) : 0),
           packing: (d as any).packing || 0
         })));
@@ -606,6 +620,12 @@ export const WandaSaleForm: React.FC = () => {
           updated.packing = round(packing, 2);
           updated.rate = round(kgRate, 8);
           updated.secRate = round(bagRate, 2);
+
+          const currentCust = form.getFieldValue('account');
+          if ((field === 'rate' || field === 'secRate') && originalAccountIdRef.current && String(currentCust) === String(originalAccountIdRef.current)) {
+            updated.savedRate = updated.rate;
+            updated.savedSecRate = updated.secRate;
+          }
 
           if (field === 'discount') {
             updated.discount = numVal;

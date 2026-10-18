@@ -60,6 +60,7 @@ export const NormalSaleForm: React.FC = () => {
   const [saleLines, setSaleLines] = useState<any[]>([]);
   const [cacheMissError, setCacheMissError] = useState<string | null>(null);
   const prevTotalAmountRef = useRef(0);
+  const originalAccountIdRef = useRef<string | null>(null);
 
   // Multi-tab state management for rapid checkout drafts
   const [tabs, setTabs] = useState<SaleTab[]>(() => {
@@ -318,6 +319,7 @@ export const NormalSaleForm: React.FC = () => {
           saleLines: initialLines.length > 0 ? initialLines : t.saleLines
         } : t));
       } else {
+        originalAccountIdRef.current = null;
         setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0 }]);
         form.setFieldsValue({ date: dayjs() });
       }
@@ -376,9 +378,19 @@ export const NormalSaleForm: React.FC = () => {
 
   const handleCustomerChange = (newAccount: string) => {
     form.setFieldValue('account', newAccount);
+    const isOriginal = originalAccountIdRef.current && String(newAccount) === String(originalAccountIdRef.current);
     setSaleLines(prev => prev.map(l => {
       if (!l.itemId) return l;
-      const { rate: newPriRate, secRate: newSecRate } = resolveItemRates(l.itemId, newAccount);
+      let newPriRate: number;
+      let newSecRate: number;
+      if (isOriginal && (l as any).savedRate !== undefined) {
+        newPriRate = (l as any).savedRate;
+        newSecRate = (l as any).savedSecRate ?? 0;
+      } else {
+        const { rate, secRate } = resolveItemRates(l.itemId, newAccount);
+        newPriRate = rate;
+        newSecRate = secRate;
+      }
       const qty = l.qty || 1;
       const secQty = l.secQty || 0;
       const disc = l.discount || 0;
@@ -399,6 +411,7 @@ export const NormalSaleForm: React.FC = () => {
       const details = await saleService.getDetail(voucherNo!);
       if (details.length > 0) {
         const first = details[0];
+        originalAccountIdRef.current = first.accountId ? String(first.accountId) : null;
         form.setFieldsValue({
           date: dayjs(first.date),
           account: first.accountId,
@@ -412,12 +425,14 @@ export const NormalSaleForm: React.FC = () => {
           ...d,
           key: d.seq,
           rate: d.rate,
+          savedRate: d.rate,
           discount: d.discount,
           carriage: d.carriage || 0,
           amount: d.amount,
           secUnit: d.secUnit,
           secQty: d.secQty,
           secRate: d.secRate,
+          savedSecRate: d.secRate ?? 0,
           imei: d.imei || '',
           imei2: d.imei2 || '',
           ptaStatus: d.ptaStatus || undefined,
@@ -532,9 +547,21 @@ export const NormalSaleForm: React.FC = () => {
           const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
 
           if (field === 'qty') updated.qty = numVal;
-          if (field === 'rate') updated.rate = numVal;
+          if (field === 'rate') {
+            updated.rate = numVal;
+            const currentCust = form.getFieldValue('account');
+            if (originalAccountIdRef.current && String(currentCust) === String(originalAccountIdRef.current)) {
+              updated.savedRate = numVal;
+            }
+          }
           if (field === 'secQty') updated.secQty = numVal;
-          if (field === 'secRate') updated.secRate = numVal;
+          if (field === 'secRate') {
+            updated.secRate = numVal;
+            const currentCust = form.getFieldValue('account');
+            if (originalAccountIdRef.current && String(currentCust) === String(originalAccountIdRef.current)) {
+              updated.savedSecRate = numVal;
+            }
+          }
           if (field === 'discount') updated.discount = numVal;
           if (field === 'carriage') updated.carriage = numVal;
 
