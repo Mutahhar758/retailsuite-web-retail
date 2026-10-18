@@ -475,7 +475,14 @@ export const NormalSaleSupplyForm: React.FC = () => {
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
-      const validLines = supplyLines.filter(l => l.customerId && l.qty > 0);
+      const validLines = supplyLines.filter(l =>
+        l.customerId && (
+          (Number(l.qty) || 0) > 0 ||
+          (Number(l.secQty) || 0) > 0 ||
+          (Number(l.addLess) || 0) !== 0 ||
+          (Number(l.amount) || 0) !== 0
+        )
+      );
 
       if (validLines.length === 0) {
         message.error('Please add at least one customer');
