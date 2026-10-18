@@ -49,27 +49,30 @@ export const InventoryItemForm: React.FC = () => {
   }>>([]);
 
   const handleOpenCatRates = async () => {
-    if (!isEdit || !id) {
-      message.info('Please save the product first before configuring customer category rates.');
-      return;
-    }
     setCatRatesModalVisible(true);
     setCatRatesLoading(true);
     try {
-      const [lookupCategories, existingPrices] = await Promise.all([
-        customerCategoryService.getLookup(),
-        inventoryService.getItemCategoryPrices(id)
-      ]);
+      const lookupCategories = await customerCategoryService.getLookup();
       const currentPriRate = form.getFieldValue('priRate') || 0;
       const currentSecRate = form.getFieldValue('secRate') || 0;
 
+      let existingPrices: any[] = [];
+      if (isEdit && id) {
+        existingPrices = await inventoryService.getItemCategoryPrices(id);
+      }
+
       const merged = lookupCategories.map(cat => {
+        const inState = catRates.find(c => c.customerCategoryId === cat.code);
+        if (inState && !isEdit) {
+          return inState;
+        }
+
         const found = existingPrices.find(p => p.customerCategoryId === cat.code);
         return {
           customerCategoryId: cat.code,
           customerCategoryTitle: cat.title,
-          priRate: found ? Number(found.priRate) : Number(currentPriRate),
-          secRate: found && found.secRate != null ? Number(found.secRate) : Number(currentSecRate)
+          priRate: found ? Number(found.priRate) : (inState ? inState.priRate : Number(currentPriRate)),
+          secRate: found && found.secRate != null ? Number(found.secRate) : (inState ? inState.secRate : Number(currentSecRate))
         };
       });
       setCatRates(merged);
@@ -82,20 +85,24 @@ export const InventoryItemForm: React.FC = () => {
   };
 
   const handleSaveCatRates = async () => {
-    if (!id) return;
-    try {
-      setSavingCatRates(true);
-      await inventoryService.saveItemCategoryPrices(id, catRates.map(r => ({
-        customerCategoryId: r.customerCategoryId,
-        priRate: r.priRate,
-        secRate: r.secRate
-      })));
-      message.success('Customer category rates updated successfully');
+    if (isEdit && id) {
+      try {
+        setSavingCatRates(true);
+        await inventoryService.saveItemCategoryPrices(id, catRates.map(r => ({
+          customerCategoryId: r.customerCategoryId,
+          priRate: r.priRate,
+          secRate: r.secRate
+        })));
+        message.success('Customer category rates updated successfully');
+        setCatRatesModalVisible(false);
+      } catch (err: any) {
+        message.error(err.response?.data?.message || 'Failed to save customer category rates');
+      } finally {
+        setSavingCatRates(false);
+      }
+    } else {
+      message.success('Category rates configured. They will be saved when you save the product.');
       setCatRatesModalVisible(false);
-    } catch (err: any) {
-      message.error(err.response?.data?.message || 'Failed to save customer category rates');
-    } finally {
-      setSavingCatRates(false);
     }
   };
 
@@ -174,7 +181,18 @@ export const InventoryItemForm: React.FC = () => {
         await inventoryService.update(id!, apiValues);
         message.success('Item updated successfully');
       } else {
-        await inventoryService.create(apiValues);
+        const newId = await inventoryService.create(apiValues);
+        if (catRates.length > 0 && newId) {
+          try {
+            await inventoryService.saveItemCategoryPrices(newId, catRates.map(r => ({
+              customerCategoryId: r.customerCategoryId,
+              priRate: r.priRate,
+              secRate: r.secRate
+            })));
+          } catch (err) {
+            console.error('Failed to save category rates after creation:', err);
+          }
+        }
         message.success('Item created successfully');
       }
       navigate('/setup/item-details');
@@ -406,15 +424,13 @@ export const InventoryItemForm: React.FC = () => {
 
             <div className="flex justify-between items-center mb-4 mt-6">
               <Title level={5} style={{ margin: 0 }}>Pricing & Units</Title>
-              {isEdit && (
-                <Button 
-                  icon={<TagsOutlined />} 
-                  onClick={handleOpenCatRates}
-                  style={{ borderColor: '#1677ff', color: '#1677ff' }}
-                >
-                  Customer Category Rates
-                </Button>
-              )}
+              <Button 
+                icon={<TagsOutlined />} 
+                onClick={handleOpenCatRates}
+                style={{ borderColor: '#1677ff', color: '#1677ff' }}
+              >
+                Customer Category Rates {catRates.length > 0 && !isEdit ? `(${catRates.filter(r => r.priRate > 0).length} set)` : ''}
+              </Button>
             </div>
             {itemType !== 'Service' ? (
               <>
