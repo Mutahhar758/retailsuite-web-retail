@@ -14,7 +14,7 @@ import { saleService } from '../../services/saleService';
 import { offlineCacheService, OfflineCacheMissError } from '../../services/offlineCacheService';
 import type { ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import type { NarrationDto } from '../../services/narrationService';
-import type { Item } from '../../services/inventoryService';
+import { inventoryService, type Item, type ItemCustomerCategoryPriceDto } from '../../services/inventoryService';
 import { useSettingsStore, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
@@ -47,6 +47,7 @@ export const WandaSaleForm: React.FC = () => {
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [categoryPrices, setCategoryPrices] = useState<ItemCustomerCategoryPriceDto[]>([]);
   const [saleLines, setSaleLines] = useState<any[]>([]);
   const [cacheMissError, setCacheMissError] = useState<string | null>(null);
   const prevTotalAmountRef = useRef(0);
@@ -328,6 +329,7 @@ export const WandaSaleForm: React.FC = () => {
       setCustomers(customers);
       setNarrations(narrations);
       setItems(items);
+      inventoryService.getCustomerCategoryPrices().then(setCategoryPrices).catch(() => []);
       setCacheMissError(null);
       focusCustomerSelect();
     } catch (err) {
@@ -337,6 +339,54 @@ export const WandaSaleForm: React.FC = () => {
         message.error('Failed to load reference data');
       }
     }
+  };
+
+  const resolveItemRates = (itemId: string, customerAccountId?: string | null) => {
+    const item = items.find(i => String(i.id) === String(itemId));
+    if (!item) return { priRate: 0, secRate: 0 };
+
+    const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 0);
+    let priRate = Number(item.priRate) || 0;
+    let secRate = item.secRate != null ? Number(item.secRate) : (priRate * (pSize > 0 ? pSize : 1));
+
+    if (customerAccountId) {
+      const cust = customers.find(c => c.account === customerAccountId);
+      if (cust?.customerCategoryId) {
+        const catPrice = categoryPrices.find(cp => cp.itemId === itemId && cp.customerCategoryId === cust.customerCategoryId);
+        if (catPrice) {
+          if (catPrice.priRate > 0) {
+            priRate = Number(catPrice.priRate);
+          }
+          if (catPrice.secRate != null && catPrice.secRate > 0) {
+            secRate = Number(catPrice.secRate);
+          }
+        }
+      }
+    }
+
+    return { priRate, secRate };
+  };
+
+  const handleCustomerChange = (newAccount: string) => {
+    form.setFieldValue('account', newAccount);
+    setSaleLines(prev => prev.map(l => {
+      if (!l.itemId) return l;
+      const { priRate, secRate } = resolveItemRates(l.itemId, newAccount);
+      const pSize = Number(l.packing || l.packQty || 0);
+      const bagR = secRate || (priRate * (pSize > 0 ? pSize : 1));
+      const kgR = (pSize > 0 && bagR > 0) ? round(bagR / pSize, 8) : priRate;
+
+      const qty = l.qty || 1;
+      const disc = l.discount || 0;
+      const carriage = l.carriage || 0;
+      const amount = round((qty * kgR) - disc + carriage, 2);
+      return {
+        ...l,
+        rate: kgR,
+        secRate: bagR,
+        amount
+      };
+    }));
   };
 
   const fetchDetail = async () => {
@@ -465,9 +515,11 @@ export const WandaSaleForm: React.FC = () => {
               const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 0);
               updated.packQty = pSize;
               updated.packing = pSize;
-              const bagR = item.secRate || ((item.priRate || 0) * (pSize > 0 ? pSize : 1));
+              const currentCust = form.getFieldValue('account');
+              const { priRate: resolvedPriRate, secRate: resolvedSecRate } = resolveItemRates(item.id, currentCust);
+              const bagR = resolvedSecRate || ((resolvedPriRate || 0) * (pSize > 0 ? pSize : 1));
               updated.secRate = bagR;
-              updated.rate = (pSize > 0 && bagR > 0) ? round(bagR / pSize, 8) : (item.priRate || 0);
+              updated.rate = (pSize > 0 && bagR > 0) ? round(bagR / pSize, 8) : (resolvedPriRate || 0);
               updated.secQty = 0;
             }
           }
@@ -1128,6 +1180,7 @@ export const WandaSaleForm: React.FC = () => {
                 optionFilterProp="children"
                 className="pos-customer-select"
                 prefix={<UserOutlined />}
+                onChange={handleCustomerChange}
                 filterOption={(input, option) =>
                   (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
                 }

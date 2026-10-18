@@ -34,6 +34,8 @@ export interface CustomerResponse {
   active: boolean;
   mediaId?: string;
   mediaUrl?: string;
+  customerCategoryId?: string;
+  customerCategoryTitle?: string;
   createdBy?: string;
   createdOn?: string;
   lastModifiedBy?: string;
@@ -56,6 +58,7 @@ export interface CustomerCreateRequest {
   emailAlert: boolean;
   active: boolean;
   mediaId?: string;
+  customerCategoryId?: string;
   supplyItems?: CustomerSupplyItemDto[];
 }
 
@@ -74,6 +77,7 @@ export interface CustomerUpdateRequest {
   emailAlert: boolean;
   active: boolean;
   mediaId?: string;
+  customerCategoryId?: string;
   supplyItems?: CustomerSupplyItemDto[];
 }
 
@@ -128,6 +132,7 @@ export interface CustomerBulkItemDto {
   smsAlert?: boolean;
   emailAlert?: boolean;
   active?: boolean;
+  customerCategoryId?: string;
 }
 
 export interface CustomerBulkUpsertRequest {

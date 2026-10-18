@@ -118,8 +118,40 @@ export const inventoryService = {
   async bulkUpsert(data: InventoryItemBulkUpsertRequest) {
     const response = await api.post('/api/inventory/items/bulk', data);
     return response.data.body as BulkOperationResult;
+  },
+
+  async getCustomerCategoryPrices(customerCategoryId?: string) {
+    const response = await api.get('/api/inventory/customer-category-prices', {
+      params: { customerCategoryId }
+    });
+    return response.data.body as ItemCustomerCategoryPriceDto[];
+  },
+
+  async getItemCategoryPrices(itemId: string) {
+    const response = await api.get(`/api/inventory/items/${itemId}/customer-category-prices`);
+    return response.data.body as ItemCustomerCategoryPriceDto[];
+  },
+
+  async saveItemCategoryPrices(itemId: string, prices: ItemCustomerCategoryPriceUpsertRequest[]) {
+    const response = await api.put(`/api/inventory/items/${itemId}/customer-category-prices`, prices);
+    return response.data.body as string;
   }
 };
+
+export interface ItemCustomerCategoryPriceDto {
+  id: number;
+  itemId: string;
+  customerCategoryId: string;
+  customerCategoryTitle: string;
+  priRate: number;
+  secRate?: number;
+}
+
+export interface ItemCustomerCategoryPriceUpsertRequest {
+  customerCategoryId: string;
+  priRate: number;
+  secRate?: number;
+}
 
 export interface InventoryItemBulkItemDto {
   id?: string;

@@ -14,7 +14,7 @@ import { saleService } from '../../services/saleService';
 import { offlineCacheService, OfflineCacheMissError } from '../../services/offlineCacheService';
 import type { ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import type { NarrationDto } from '../../services/narrationService';
-import type { Item } from '../../services/inventoryService';
+import { inventoryService, type Item, type ItemCustomerCategoryPriceDto } from '../../services/inventoryService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useAppStore } from '../../stores/useAppStore';
 import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, TRANSACTION_ENABLE_CARRIAGE_KEY, MOBILE_SHOP_ENABLE_KEY, BARCODE_FAST_SCAN_INCREMENT_KEY } from '../../stores/useSettingsStore';
@@ -56,6 +56,7 @@ export const NormalSaleForm: React.FC = () => {
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [categoryPrices, setCategoryPrices] = useState<ItemCustomerCategoryPriceDto[]>([]);
   const [saleLines, setSaleLines] = useState<any[]>([]);
   const [cacheMissError, setCacheMissError] = useState<string | null>(null);
   const prevTotalAmountRef = useRef(0);
@@ -335,6 +336,7 @@ export const NormalSaleForm: React.FC = () => {
       setCustomers(customers);
       setNarrations(narrations);
       setItems(items);
+      inventoryService.getCustomerCategoryPrices().then(setCategoryPrices).catch(() => []);
       setCacheMissError(null);
       focusCustomerSelect();
     } catch (err) {
@@ -344,6 +346,51 @@ export const NormalSaleForm: React.FC = () => {
         message.error('Failed to load reference data');
       }
     }
+  };
+
+  const resolveItemRates = (itemId: string, customerAccountId?: string | null) => {
+    const item = items.find(i => String(i.id) === String(itemId));
+    if (!item) return { rate: 0, secRate: 0 };
+
+    const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 0);
+    let priRate = Number(item.priRate) || 0;
+    let secRate = item.secRate != null ? Number(item.secRate) : (priRate * (pSize > 0 ? pSize : 1));
+
+    if (customerAccountId) {
+      const cust = customers.find(c => c.account === customerAccountId);
+      if (cust?.customerCategoryId) {
+        const catPrice = categoryPrices.find(cp => cp.itemId === itemId && cp.customerCategoryId === cust.customerCategoryId);
+        if (catPrice) {
+          if (catPrice.priRate > 0) {
+            priRate = Number(catPrice.priRate);
+          }
+          if (catPrice.secRate != null && catPrice.secRate > 0) {
+            secRate = Number(catPrice.secRate);
+          }
+        }
+      }
+    }
+
+    return { rate: priRate, secRate };
+  };
+
+  const handleCustomerChange = (newAccount: string) => {
+    form.setFieldValue('account', newAccount);
+    setSaleLines(prev => prev.map(l => {
+      if (!l.itemId) return l;
+      const { rate: newPriRate, secRate: newSecRate } = resolveItemRates(l.itemId, newAccount);
+      const qty = l.qty || 1;
+      const secQty = l.secQty || 0;
+      const disc = l.discount || 0;
+      const carriage = l.carriage || 0;
+      const amount = round(((qty * newPriRate) + (secQty * newSecRate)) - disc + carriage, 2);
+      return {
+        ...l,
+        rate: newPriRate,
+        secRate: newSecRate,
+        amount
+      };
+    }));
   };
 
   const fetchDetail = async () => {
@@ -471,11 +518,12 @@ export const NormalSaleForm: React.FC = () => {
 
           if (field === 'itemId') {
             if (item) {
+              const currentCust = form.getFieldValue('account');
+              const { rate: resolvedRate, secRate: resolvedSecRate } = resolveItemRates(item.id, currentCust);
               updated.unit = item.defaultUnit || item.primaryUnit;
-              updated.rate = item.priRate || 0;
+              updated.rate = resolvedRate;
               updated.secUnit = item.secondaryUnit;
-              const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 0);
-              updated.secRate = item.secRate || ((item.priRate || 0) * (pSize > 0 ? pSize : 1));
+              updated.secRate = resolvedSecRate;
               updated.secQty = 0;
             }
           }
@@ -520,7 +568,9 @@ export const NormalSaleForm: React.FC = () => {
     _isVariableWeight?: boolean
   ) => {
     const autoIncrement = getSetting(BARCODE_FAST_SCAN_INCREMENT_KEY, 'true') !== 'false';
-    const effectiveRate = customRate !== undefined ? customRate : (scannedItem.priRate || 0);
+    const currentCust = form.getFieldValue('account');
+    const { rate: resolvedRate, secRate: resolvedSecRate } = resolveItemRates(scannedItem.id, currentCust);
+    const effectiveRate = customRate !== undefined ? customRate : resolvedRate;
 
     setSaleLines(prev => {
       // If same record with SAME price exists, increment quantity; otherwise add new row
@@ -548,9 +598,8 @@ export const NormalSaleForm: React.FC = () => {
       }
 
       const emptyRowIndex = prev.findIndex(l => !l.itemId);
-      const pSize = Number(scannedItem.qtyInPack || (scannedItem as any).QtyInPack || (scannedItem as any).qty_in_pack || 0);
       const rate = effectiveRate;
-      const secRate = scannedItem.secRate || (rate * (pSize > 0 ? pSize : 1));
+      const secRate = resolvedSecRate;
       const amount = customAmount !== undefined ? customAmount : round(scanQty * rate, 2);
 
       if (emptyRowIndex >= 0) {
@@ -1235,6 +1284,7 @@ export const NormalSaleForm: React.FC = () => {
                 optionFilterProp="children"
                 className="pos-customer-select"
                 prefix={<UserOutlined />}
+                onChange={handleCustomerChange}
                 filterOption={(input, option) =>
                   (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
                 }

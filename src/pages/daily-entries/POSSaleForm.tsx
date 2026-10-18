@@ -28,7 +28,7 @@ import dayjs from 'dayjs';
 import { saleService } from '../../services/saleService';
 import { offlineCacheService, OfflineCacheMissError } from '../../services/offlineCacheService';
 import type { ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
-import type { Item } from '../../services/inventoryService';
+import { inventoryService, type Item, type ItemCustomerCategoryPriceDto } from '../../services/inventoryService';
 import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCategoryService';
 import type { NarrationDto } from '../../services/narrationService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
@@ -86,6 +86,7 @@ export const POSSaleForm: React.FC = () => {
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [categories, setCategories] = useState<ItemCategoryDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [categoryPrices, setCategoryPrices] = useState<ItemCustomerCategoryPriceDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [units, setUnits] = useState<{ code: string; title: string }[]>([]);
   const [diningTables, setDiningTables] = useState<DiningTableDto[]>([]);
@@ -266,12 +267,38 @@ export const POSSaleForm: React.FC = () => {
       .then(setUnits)
       .catch(() => { /* Non-critical */ });
 
+    inventoryService.getCustomerCategoryPrices()
+      .then(setCategoryPrices)
+      .catch(() => { /* Non-critical */ });
+
     if (hasKotFeature) {
       kotService.getDiningTables()
         .then(setDiningTables)
         .catch(console.error);
     }
   }, []);
+
+  const resolveCustomerItemRate = (itemId: string, customerAccount?: string | null, unit?: string): number => {
+    const item = items.find(i => i.id === itemId);
+    if (!item) return 0;
+    const isSec = !!(unit && item.secondaryUnit && unit.trim().toLowerCase() === item.secondaryUnit.trim().toLowerCase());
+    const defaultRate = isSec ? (item.secRate || item.priRate || 0) : (item.priRate || 0);
+    if (!customerAccount) return defaultRate;
+
+    const cust = customers.find(c => c.account === customerAccount);
+    if (!cust?.customerCategoryId) return defaultRate;
+
+    const catPrice = categoryPrices.find(p => p.itemId === itemId && p.customerCategoryId === cust.customerCategoryId);
+    if (catPrice) {
+      if (isSec && catPrice.secRate != null && catPrice.secRate > 0) {
+        return catPrice.secRate;
+      }
+      if (!isSec && catPrice.priRate > 0) {
+        return catPrice.priRate;
+      }
+    }
+    return defaultRate;
+  };
 
   const filteredItems = items.filter(item => {
     const matchesCategory = activeCategory === 'all' || item.itemCategoryCode === activeCategory;
@@ -286,7 +313,9 @@ export const POSSaleForm: React.FC = () => {
   );
 
   const handleAddToCart = (item: Item, scanQty: number = 1, customRate?: number, customUnit?: string) => {
-    const effectiveRate = customRate !== undefined ? customRate : (item.priRate || 0);
+    const unit = customUnit || item.defaultUnit || item.primaryUnit || '';
+    const catRate = resolveCustomerItemRate(item.id, selectedCustomer?.account, unit);
+    const effectiveRate = customRate !== undefined ? customRate : catRate;
 
     setCart(prev => {
       // If same record with SAME price exists in cart, increment quantity; otherwise add new row
@@ -375,19 +404,21 @@ export const POSSaleForm: React.FC = () => {
   const handleAddWithPreset = (item: Item, preset: PresetOption) => {
     let targetQty = 1;
     let targetUnit = item.defaultUnit || item.primaryUnit || '';
-    let targetRate = item.priRate || 0;
+    let targetRate = resolveCustomerItemRate(item.id, selectedCustomer?.account, targetUnit);
 
     if (preset.type === 'rs') {
-      if (item.priRate > 0) {
-        targetQty = parseFloat((preset.value / item.priRate).toFixed(3));
+      if (targetRate > 0) {
+        targetQty = parseFloat((preset.value / targetRate).toFixed(3));
       }
     } else if (preset.type === 'secondary') {
       const packQty = item.qtyInPack || 1000;
       targetQty = parseFloat((preset.value / packQty).toFixed(3));
-      targetUnit = item.primaryUnit || '';
+      targetUnit = item.secondaryUnit || item.primaryUnit || '';
+      targetRate = resolveCustomerItemRate(item.id, selectedCustomer?.account, targetUnit);
     } else {
       targetQty = preset.value;
       targetUnit = item.primaryUnit || '';
+      targetRate = resolveCustomerItemRate(item.id, selectedCustomer?.account, targetUnit);
     }
 
     setCart(prev => {
@@ -1838,6 +1869,10 @@ export const POSSaleForm: React.FC = () => {
                   setIsCustomerModalVisible(false);
                   setSearchCustomerQuery('');
                   message.success(`Selected customer: ${item.title}`);
+                  setCart(prev => prev.map(cartItem => ({
+                    ...cartItem,
+                    rate: resolveCustomerItemRate(cartItem.item.id, item.account, cartItem.unit)
+                  })));
                 }}
                 style={{
                   padding: '14px 20px',

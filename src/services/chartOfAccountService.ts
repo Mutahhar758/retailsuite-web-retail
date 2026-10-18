@@ -5,6 +5,7 @@ import api from './api';
 export interface ChartOfAccountHeadDto {
   account: string;
   title: string;
+  customerCategoryId?: string;
 }
 
 export interface ChartOfAccountDto {

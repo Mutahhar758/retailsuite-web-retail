@@ -118,6 +118,17 @@ export const CustomerList: React.FC = () => {
       render: (text?: string) => text ? <Text style={{ fontSize: '13px' }}>{text}</Text> : <Text type="secondary" style={{ fontSize: '13px', fontStyle: 'italic' }}>-</Text>,
     },
     {
+      title: 'Category',
+      dataIndex: 'customerCategoryTitle',
+      key: 'customerCategoryTitle',
+      width: '130px',
+      render: (cat?: string) => cat ? (
+        <Tag color="blue">{cat}</Tag>
+      ) : (
+        <Text type="secondary" style={{ fontSize: '12px', fontStyle: 'italic' }}>-</Text>
+      ),
+    },
+    {
       title: 'Status',
       dataIndex: 'active',
       key: 'active',

@@ -63,6 +63,7 @@ import { DetailAccountList } from './pages/setup/DetailAccountList';
 import { InventoryItemList } from './pages/setup/InventoryItemList';
 import { InventoryItemForm } from './pages/setup/InventoryItemForm';
 import { CustomerList } from './pages/setup/CustomerList';
+import { CustomerCategoryList } from './pages/setup/CustomerCategoryList';
 import { CustomerForm } from './pages/setup/CustomerForm';
 import { VendorList } from './pages/setup/VendorList';
 import { VendorForm } from './pages/setup/VendorForm';
@@ -231,6 +232,7 @@ function App() {
             <Route path="setup/item-details/:id" element={<InventoryItemForm />} />
             
              <Route path="setup/customers" element={<CustomerList />} />
+            <Route path="setup/customer-categories" element={<CustomerCategoryList />} />
             <Route path="setup/customers/new" element={<CustomerForm />} />
             <Route path="setup/customers/:account" element={<CustomerForm />} />
             

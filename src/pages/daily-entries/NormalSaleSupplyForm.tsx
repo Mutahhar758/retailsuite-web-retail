@@ -15,7 +15,7 @@ import { round } from '../../utils/numberUtils';
 import { saleSupplyService } from '../../services/saleSupplyService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
-import { inventoryService, type Item } from '../../services/inventoryService';
+import { inventoryService, type Item, type ItemCustomerCategoryPriceDto } from '../../services/inventoryService';
 import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
 import { customerService } from '../../services/customerService';
 import { useGridKeyboard } from '../../hooks/useGridKeyboard';
@@ -40,6 +40,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [categoryPrices, setCategoryPrices] = useState<ItemCustomerCategoryPriceDto[]>([]);
   const [supplyLines, setSupplyLines] = useState<any[]>([]);
   const [supplyOrders, setSupplyOrders] = useState<SupplyOrder[]>([]);
 
@@ -87,6 +88,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
 
   // ── Keyboard navigation ────────────────────────────────────────────────────
   const pendingFocusRef = useRef<{ rowIdx: number; colKey: 'customerId' } | null>(null);
+  const originalItemIdRef = useRef<string | null>(null);
 
   const handleAddRow = useCallback(() => {
     setSupplyLines(prev => {
@@ -151,6 +153,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
     chartOfAccountService.getCustomerAccounts().then(setCustomers);
     narrationService.getActiveNarrationsLookup().then(setNarrations);
     inventoryService.getItemsLookup().then(setItems);
+    inventoryService.getCustomerCategoryPrices().then(setCategoryPrices).catch(() => []);
     supplyOrderService.getList().then(setSupplyOrders);
 
     if (isEdit) {
@@ -185,6 +188,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
       const details = await saleSupplyService.getDetail(voucherNo!);
       if (details.length > 0) {
         const first = details[0];
+        originalItemIdRef.current = first.itemId;
         form.setFieldsValue({
           date: dayjs(first.date),
           itemId: first.itemId,
@@ -201,7 +205,10 @@ export const NormalSaleSupplyForm: React.FC = () => {
           carriage: d.carriage || 0,
           secQty: d.secQty,
           secRate: d.secRate,
-          secUnit: d.secUnit
+          secUnit: d.secUnit,
+          isExisting: true,
+          savedRate: d.rate,
+          savedSecRate: d.secRate
         })));
       }
     } catch {
@@ -209,6 +216,59 @@ export const NormalSaleSupplyForm: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const resolveSellingRate = (customerId?: string, itemId?: string, customRate?: number | null) => {
+    if (customRate != null && customRate > 0) return customRate;
+
+    const item = items.find(i => String(i.id) === String(itemId));
+    if (!item) return 0;
+
+    const hasSec = !!(item.secondaryUnit && item.secondaryUnit.trim());
+    const isSec = hasSec && !!(item.defaultUnit && item.defaultUnit.trim().toLowerCase() === item.secondaryUnit?.trim().toLowerCase());
+    let baseRate = (isSec && (item.secRate || 0) > 0) ? (item.secRate || 0) : (item.priRate || 0);
+
+    if (customerId && itemId) {
+      const cust = customers.find(c => c.account === customerId);
+      if (cust?.customerCategoryId) {
+        const catPrice = categoryPrices.find(p => String(p.itemId) === String(itemId) && p.customerCategoryId === cust.customerCategoryId);
+        if (catPrice) {
+          if (isSec && catPrice.secRate != null && catPrice.secRate > 0) {
+            return catPrice.secRate;
+          }
+          if (catPrice.priRate > 0) {
+            return catPrice.priRate;
+          }
+        }
+      }
+    }
+
+    return baseRate;
+  };
+
+  const resolveSecondaryRate = (customerId?: string, itemId?: string) => {
+    const item = items.find(i => String(i.id) === String(itemId));
+    if (!item) return 0;
+
+    const pSize = Number(item.qtyInPack || (item as any)?.QtyInPack || (item as any)?.qty_in_pack || 0);
+    let baseSecRate = item.secRate || ((item.priRate || 0) * (pSize > 0 ? pSize : 1));
+
+    if (customerId && itemId) {
+      const cust = customers.find(c => c.account === customerId);
+      if (cust?.customerCategoryId) {
+        const catPrice = categoryPrices.find(p => String(p.itemId) === String(itemId) && p.customerCategoryId === cust.customerCategoryId);
+        if (catPrice) {
+          if (catPrice.secRate != null && catPrice.secRate > 0) {
+            return catPrice.secRate;
+          }
+          if (catPrice.priRate > 0 && pSize > 0) {
+            return catPrice.priRate * pSize;
+          }
+        }
+      }
+    }
+
+    return baseSecRate;
   };
 
   const handleLoadFromSupplyOrder = async (orderId: number) => {
@@ -240,19 +300,16 @@ export const NormalSaleSupplyForm: React.FC = () => {
       }
 
       if (order && order.details) {
-        const isSec = item?.defaultUnit === item?.secondaryUnit;
-        const rate = isSec ? (item?.secRate || 0) : (item?.priRate || 0);
-        const secRate = item?.secRate || 0;
-
         const newLines = order.details.map((d, index) => {
           const setting = customerQtyMap.get(d.customerId);
           const qty = setting ? setting.qty : 1;
           const secQty = setting ? (setting.secQty || 0) : 0;
-          const lineRate = setting?.rate != null ? setting.rate : rate;
+          const lineRate = resolveSellingRate(d.customerId, masterItemId, setting?.rate);
+          const lineSecRate = resolveSecondaryRate(d.customerId, masterItemId);
           const lineDiscount = setting?.discount != null ? setting.discount : 0;
           const lineAddLess = setting?.addLess != null ? setting.addLess : 0;
           const lineCarriage = setting?.carriage != null ? setting.carriage : 0;
-          const amount = round((qty * lineRate) - lineDiscount + lineCarriage + lineAddLess + (secQty * secRate), 2);
+          const amount = round((qty * lineRate) - lineDiscount + lineCarriage + lineAddLess + (secQty * lineSecRate), 2);
 
           return {
             key: Date.now() + index,
@@ -266,7 +323,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
             carriage: lineCarriage,
             amount: amount,
             secQty: secQty,
-            secRate: secRate,
+            secRate: lineSecRate,
             secUnit: item?.secondaryUnit || ''
           };
         });
@@ -281,8 +338,10 @@ export const NormalSaleSupplyForm: React.FC = () => {
   };
 
   const handleItemChange = async (newItemId: string) => {
-    const item = items.find(i => i.id === newItemId);
+    const item = items.find(i => String(i.id) === String(newItemId));
     if (!item) return;
+
+    const isSameAsOriginal = isEdit && originalItemIdRef.current != null && String(newItemId) === String(originalItemIdRef.current);
 
     try {
       const customSupplyItems = await customerService.getSupplyItems({ itemId: newItemId });
@@ -302,32 +361,42 @@ export const NormalSaleSupplyForm: React.FC = () => {
         });
       }
 
-      const isSec = item?.defaultUnit === item?.secondaryUnit;
-      const rate = isSec ? (item?.secRate || 0) : (item?.priRate || 0);
-      const secRate = item?.secRate || 0;
-
       setSupplyLines(prev => prev.map(line => {
-        if (!line.customerId) return line;
+        const shouldPreserveRate = isSameAsOriginal && line.isExisting;
+
+        if (!line.customerId) {
+          const lineRate = shouldPreserveRate ? (line.savedRate ?? line.rate) : resolveSellingRate(undefined, newItemId, undefined);
+          const lineSecRate = shouldPreserveRate ? (line.savedSecRate ?? line.secRate) : resolveSecondaryRate(undefined, newItemId);
+          return {
+            ...line,
+            unit: item.defaultUnit || item.primaryUnit || line.unit,
+            secUnit: item.secondaryUnit || line.secUnit,
+            rate: lineRate,
+            secRate: lineSecRate,
+            amount: round(((line.qty || 1) * lineRate) + ((line.secQty || 0) * lineSecRate), 2)
+          };
+        }
         const setting = customerQtyMap.get(line.customerId);
         const qty = setting ? setting.qty : (line.qty || 1);
         const secQty = setting ? (setting.secQty || 0) : (line.secQty || 0);
-        const lineRate = setting?.rate != null ? setting.rate : rate;
+        const lineRate = shouldPreserveRate ? (line.savedRate ?? line.rate) : resolveSellingRate(line.customerId, newItemId, setting?.rate);
+        const lineSecRate = shouldPreserveRate ? (line.savedSecRate ?? line.secRate) : resolveSecondaryRate(line.customerId, newItemId);
         const lineDiscount = setting?.discount != null ? setting.discount : (line.discount || 0);
         const lineAddLess = setting?.addLess != null ? setting.addLess : (line.addLess || 0);
         const lineCarriage = setting?.carriage != null ? setting.carriage : (line.carriage || 0);
-        const amount = round((qty * lineRate) - lineDiscount + lineCarriage + lineAddLess + (secQty * secRate), 2);
+        const amount = round((qty * lineRate) - lineDiscount + lineCarriage + lineAddLess + (secQty * lineSecRate), 2);
 
         return {
           ...line,
-          unit: item?.defaultUnit || line.unit,
+          unit: item.defaultUnit || item.primaryUnit || line.unit,
           qty,
           secQty,
           rate: lineRate,
           discount: lineDiscount,
           addLess: lineAddLess,
           carriage: lineCarriage,
-          secRate,
-          secUnit: item?.secondaryUnit || line.secUnit,
+          secRate: lineSecRate,
+          secUnit: item.secondaryUnit || line.secUnit,
           amount
         };
       }));
@@ -384,6 +453,12 @@ export const NormalSaleSupplyForm: React.FC = () => {
         } else if (field === 'rate' || field === 'qty' || field === 'secRate' || field === 'secQty') {
           const disc = updated.discount || 0;
           updated.discPercent = lineGross > 0 ? round((disc / lineGross) * 100, 2) : 0;
+          if (field === 'rate' && isEdit && String(form.getFieldValue('itemId')) === String(originalItemIdRef.current)) {
+            updated.savedRate = numVal;
+          }
+          if (field === 'secRate' && isEdit && String(form.getFieldValue('itemId')) === String(originalItemIdRef.current)) {
+            updated.savedSecRate = numVal;
+          }
         }
 
         const addLess = updated.addLess || 0;
@@ -461,14 +536,13 @@ export const NormalSaleSupplyForm: React.FC = () => {
 
   const handleCustomerChange = async (key: number, customerId: string) => {
     const masterItemId = form.getFieldValue('itemId');
-    const item = items.find(i => i.id === masterItemId);
-    const isSec = item?.defaultUnit === item?.secondaryUnit;
-    const rate = isSec ? (item?.secRate || 0) : (item?.priRate || 0);
-    const secRate = item?.secRate || 0;
 
     let defQty = 1;
     let defSecQty = 0;
     let defCarriage = 0;
+    let customRate: number | undefined;
+    let customDiscount: number | undefined;
+    let customAddLess: number | undefined;
 
     if (masterItemId && customerId) {
       try {
@@ -477,22 +551,32 @@ export const NormalSaleSupplyForm: React.FC = () => {
           defQty = customItems[0].qty > 0 ? customItems[0].qty : 1;
           defSecQty = customItems[0].secQty || 0;
           if (customItems[0].carriage != null) defCarriage = customItems[0].carriage;
+          if (customItems[0].rate != null) customRate = customItems[0].rate;
+          if (customItems[0].discount != null) customDiscount = customItems[0].discount;
+          if (customItems[0].addLess != null) customAddLess = customItems[0].addLess;
         }
       } catch (err) {
         console.error('Failed to get customer supply item default', err);
       }
     }
 
+    const finalRate = resolveSellingRate(customerId, masterItemId, customRate);
+    const finalSecRate = resolveSecondaryRate(customerId, masterItemId);
+
     setSupplyLines(prev => prev.map(l => {
       if (l.key === key) {
-        const amount = round((defQty * rate) - (l.discount || 0) + defCarriage + (l.addLess || 0) + (defSecQty * secRate), 2);
+        const disc = customDiscount != null ? customDiscount : (l.discount || 0);
+        const al = customAddLess != null ? customAddLess : (l.addLess || 0);
+        const amount = round((defQty * finalRate) - disc + defCarriage + al + (defSecQty * finalSecRate), 2);
         return {
           ...l,
           customerId,
           qty: defQty,
           secQty: defSecQty,
-          rate,
-          secRate,
+          rate: finalRate,
+          secRate: finalSecRate,
+          discount: disc,
+          addLess: al,
           carriage: defCarriage,
           amount
         };

@@ -11,6 +11,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { customerService, type CustomerCreateRequest, type CustomerUpdateRequest, type CustomerSupplyItemDto } from '../../services/customerService';
+import { customerCategoryService, type CustomerCategoryLookupResponse } from '../../services/customerCategoryService';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { useAppStore } from '../../stores/useAppStore';
 import { useSettingsStore, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
@@ -48,12 +49,17 @@ export const CustomerForm: React.FC = () => {
   const [uploading, setUploading] = useState(false);
 
   const [items, setItems] = useState<Item[]>([]);
+  const [categories, setCategories] = useState<CustomerCategoryLookupResponse[]>([]);
   const [supplyLines, setSupplyLines] = useState<SupplyLineRow[]>([]);
 
   useEffect(() => {
     inventoryService.getItemsLookup()
       .then(setItems)
       .catch(err => console.error('Failed to load items lookup:', err));
+
+    customerCategoryService.getLookup()
+      .then(setCategories)
+      .catch(err => console.error('Failed to load customer categories lookup:', err));
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -81,6 +87,7 @@ export const CustomerForm: React.FC = () => {
             emailAlert: customer.emailAlert,
             active: customer.active,
             mediaId: customer.mediaId,
+            customerCategoryId: customer.customerCategoryId || undefined,
           });
           if (customer.mediaUrl) {
             setImageUrl(customer.mediaUrl);
@@ -187,6 +194,7 @@ export const CustomerForm: React.FC = () => {
           emailAlert: !!values.emailAlert,
           active: values.active !== undefined ? values.active : true,
           mediaId: values.mediaId || null,
+          customerCategoryId: values.customerCategoryId || null,
           supplyItems: validSupplyItems
         };
 
@@ -208,6 +216,7 @@ export const CustomerForm: React.FC = () => {
           emailAlert: !!values.emailAlert,
           active: values.active !== undefined ? values.active : true,
           mediaId: values.mediaId || null,
+          customerCategoryId: values.customerCategoryId || null,
           supplyItems: validSupplyItems
         };
 
@@ -522,10 +531,27 @@ export const CustomerForm: React.FC = () => {
                   <Input placeholder="e.g. John Doe / Apex Enterprises" />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={12}>
+              <Col xs={24} md={6}>
+                <Form.Item
+                  name="customerCategoryId"
+                  label="Customer Category"
+                >
+                  <Select
+                    placeholder="Select category"
+                    allowClear
+                    showSearch
+                    optionFilterProp="children"
+                  >
+                    {categories.map(c => (
+                      <Select.Option key={c.code} value={c.code}>{c.title}</Select.Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={6}>
                 <Form.Item
                   name="cnic"
-                  label="National ID / Registration (CNIC / NTN)"
+                  label="National ID / Registration"
                 >
                   <Input placeholder="e.g. 42101-1234567-1" />
                 </Form.Item>

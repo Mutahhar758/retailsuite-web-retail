@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Card, Button, Space, Typography, Form, Input, Select, InputNumber, Row, Col, Checkbox, message, Popconfirm, Upload
+  Card, Button, Space, Typography, Form, Input, Select, InputNumber, Row, Col, Checkbox, message, Popconfirm, Upload, Modal, Table
 } from 'antd';
 import { 
-  SaveOutlined, ArrowLeftOutlined, ShoppingOutlined, DeleteOutlined, UploadOutlined, LoadingOutlined, PlusOutlined
+  SaveOutlined, ArrowLeftOutlined, ShoppingOutlined, DeleteOutlined, UploadOutlined, LoadingOutlined, PlusOutlined, TagsOutlined
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { inventoryService } from '../../services/inventoryService';
+import { customerCategoryService } from '../../services/customerCategoryService';
 import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCategoryService';
 import { unitService, type UnitDto } from '../../services/unitService';
 import { brandService, type BrandLookupDto } from '../../services/brandService';
@@ -36,6 +37,67 @@ export const InventoryItemForm: React.FC = () => {
   const [brands, setBrands] = useState<BrandLookupDto[]>([]);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+
+  const [catRatesModalVisible, setCatRatesModalVisible] = useState(false);
+  const [catRatesLoading, setCatRatesLoading] = useState(false);
+  const [savingCatRates, setSavingCatRates] = useState(false);
+  const [catRates, setCatRates] = useState<Array<{
+    customerCategoryId: string;
+    customerCategoryTitle: string;
+    priRate: number;
+    secRate: number;
+  }>>([]);
+
+  const handleOpenCatRates = async () => {
+    if (!isEdit || !id) {
+      message.info('Please save the product first before configuring customer category rates.');
+      return;
+    }
+    setCatRatesModalVisible(true);
+    setCatRatesLoading(true);
+    try {
+      const [lookupCategories, existingPrices] = await Promise.all([
+        customerCategoryService.getLookup(),
+        inventoryService.getItemCategoryPrices(id)
+      ]);
+      const currentPriRate = form.getFieldValue('priRate') || 0;
+      const currentSecRate = form.getFieldValue('secRate') || 0;
+
+      const merged = lookupCategories.map(cat => {
+        const found = existingPrices.find(p => p.customerCategoryId === cat.code);
+        return {
+          customerCategoryId: cat.code,
+          customerCategoryTitle: cat.title,
+          priRate: found ? Number(found.priRate) : Number(currentPriRate),
+          secRate: found && found.secRate != null ? Number(found.secRate) : Number(currentSecRate)
+        };
+      });
+      setCatRates(merged);
+    } catch (err) {
+      console.error(err);
+      message.error('Failed to load category rates');
+    } finally {
+      setCatRatesLoading(false);
+    }
+  };
+
+  const handleSaveCatRates = async () => {
+    if (!id) return;
+    try {
+      setSavingCatRates(true);
+      await inventoryService.saveItemCategoryPrices(id, catRates.map(r => ({
+        customerCategoryId: r.customerCategoryId,
+        priRate: r.priRate,
+        secRate: r.secRate
+      })));
+      message.success('Customer category rates updated successfully');
+      setCatRatesModalVisible(false);
+    } catch (err: any) {
+      message.error(err.response?.data?.message || 'Failed to save customer category rates');
+    } finally {
+      setSavingCatRates(false);
+    }
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -344,6 +406,15 @@ export const InventoryItemForm: React.FC = () => {
 
             <div className="flex justify-between items-center mb-4 mt-6">
               <Title level={5} style={{ margin: 0 }}>Pricing & Units</Title>
+              {isEdit && (
+                <Button 
+                  icon={<TagsOutlined />} 
+                  onClick={handleOpenCatRates}
+                  style={{ borderColor: '#1677ff', color: '#1677ff' }}
+                >
+                  Customer Category Rates
+                </Button>
+              )}
             </div>
             {itemType !== 'Service' ? (
               <>
@@ -663,6 +734,70 @@ export const InventoryItemForm: React.FC = () => {
           </Col>
         </Row>
       </Form>
+
+      <Modal
+        title="Customer Category Rates"
+        open={catRatesModalVisible}
+        onCancel={() => setCatRatesModalVisible(false)}
+        onOk={handleSaveCatRates}
+        confirmLoading={savingCatRates}
+        width={650}
+        destroyOnClose
+      >
+        <Text type="secondary" className="block mb-4">
+          Define custom selling rates for this product per customer category. If no rate is defined, the default product rate will be used.
+        </Text>
+        <Table
+          dataSource={catRates}
+          rowKey="customerCategoryId"
+          loading={catRatesLoading}
+          pagination={false}
+          size="small"
+          bordered
+          columns={[
+            {
+              title: 'Customer Category',
+              dataIndex: 'customerCategoryTitle',
+              key: 'title',
+              render: (title: string) => <Text strong>{title}</Text>
+            },
+            {
+              title: 'Primary Rate (Rs)',
+              dataIndex: 'priRate',
+              key: 'priRate',
+              render: (val: number, record: any) => (
+                <InputNumber
+                  style={{ width: '100%' }}
+                  min={0}
+                  precision={2}
+                  value={val}
+                  onChange={(v) => {
+                    const newVal = v != null ? Number(v) : 0;
+                    setCatRates(prev => prev.map(r => r.customerCategoryId === record.customerCategoryId ? { ...r, priRate: newVal } : r));
+                  }}
+                />
+              )
+            },
+            {
+              title: 'Secondary Rate (Rs)',
+              dataIndex: 'secRate',
+              key: 'secRate',
+              render: (val: number, record: any) => (
+                <InputNumber
+                  style={{ width: '100%' }}
+                  min={0}
+                  precision={2}
+                  value={val}
+                  onChange={(v) => {
+                    const newVal = v != null ? Number(v) : 0;
+                    setCatRates(prev => prev.map(r => r.customerCategoryId === record.customerCategoryId ? { ...r, secRate: newVal } : r));
+                  }}
+                />
+              )
+            }
+          ]}
+        />
+      </Modal>
     </Card>
   );
 };
