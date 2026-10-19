@@ -78,6 +78,15 @@ assert(res6 !== null && res6.matchedItem.id === '102' && res6.qty === 3 && res6.
 const res7 = parseBarcodePayload('8964001100013', mockItems);
 assert(res7 !== null && res7.matchedItem.id === '102' && res7.qty === 1, 'Standard barcode scan');
 
+// Test 8: Compact 18-digit Variable Barcode (2 + 6-digit Item + 5-digit Qty + 6-digit Amount)
+// Prefix 2, Item 000101 (Item 101), 325 grams (0.325 kg), Rs. 325 total
+const res8 = parseBarcodePayload('200010100325000325', mockItems);
+assert(res8 !== null && res8.matchedItem.id === '101', '18-digit compact resolves Item 101');
+assert(res8?.qty === 0.325, `Qty is 0.325 kg (got ${res8?.qty})`);
+assert(res8?.amount === 325, `Amount is 325 (got ${res8?.amount})`);
+assert(res8?.rate === 1000, `Rate is 1000 (got ${res8?.rate})`);
+assert(res8?.isVariableWeight === true, 'isVariableWeight is true');
+
 if (failed > 0) {
   process.exit(1);
 } else {

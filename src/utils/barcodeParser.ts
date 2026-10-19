@@ -38,6 +38,36 @@ export function parseBarcodePayload(
   const raw = (rawInput || '').trim();
   if (!raw || items.length === 0) return null;
 
+  const cleanDigits = raw.replace(/\D/g, '');
+
+  // -------------------------------------------------------------
+  // 0. RetailSuite Compact 18-digit Variable Barcode: 2 + IIIIII + QQQQQ + AAAAAA
+  // Prefix 2 (1 digit) + Item ID (6 digits) + Qty*1000 (5 digits) + Amount (6 digits, whole number max 9 lac)
+  // e.g. 200010500325000450 -> Item 000105, 0.325 kg (325g), Rs. 450
+  // -------------------------------------------------------------
+  if (cleanDigits.length === 18 && cleanDigits.startsWith('2')) {
+    const itemPart = cleanDigits.substring(1, 7);
+    const qtyPart = cleanDigits.substring(7, 12);
+    const amtPart = cleanDigits.substring(12, 18);
+
+    const item = findItemByPlu(itemPart, items) || findItemByCode(itemPart, items);
+    if (item) {
+      const parsedQty = round3(parseInt(qtyPart, 10) / 1000);
+      const totalAmt = round2(parseInt(amtPart, 10));
+      const effectiveRate = parsedQty > 0 ? round2(totalAmt / parsedQty) : (item.priRate || 0);
+
+      return {
+        matchedItem: item,
+        qty: parsedQty,
+        rate: effectiveRate,
+        amount: totalAmt,
+        isVariableWeight: true,
+        unit: item.defaultUnit || item.primaryUnit || 'kg',
+        rawCode: raw
+      };
+    }
+  }
+
   // -------------------------------------------------------------
   // 1. RetailSuite Variable Code-128: VW-{ItemCode}-Q{qty}-R{rate}
   // -------------------------------------------------------------
@@ -115,7 +145,6 @@ export function parseBarcodePayload(
   // 3. Mart Weighing Machine Barcodes (EAN-13 Scale Barcodes)
   // Format: 2X IIIII VVVVV C (13 numeric digits)
   // -------------------------------------------------------------
-  const cleanDigits = raw.replace(/\D/g, '');
   if (cleanDigits.length === 13) {
     const prefixes = scaleConfig?.scalePrefixes || DEFAULT_SCALE_PREFIXES;
     const prefix = cleanDigits.substring(0, 2);

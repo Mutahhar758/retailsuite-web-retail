@@ -225,6 +225,34 @@ export const BarcodePrint: React.FC = () => {
     }
   };
 
+  // Generate barcode string (uses compact 18-digit Code-128C format: 2 + IIIIII + QQQQQ + AAAAAA)
+  const generateBarcodeString = (
+    item: ProductOption,
+    variableWeight: boolean,
+    qty: number,
+    price: number,
+    amt: number
+  ): string => {
+    const baseCode = (item.barcode || item.id)?.replace(/[\r\n]/g, '').trim() || '000000';
+    if (!variableWeight) return baseCode;
+
+    // Compact 18-digit format: 2 (prefix) + 6-digit Item ID + 5-digit Qty (x1000) + 6-digit Amount
+    const numericId = !isNaN(Number(item.id))
+      ? String(parseInt(item.id, 10)).padStart(6, '0')
+      : (!isNaN(Number(baseCode)) ? String(parseInt(baseCode, 10)).padStart(6, '0') : null);
+
+    if (numericId && numericId.length <= 6) {
+      const qtyGrams = Math.min(99999, Math.max(1, Math.round((qty || 1) * 1000))).toString().padStart(5, '0');
+      const calcAmount = amt > 0 ? Math.round(amt) : Math.round((qty || 1) * price);
+      const amtWhole = Math.min(999999, Math.max(0, calcAmount)).toString().padStart(6, '0');
+      return `2${numericId}${qtyGrams}${amtWhole}`;
+    }
+
+    // Fallback if ID is alphanumeric:
+    const defaultRate = Math.round(item.priRate || 0);
+    return price === defaultRate ? `${baseCode}*${qty}` : `${baseCode}*${qty}*${price}`;
+  };
+
   // Add current item to batch queue
   const handleAddToBatch = () => {
     if (!selectedItem) {
@@ -232,11 +260,7 @@ export const BarcodePrint: React.FC = () => {
       return;
     }
 
-    const baseCode = (selectedItem.barcode || selectedItem.id)?.replace(/[\r\n]/g, '').trim();
-    const defaultRate = Math.round(selectedItem.priRate || 0);
-    const finalBarcode = isVariableWeight
-      ? (printPrice === defaultRate ? `${baseCode}*${printQty}` : `${baseCode}*${printQty}*${printPrice}`)
-      : baseCode;
+    const finalBarcode = generateBarcodeString(selectedItem, isVariableWeight, printQty, printPrice, totalAmount);
 
     const newItem: BarcodePrintItem = {
       itemId: selectedItem.id,
@@ -275,11 +299,7 @@ export const BarcodePrint: React.FC = () => {
     if (batchQueue.length > 0) {
       itemsToPrint = [...batchQueue];
     } else if (selectedItem) {
-      const baseCode = (selectedItem.barcode || selectedItem.id)?.replace(/[\r\n]/g, '').trim();
-      const defaultRate = Math.round(selectedItem.priRate || 0);
-      const finalBarcode = isVariableWeight
-        ? (printPrice === defaultRate ? `${baseCode}*${printQty}` : `${baseCode}*${printQty}*${printPrice}`)
-        : baseCode;
+      const finalBarcode = generateBarcodeString(selectedItem, isVariableWeight, printQty, printPrice, totalAmount);
 
       itemsToPrint = [{
         itemId: selectedItem.id,
