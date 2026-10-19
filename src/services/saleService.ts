@@ -20,6 +20,30 @@ export interface Sale {
   lastModifiedOn?: string;
 }
 
+export interface CustomerItemSaleRecord {
+  voucherNo: string;
+  vType?: string;
+  date: string;
+  qty: number;
+  rate: number;
+  discount?: number;
+  secQty?: number;
+  secRate?: number;
+  amount: number;
+}
+
+export interface CustomerItemPriceHistoryResponse {
+  hasHistory: boolean;
+  lastSaleDate?: string;
+  lastRate?: number;
+  lastQty?: number;
+  lastDiscount?: number;
+  lastSecRate?: number;
+  lastVoucherNo?: string;
+  lastVType?: string;
+  recentSales: CustomerItemSaleRecord[];
+}
+
 export interface SaleLine {
   seq: number;
   date: string;
@@ -108,6 +132,13 @@ export const saleService = {
   async getDetail(voucherNo: string) {
     const response = await api.get(`/api/sales/${voucherNo}`);
     return response.data.body as SaleLine[];
+  },
+
+  async getCustomerItemHistory(accountId: string, itemId: string): Promise<CustomerItemPriceHistoryResponse> {
+    const response = await api.get('/api/sales/customer-history', {
+      params: { accountId, itemId }
+    });
+    return response.data.body as CustomerItemPriceHistoryResponse;
   },
 
   /**

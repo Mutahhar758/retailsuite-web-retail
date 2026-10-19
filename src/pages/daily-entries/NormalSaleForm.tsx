@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
-  Table, Space, message, InputNumber, Popconfirm, Tag, Alert, Modal
+  Table, Space, message, InputNumber, Popconfirm, Tag, Alert, Modal, Tooltip
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
   RocketOutlined, UserOutlined, FileTextOutlined, WifiOutlined, DisconnectOutlined,
-  CopyOutlined
+  CopyOutlined, HistoryOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -20,6 +20,7 @@ import { useAppStore } from '../../stores/useAppStore';
 import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, TRANSACTION_ENABLE_CARRIAGE_KEY, MOBILE_SHOP_ENABLE_KEY, BARCODE_FAST_SCAN_INCREMENT_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 import { BarcodeFastScanBar } from '../../components/common/BarcodeFastScanBar';
+import { CustomerPriceHistoryModal } from '../../components/sale/CustomerPriceHistoryModal';
 
 const { Title, Text } = Typography;
 
@@ -61,6 +62,11 @@ export const NormalSaleForm: React.FC = () => {
   const [cacheMissError, setCacheMissError] = useState<string | null>(null);
   const prevTotalAmountRef = useRef(0);
   const originalAccountIdRef = useRef<string | null>(null);
+
+  // Price history modal state
+  const [historyModalVisible, setHistoryModalVisible] = useState(false);
+  const [historyTargetLineKey, setHistoryTargetLineKey] = useState<number | null>(null);
+  const [historyTargetItemId, setHistoryTargetItemId] = useState<string | null>(null);
 
   // Multi-tab state management for rapid checkout drafts
   const [tabs, setTabs] = useState<SaleTab[]>(() => {
@@ -587,6 +593,46 @@ export const NormalSaleForm: React.FC = () => {
     });
   };
 
+  const handleOpenPriceHistory = (lineKey: number, itemId: string) => {
+    const currentCust = form.getFieldValue('account');
+    if (!currentCust) {
+      message.warning('Please select a customer first.');
+      return;
+    }
+    if (!itemId) {
+      message.warning('Please select an item first.');
+      return;
+    }
+    setHistoryTargetLineKey(lineKey);
+    setHistoryTargetItemId(itemId);
+    setHistoryModalVisible(true);
+  };
+
+  const handleApplyHistoricalRate = (rate: number, secRate?: number) => {
+    if (historyTargetLineKey !== null) {
+      setSaleLines(prev => {
+        return prev.map(l => {
+          if (l.key === historyTargetLineKey) {
+            const updated = { ...l, rate };
+            if (hasSecondaryQty && secRate !== undefined) {
+              updated.secRate = secRate;
+            }
+            const qty = updated.qty || 0;
+            const r = updated.rate || 0;
+            const disc = updated.discount || 0;
+            const carriage = updated.carriage || 0;
+            const secQty = updated.secQty || 0;
+            const sr = updated.secRate || 0;
+            updated.amount = round(((qty * r) + (secQty * sr)) - disc + carriage, 2);
+            return updated;
+          }
+          return l;
+        });
+      });
+      message.success(`Applied historical rate: ₨ ${rate}`);
+    }
+  };
+
   const handleBarcodeScanned = (
     scannedItem: Item,
     scanQty: number = 1,
@@ -965,19 +1011,29 @@ export const NormalSaleForm: React.FC = () => {
       title: hasSecondaryQty ? 'Single Rate' : 'Rate',
       dataIndex: 'rate',
       key: 'rate',
-      width: 100,
+      width: 140,
       render: (val: number, record: any) => (
-        <InputNumber
-          style={{ width: '100%' }}
-          value={val}
-          min={0}
-          precision={4}
-          step={0.01}
-          formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-          parser={value => value?.replace(/[^0-9.]/g, '') as any}
-          onChange={(v) => updateLine(record.key, 'rate', v)}
-          tabIndex={-1}
-        />
+        <Space.Compact style={{ width: '100%' }}>
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            precision={4}
+            step={0.01}
+            formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            parser={value => value?.replace(/[^0-9.]/g, '') as any}
+            onChange={(v) => updateLine(record.key, 'rate', v)}
+            tabIndex={-1}
+          />
+          <Tooltip title="View last sale price & history">
+            <Button
+              icon={<HistoryOutlined style={{ color: record.itemId ? '#1677ff' : undefined }} />}
+              disabled={!record.itemId}
+              onClick={() => handleOpenPriceHistory(record.key, record.itemId)}
+              tabIndex={-1}
+            />
+          </Tooltip>
+        </Space.Compact>
       )
     },
     ...(hasSecondaryQty ? [
@@ -1429,6 +1485,19 @@ export const NormalSaleForm: React.FC = () => {
           </Row>
         </div>
       </Form>
+
+      <CustomerPriceHistoryModal
+        visible={historyModalVisible}
+        onClose={() => setHistoryModalVisible(false)}
+        accountId={form.getFieldValue('account')}
+        customerName={
+          customers.find(c => c.account === form.getFieldValue('account') || c.id === form.getFieldValue('account'))?.title
+        }
+        itemId={historyTargetItemId}
+        itemTitle={items.find(i => String(i.id) === String(historyTargetItemId))?.title}
+        hasSecondaryQty={hasSecondaryQty}
+        onApplyRate={handleApplyHistoricalRate}
+      />
     </Card>
   );
 };

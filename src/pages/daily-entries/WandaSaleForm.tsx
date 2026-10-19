@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
-  Table, Space, message, InputNumber, Popconfirm, Tag, Alert, Modal
+  Table, Space, message, InputNumber, Popconfirm, Tag, Alert, Modal, Tooltip
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
   RocketOutlined, UserOutlined, FileTextOutlined, WifiOutlined, DisconnectOutlined,
-  CopyOutlined
+  CopyOutlined, HistoryOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -18,6 +18,7 @@ import { inventoryService, type Item, type ItemCustomerCategoryPriceDto } from '
 import { useSettingsStore, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { CustomerPriceHistoryModal } from '../../components/sale/CustomerPriceHistoryModal';
 
 const { Title, Text } = Typography;
 
@@ -52,6 +53,11 @@ export const WandaSaleForm: React.FC = () => {
   const [cacheMissError, setCacheMissError] = useState<string | null>(null);
   const prevTotalAmountRef = useRef(0);
   const originalAccountIdRef = useRef<string | null>(null);
+
+  // Price history modal state
+  const [historyModalVisible, setHistoryModalVisible] = useState(false);
+  const [historyTargetLineKey, setHistoryTargetLineKey] = useState<number | null>(null);
+  const [historyTargetItemId, setHistoryTargetItemId] = useState<string | null>(null);
 
   // Multi-tab state management for rapid checkout drafts
   const [tabs, setTabs] = useState<SaleTab[]>(() => {
@@ -654,6 +660,32 @@ export const WandaSaleForm: React.FC = () => {
     });
   };
 
+  const handleOpenPriceHistory = (lineKey: number, itemId: string) => {
+    const currentCust = form.getFieldValue('account');
+    if (!currentCust) {
+      message.warning('Please select a customer first.');
+      return;
+    }
+    if (!itemId) {
+      message.warning('Please select an item first.');
+      return;
+    }
+    setHistoryTargetLineKey(lineKey);
+    setHistoryTargetItemId(itemId);
+    setHistoryModalVisible(true);
+  };
+
+  const handleApplyHistoricalRate = (rate: number, secRate?: number) => {
+    if (historyTargetLineKey !== null) {
+      if (secRate !== undefined && secRate > 0) {
+        updateLine(historyTargetLineKey, 'secRate', secRate);
+      } else {
+        updateLine(historyTargetLineKey, 'rate', rate);
+      }
+      message.success(`Applied historical rate: ₨ ${rate}`);
+    }
+  };
+
   const totalAmount = saleLines.reduce((sum, l) => sum + (l.amount || 0), 0);
   const cashReceipt = Form.useWatch('cashReceipt', form) || 0;
   const cashBack = Form.useWatch('cashBack', form) || 0;
@@ -863,26 +895,36 @@ export const WandaSaleForm: React.FC = () => {
       title: 'Rate (/Kg)',
       dataIndex: 'rate',
       key: 'rate',
-      width: 100,
+      width: 140,
       render: (val: number, record: any) => (
-        <InputNumber
-          style={{ width: '100%' }}
-          value={val}
-          min={0}
-          step={0.01}
-          formatter={(value: any, info: any) => {
-            if (value == null || value === '') return '';
-            if (info?.userTyping) {
-              return `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-            }
-            const num = Number(value);
-            if (isNaN(num)) return `${value}`;
-            return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-          }}
-          parser={value => value?.replace(/[^0-9.]/g, '') as any}
-          onChange={(v) => updateLine(record.key, 'rate', v)}
-          tabIndex={0}
-        />
+        <Space.Compact style={{ width: '100%' }}>
+          <InputNumber
+            style={{ width: '100%' }}
+            value={val}
+            min={0}
+            step={0.01}
+            formatter={(value: any, info: any) => {
+              if (value == null || value === '') return '';
+              if (info?.userTyping) {
+                return `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+              }
+              const num = Number(value);
+              if (isNaN(num)) return `${value}`;
+              return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }}
+            parser={value => value?.replace(/[^0-9.]/g, '') as any}
+            onChange={(v) => updateLine(record.key, 'rate', v)}
+            tabIndex={0}
+          />
+          <Tooltip title="View last sale price & history">
+            <Button
+              icon={<HistoryOutlined style={{ color: record.itemId ? '#1677ff' : undefined }} />}
+              disabled={!record.itemId}
+              onClick={() => handleOpenPriceHistory(record.key, record.itemId)}
+              tabIndex={-1}
+            />
+          </Tooltip>
+        </Space.Compact>
       )
     },
     {
@@ -1313,6 +1355,19 @@ export const WandaSaleForm: React.FC = () => {
           </Row>
         </div>
       </Form>
+
+      <CustomerPriceHistoryModal
+        visible={historyModalVisible}
+        onClose={() => setHistoryModalVisible(false)}
+        accountId={form.getFieldValue('account')}
+        customerName={
+          customers.find(c => c.account === form.getFieldValue('account') || c.id === form.getFieldValue('account'))?.title
+        }
+        itemId={historyTargetItemId}
+        itemTitle={items.find(i => String(i.id) === String(historyTargetItemId))?.title}
+        hasSecondaryQty={true}
+        onApplyRate={handleApplyHistoricalRate}
+      />
     </Card>
   );
 };
