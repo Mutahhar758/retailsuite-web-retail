@@ -17,6 +17,18 @@ export interface ScaleBarcodeConfig {
   priceDecimals?: number;   // default 2 or 0
 }
 
+/**
+ * Resolves user-friendly unit title (e.g. 'kg', 'pcs') instead of raw numeric unit ID/code (e.g. '004', '1').
+ */
+export function resolveItemUnitTitle(item?: Item | null): string {
+  if (!item) return 'kg';
+  if (item.defaultUnitTitle && item.defaultUnitTitle.trim()) return item.defaultUnitTitle.trim();
+  if (item.primaryUnitTitle && item.primaryUnitTitle.trim()) return item.primaryUnitTitle.trim();
+  if (item.defaultUnit && isNaN(Number(item.defaultUnit))) return item.defaultUnit.trim();
+  if (item.primaryUnit && isNaN(Number(item.primaryUnit))) return item.primaryUnit.trim();
+  return 'kg';
+}
+
 const DEFAULT_SCALE_PREFIXES = ['20', '21', '22', '23', '24', '25', '28'];
 
 /**
@@ -62,7 +74,7 @@ export function parseBarcodePayload(
         rate: effectiveRate,
         amount: totalAmt,
         isVariableWeight: true,
-        unit: item.defaultUnit || item.primaryUnit || 'kg',
+        unit: resolveItemUnitTitle(item),
         rawCode: raw
       };
     }
@@ -108,7 +120,7 @@ export function parseBarcodePayload(
           rate: effectiveRate,
           amount: effectiveAmount,
           isVariableWeight: true,
-          unit: item.defaultUnit || item.primaryUnit,
+          unit: resolveItemUnitTitle(item),
           rawCode: raw
         };
       }
@@ -134,7 +146,7 @@ export function parseBarcodePayload(
           rate,
           amount: round2(qVal * rate),
           isVariableWeight: true,
-          unit: item.defaultUnit || item.primaryUnit,
+          unit: resolveItemUnitTitle(item),
           rawCode: raw
         };
       }
@@ -175,7 +187,7 @@ export function parseBarcodePayload(
             rate,
             amount,
             isVariableWeight: true,
-            unit: item.defaultUnit || item.primaryUnit || 'kg',
+            unit: resolveItemUnitTitle(item),
             rawCode: raw
           };
         } else {
@@ -190,7 +202,7 @@ export function parseBarcodePayload(
             rate: baseRate > 0 ? baseRate : totalPrice,
             amount: totalPrice,
             isVariableWeight: true,
-            unit: item.defaultUnit || item.primaryUnit,
+            unit: resolveItemUnitTitle(item),
             rawCode: raw
           };
         }
@@ -245,7 +257,7 @@ export function parseBarcodePayload(
       rate,
       amount: round2(scanQty * rate),
       isVariableWeight: false,
-      unit: matchedItem.defaultUnit || matchedItem.primaryUnit,
+      unit: resolveItemUnitTitle(matchedItem),
       rawCode: raw
     };
   }

@@ -273,7 +273,7 @@ export const BarcodeFastScanBar: React.FC<BarcodeFastScanBarProps> = ({
           >
             {lastScanned.isVariableWeight ? (
               <>
-                Added: {lastScanned.item.title} ({lastScanned.qty} {lastScanned.unit ?? 'kg'} @ Rs. {Number(lastScanned.rate || 0).toLocaleString()} = Rs. {Number(lastScanned.amount || 0).toLocaleString()})
+                Added: {lastScanned.item.title} ({lastScanned.qty} {(!lastScanned.unit || !isNaN(Number(lastScanned.unit))) ? (lastScanned.item.defaultUnitTitle || lastScanned.item.primaryUnitTitle || 'kg') : lastScanned.unit} @ Rs. {Number(lastScanned.rate || 0).toLocaleString()} = Rs. {Number(lastScanned.amount || 0).toLocaleString()})
               </>
             ) : (
               <>

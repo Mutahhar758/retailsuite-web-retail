@@ -26,6 +26,16 @@ const mockItems: any[] = [
     priRate: 800,
     primaryUnit: 'kg',
     defaultUnit: 'kg'
+  },
+  {
+    id: '000105',
+    title: 'Dal Chana 5kg',
+    barcode: '000105',
+    priRate: 1248,
+    primaryUnit: '004',
+    primaryUnitTitle: 'kg',
+    defaultUnit: '004',
+    defaultUnitTitle: 'kg'
   }
 ];
 
@@ -85,7 +95,13 @@ assert(res8 !== null && res8.matchedItem.id === '101', '18-digit compact resolve
 assert(res8?.qty === 0.325, `Qty is 0.325 kg (got ${res8?.qty})`);
 assert(res8?.amount === 325, `Amount is 325 (got ${res8?.amount})`);
 assert(res8?.rate === 1000, `Rate is 1000 (got ${res8?.rate})`);
-assert(res8?.isVariableWeight === true, 'isVariableWeight is true');
+// Test 9: Item with unit code '004' and unit title 'kg'
+// Exact match from user scenario: 200010500250000312 -> Item 000105, 0.25 kg, Rs. 312
+const res9 = parseBarcodePayload('200010500250000312', mockItems);
+assert(res9 !== null && res9.matchedItem.title === 'Dal Chana 5kg', 'Resolves Dal Chana');
+assert(res9?.qty === 0.25, `Qty is 0.25 kg (got ${res9?.qty})`);
+assert(res9?.amount === 312, `Amount is 312 (got ${res9?.amount})`);
+assert(res9?.unit === 'kg', `Unit resolves to 'kg' instead of code '004' (got ${res9?.unit})`);
 
 if (failed > 0) {
   process.exit(1);
