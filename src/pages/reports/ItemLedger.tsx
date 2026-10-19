@@ -165,9 +165,9 @@ export const ItemLedger: React.FC = () => {
         baseRow.push(line.costPrice != null ? line.costPrice.toFixed(2) : '-');
       }
       baseRow.push(
-        line.qtyIn.toFixed(2),
-        line.qtyOut.toFixed(2),
-        line.balance.toFixed(2)
+        line.qtyInDisplay || line.qtyIn.toFixed(2),
+        line.qtyOutDisplay || line.qtyOut.toFixed(2),
+        line.balanceDisplay || line.balance.toFixed(2)
       );
       return baseRow;
     });
@@ -221,9 +221,9 @@ export const ItemLedger: React.FC = () => {
           <td style="border: 1px solid #e5e7eb; padding: 6px;">${line.particular || ''}</td>
           <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${line.rate ? line.rate.toFixed(2) : '-'}</td>
           ${showCostPrice ? `<td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: #4338ca;">${line.costPrice != null ? line.costPrice.toFixed(2) : '-'}</td>` : ''}
-          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: ${line.qtyIn > 0 ? '#15803d' : '#374151'};">${line.qtyIn > 0 ? line.qtyIn.toFixed(2) : '-'}</td>
-          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: ${line.qtyOut > 0 ? '#b91c1c' : '#374151'};">${line.qtyOut > 0 ? line.qtyOut.toFixed(2) : '-'}</td>
-          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; font-weight: bold;">${line.balance.toFixed(2)}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: ${line.qtyIn > 0 ? '#15803d' : '#374151'};">${line.qtyIn > 0 ? (line.qtyInDisplay || line.qtyIn.toFixed(2)) : '-'}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: ${line.qtyOut > 0 ? '#b91c1c' : '#374151'};">${line.qtyOut > 0 ? (line.qtyOutDisplay || line.qtyOut.toFixed(2)) : '-'}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; font-weight: bold;">${line.balanceDisplay || line.balance.toFixed(2)}</td>
         </tr>
       `;
     });

@@ -24,6 +24,7 @@ export interface Item {
   mediaId?: string;
   mediaUrl?: string;
   quickQtyPresets?: string;
+  additionalUnits?: string | null;
   requireImei?: boolean;
   brandId?: string;
   brandTitle?: string;
@@ -52,6 +53,7 @@ export interface InventoryItemUpsertRequest {
   itemType?: string;
   mediaId?: string;
   quickQtyPresets?: string;
+  additionalUnits?: string | null;
   requireImei?: boolean;
   brandId?: string;
   modelName?: string;
@@ -63,6 +65,10 @@ export interface InventoryItemUpsertRequest {
 export interface Unit {
   code: string;
   title: string;
+  shortTitle?: string | null;
+  parentUnitId?: string | null;
+  parentUnitTitle?: string | null;
+  conversionRatio?: number | null;
 }
 
 export const inventoryService = {

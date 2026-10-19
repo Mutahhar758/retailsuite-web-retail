@@ -12,6 +12,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAppStore } from '../../stores/useAppStore';
 import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
+import { getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
 import { saleSupplyService } from '../../services/saleSupplyService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
@@ -436,12 +437,40 @@ export const NormalSaleSupplyForm: React.FC = () => {
     setSupplyLines(supplyLines.filter(l => l.key !== key));
   };
 
+  const watchedItemId = Form.useWatch('itemId', form);
+
   const updateLine = (key: number, field: string, value: any) => {
+    const masterItemId = watchedItemId || form.getFieldValue('itemId');
+    const item = items.find(i => String(i.id) === String(masterItemId));
+
     const newLines = supplyLines.map(l => {
       if (l.key === key) {
         const updated = { ...l, [field]: value };
         const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
         const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
+
+        if (field === 'selectedUnitId') {
+          const selectable = getSelectablePrimaryUnits(item);
+          const selectedOpt = selectable.find(u => u.unitId === value);
+          const factor = selectedOpt?.factor || 1;
+          const currentDisplayQty = l.displayQty !== undefined
+            ? l.displayQty
+            : resolveDisplayQtyAndUnit(l.qty || 0, item).displayQty;
+          updated.selectedUnitId = value;
+          updated.selectedUnitFactor = factor;
+          updated.displayQty = currentDisplayQty;
+          updated.qty = toBasePrimaryQty(currentDisplayQty, factor);
+        }
+
+        if (field === 'qty') {
+          const resolved = l.selectedUnitId
+            ? { factor: l.selectedUnitFactor || 1, selectedUnitId: l.selectedUnitId }
+            : resolveDisplayQtyAndUnit(l.qty || 0, item);
+          updated.selectedUnitId = resolved.selectedUnitId;
+          updated.selectedUnitFactor = resolved.factor;
+          updated.displayQty = numVal;
+          updated.qty = toBasePrimaryQty(numVal, resolved.factor);
+        }
 
         const lineGross = ((updated.qty || 0) * (updated.rate || 0)) + ((updated.secQty || 0) * (updated.secRate || 0));
         if (field === 'discPercent') {
@@ -450,7 +479,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
         } else if (field === 'discount') {
           updated.discount = numVal;
           updated.discPercent = lineGross > 0 ? round((numVal / lineGross) * 100, 2) : 0;
-        } else if (field === 'rate' || field === 'qty' || field === 'secRate' || field === 'secQty') {
+        } else if (field === 'rate' || field === 'qty' || field === 'selectedUnitId' || field === 'secRate' || field === 'secQty') {
           const disc = updated.discount || 0;
           updated.discPercent = lineGross > 0 ? round((disc / lineGross) * 100, 2) : 0;
           if (field === 'rate' && isEdit && String(form.getFieldValue('itemId')) === String(originalItemIdRef.current)) {
@@ -619,20 +648,49 @@ export const NormalSaleSupplyForm: React.FC = () => {
       title: hasSecondaryQty ? 'Single Qty' : 'Qty',
       dataIndex: 'qty',
       key: 'qty',
-      width: 100,
-      render: (val: number, record: any, rowIdx: number) => (
-        <InputNumber
-          ref={getCellRef(rowIdx, 'qty')}
-          style={{ width: '100%' }}
-          value={val}
-          min={0}
-          precision={2}
-          keyboard={false}
-          controls={false}
-          onChange={(v) => updateLine(record.key, 'qty', v)}
-          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'qty', e)}
-        />
-      )
+      width: 145,
+      render: (val: number, record: any, rowIdx: number) => {
+        const masterItemId = watchedItemId || form.getFieldValue('itemId');
+        const item = items.find(i => String(i.id) === String(masterItemId));
+        const selectableUnits = getSelectablePrimaryUnits(item);
+        const resolved = record.selectedUnitId
+          ? {
+              displayQty: record.displayQty ?? val,
+              selectedUnitId: record.selectedUnitId,
+              factor: record.selectedUnitFactor || 1
+            }
+          : resolveDisplayQtyAndUnit(val || 0, item);
+
+        return (
+          <InputNumber
+            ref={getCellRef(rowIdx, 'qty')}
+            style={{ width: '100%' }}
+            value={resolved.displayQty}
+            min={0}
+            precision={resolved.factor > 1 ? 0 : 2}
+            keyboard={false}
+            controls={false}
+            onChange={(v) => updateLine(record.key, 'qty', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'qty', e)}
+            addonAfter={
+              selectableUnits.length > 1 ? (
+                <Select
+                  value={resolved.selectedUnitId}
+                  onChange={(unitId) => updateLine(record.key, 'selectedUnitId', unitId)}
+                  style={{ width: 62 }}
+                  popupMatchSelectWidth={false}
+                >
+                  {selectableUnits.map(u => (
+                    <Select.Option key={u.unitId} value={u.unitId}>
+                      {u.label}
+                    </Select.Option>
+                  ))}
+                </Select>
+              ) : undefined
+            }
+          />
+        );
+      }
     },
     {
       title: hasSecondaryQty ? 'Single Rate' : 'Rate',

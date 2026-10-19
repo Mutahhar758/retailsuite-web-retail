@@ -16,6 +16,7 @@ import { narrationService, type NarrationDto } from '../../services/narrationSer
 import { useAppStore } from '../../stores/useAppStore';
 import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, MOBILE_SHOP_ENABLE_KEY, BARCODE_FAST_SCAN_INCREMENT_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
+import { getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
 import { BarcodeFastScanBar } from '../../components/common/BarcodeFastScanBar';
 
 const { Title, Text } = Typography;
@@ -227,13 +228,37 @@ export const NormalPurchaseForm: React.FC = () => {
               const pSize = Number(item.qtyInPack || (item as any).QtyInPack || (item as any).qty_in_pack || 0);
               updatedRow.secRate = item.secRate || ((item.priRate || 0) * (pSize > 0 ? pSize : 1));
               updatedRow.secQty = 0;
+              updatedRow.selectedUnitId = item.primaryUnit;
+              updatedRow.selectedUnitFactor = 1;
+              updatedRow.displayQty = updatedRow.qty || 1;
             }
           }
 
           const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
           const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
 
-          if (field === 'qty') updatedRow.qty = numVal;
+          if (field === 'selectedUnitId') {
+            const selectable = getSelectablePrimaryUnits(item);
+            const selectedOpt = selectable.find(u => u.unitId === value);
+            const factor = selectedOpt?.factor || 1;
+            const currentDisplayQty = row.displayQty !== undefined
+              ? row.displayQty
+              : resolveDisplayQtyAndUnit(row.qty || 0, item).displayQty;
+            updatedRow.selectedUnitId = value;
+            updatedRow.selectedUnitFactor = factor;
+            updatedRow.displayQty = currentDisplayQty;
+            updatedRow.qty = toBasePrimaryQty(currentDisplayQty, factor);
+          }
+
+          if (field === 'qty') {
+            const resolved = row.selectedUnitId
+              ? { factor: row.selectedUnitFactor || 1, selectedUnitId: row.selectedUnitId }
+              : resolveDisplayQtyAndUnit(row.qty || 0, item);
+            updatedRow.selectedUnitId = resolved.selectedUnitId;
+            updatedRow.selectedUnitFactor = resolved.factor;
+            updatedRow.displayQty = numVal;
+            updatedRow.qty = toBasePrimaryQty(numVal, resolved.factor);
+          }
           if (field === 'rate') updatedRow.rate = numVal;
           if (field === 'secQty') updatedRow.secQty = numVal;
           if (field === 'secRate') updatedRow.secRate = numVal;
@@ -579,10 +604,44 @@ export const NormalPurchaseForm: React.FC = () => {
     {
       title: hasSecondaryQty ? 'Single Qty' : 'Qty',
       dataIndex: 'qty',
-      width: 100,
-      render: (text: number, record: any) => (
-        <InputNumber value={text} style={{ width: '100%' }} onChange={(val) => updateRow(record.key, 'qty', val)} min={0} precision={2} />
-      )
+      width: 145,
+      render: (text: number, record: any) => {
+        const item = items.find(i => String(i.id) === String(record.itemId));
+        const selectableUnits = getSelectablePrimaryUnits(item);
+        const resolved = record.selectedUnitId
+          ? {
+              displayQty: record.displayQty ?? text,
+              selectedUnitId: record.selectedUnitId,
+              factor: record.selectedUnitFactor || 1
+            }
+          : resolveDisplayQtyAndUnit(text || 0, item);
+
+        return (
+          <InputNumber
+            value={resolved.displayQty}
+            style={{ width: '100%' }}
+            onChange={(val) => updateRow(record.key, 'qty', val)}
+            min={0}
+            precision={resolved.factor > 1 ? 0 : 2}
+            addonAfter={
+              selectableUnits.length > 1 ? (
+                <Select
+                  value={resolved.selectedUnitId}
+                  onChange={(unitId) => updateRow(record.key, 'selectedUnitId', unitId)}
+                  style={{ width: 62 }}
+                  popupMatchSelectWidth={false}
+                >
+                  {selectableUnits.map(u => (
+                    <Select.Option key={u.unitId} value={u.unitId}>
+                      {u.label}
+                    </Select.Option>
+                  ))}
+                </Select>
+              ) : undefined
+            }
+          />
+        );
+      }
     },
     {
       title: hasSecondaryQty ? 'Single Rate' : 'Rate',

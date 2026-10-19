@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Row, Col, Typography, Button, Input, Space, message, Tag, Modal, List, Badge, Alert, Dropdown, Segmented, Select, Tooltip
+  Row, Col, Typography, Button, Input, InputNumber, Space, message, Tag, Modal, List, Badge, Alert, Dropdown, Segmented, Select, Tooltip
 } from 'antd';
 import {
   useThermalPrinter,
@@ -37,6 +37,7 @@ import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT, RESTAURAN
 import { printKotSlip } from '../../utils/kotPrint';
 import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
 import { parseBarcodePayload } from '../../utils/barcodeParser';
+import { getEffectiveSubUnits, getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
 
 const { Title, Text } = Typography;
 
@@ -46,6 +47,9 @@ interface CartItem {
   rate: number;
   discount: number;
   unit: string;
+  selectedUnitId?: string;
+  selectedUnitFactor?: number;
+  displayQty?: number;
 }
 
 interface InvoiceTab {
@@ -362,18 +366,29 @@ export const POSSaleForm: React.FC = () => {
       );
 
       if (existing) {
-        return prev.map(i =>
-          (i.item.id === item.id && Math.abs((i.rate || 0) - effectiveRate) < 0.001)
-            ? { ...i, qty: Math.round(((i.qty + scanQty) + Number.EPSILON) * 1000) / 1000 }
-            : i
-        );
+        return prev.map(i => {
+          if (i.item.id === item.id && Math.abs((i.rate || 0) - effectiveRate) < 0.001) {
+            const factor = i.selectedUnitFactor || 1;
+            const newQty = Math.round(((i.qty + scanQty) + Number.EPSILON) * 1000) / 1000;
+            const newDisplayQty = Number((newQty * factor).toFixed(4));
+            return {
+              ...i,
+              qty: newQty,
+              displayQty: newDisplayQty
+            };
+          }
+          return i;
+        });
       } else {
         return [...prev, {
           item,
           qty: scanQty,
           rate: effectiveRate,
           discount: 0,
-          unit: customUnit || item.defaultUnit || item.primaryUnit || ''
+          unit: customUnit || item.defaultUnit || item.primaryUnit || '',
+          selectedUnitId: item.defaultUnit || item.primaryUnit || '',
+          selectedUnitFactor: 1,
+          displayQty: scanQty
         }];
       }
     });
@@ -388,8 +403,59 @@ export const POSSaleForm: React.FC = () => {
   const handleUpdateQty = (itemId: string, increment: boolean) => {
     setCart(prev => prev.map(i => {
       if (i.item.id === itemId) {
-        const newQty = increment ? i.qty + 1 : i.qty - 1;
-        return newQty > 0 ? { ...i, qty: newQty } : i;
+        const resolved = i.selectedUnitId
+          ? { displayQty: i.displayQty ?? i.qty, selectedUnitId: i.selectedUnitId, factor: i.selectedUnitFactor || 1 }
+          : resolveDisplayQtyAndUnit(i.qty, i.item, units as any);
+        const step = resolved.factor > 1 ? (resolved.factor >= 1000 ? 50 : 1) : 1;
+        const nextDisplayQty = increment ? resolved.displayQty + step : resolved.displayQty - step;
+        if (nextDisplayQty <= 0) return i;
+        return {
+          ...i,
+          selectedUnitId: resolved.selectedUnitId,
+          selectedUnitFactor: resolved.factor,
+          displayQty: nextDisplayQty,
+          qty: toBasePrimaryQty(nextDisplayQty, resolved.factor)
+        };
+      }
+      return i;
+    }));
+  };
+
+  const handleSetCartItemDisplayQty = (itemId: string, newDisplayQty: number | null) => {
+    const cleanVal = newDisplayQty !== null && !isNaN(Number(newDisplayQty)) ? Number(newDisplayQty) : 0;
+    if (cleanVal <= 0) return;
+    setCart(prev => prev.map(i => {
+      if (i.item.id === itemId) {
+        const resolved = i.selectedUnitId
+          ? { selectedUnitId: i.selectedUnitId, factor: i.selectedUnitFactor || 1 }
+          : resolveDisplayQtyAndUnit(i.qty, i.item, units as any);
+        return {
+          ...i,
+          selectedUnitId: resolved.selectedUnitId,
+          selectedUnitFactor: resolved.factor,
+          displayQty: cleanVal,
+          qty: toBasePrimaryQty(cleanVal, resolved.factor)
+        };
+      }
+      return i;
+    }));
+  };
+
+  const handleSetCartItemUnit = (itemId: string, unitId: string) => {
+    setCart(prev => prev.map(i => {
+      if (i.item.id === itemId) {
+        const selectable = getSelectablePrimaryUnits(i.item, units as any);
+        const opt = selectable.find(u => u.unitId === unitId);
+        const factor = opt?.factor || 1;
+        const newDisplayQty = Number((i.qty * factor).toFixed(4));
+        return {
+          ...i,
+          unit: unitId,
+          selectedUnitId: unitId,
+          selectedUnitFactor: factor,
+          displayQty: newDisplayQty,
+          qty: toBasePrimaryQty(newDisplayQty, factor)
+        };
       }
       return i;
     }));
@@ -441,35 +507,46 @@ export const POSSaleForm: React.FC = () => {
 
   const handleAddWithPreset = (item: Item, preset: PresetOption) => {
     let targetQty = 1;
-    let targetUnit = item.defaultUnit || item.primaryUnit || '';
-    let targetRate = resolveCustomerItemRate(item.id, selectedCustomer?.account, targetUnit);
+    const targetUnit = item.defaultUnit || item.primaryUnit || '';
+    const targetRate = resolveCustomerItemRate(item.id, selectedCustomer?.account, targetUnit);
 
     if (preset.type === 'rs') {
       if (targetRate > 0) {
-        targetQty = parseFloat((preset.value / targetRate).toFixed(3));
+        targetQty = parseFloat((preset.value / targetRate).toFixed(4));
       }
     } else if (preset.type === 'secondary') {
-      const packQty = item.qtyInPack || 1000;
-      targetQty = parseFloat((preset.value / packQty).toFixed(3));
-      targetUnit = item.secondaryUnit || item.primaryUnit || '';
-      targetRate = resolveCustomerItemRate(item.id, selectedCustomer?.account, targetUnit);
+      const subUnits = getEffectiveSubUnits(item, units as any);
+      const subFactor = subUnits.length > 0 && subUnits[0].factor > 1 ? subUnits[0].factor : (item.qtyInPack && item.qtyInPack > 1 ? item.qtyInPack : 1000);
+      targetQty = parseFloat((preset.value / subFactor).toFixed(4));
     } else {
       targetQty = preset.value;
-      targetUnit = item.primaryUnit || '';
-      targetRate = resolveCustomerItemRate(item.id, selectedCustomer?.account, targetUnit);
     }
 
     setCart(prev => {
       const existing = prev.find(i => i.item.id === item.id);
       if (existing) {
-        return prev.map(i => i.item.id === item.id ? { ...i, qty: parseFloat((i.qty + targetQty).toFixed(3)), unit: targetUnit, rate: targetRate } : i);
+        const nextQty = parseFloat((existing.qty + targetQty).toFixed(4));
+        const resolved = resolveDisplayQtyAndUnit(nextQty, item, units as any);
+        return prev.map(i => i.item.id === item.id ? {
+          ...i,
+          qty: nextQty,
+          unit: targetUnit,
+          rate: targetRate,
+          selectedUnitId: resolved.selectedUnitId,
+          selectedUnitFactor: resolved.factor,
+          displayQty: resolved.displayQty
+        } : i);
       } else {
+        const resolved = resolveDisplayQtyAndUnit(targetQty, item, units as any);
         return [...prev, {
           item,
           qty: targetQty,
           rate: targetRate,
           discount: 0,
-          unit: targetUnit
+          unit: targetUnit,
+          selectedUnitId: resolved.selectedUnitId,
+          selectedUnitFactor: resolved.factor,
+          displayQty: resolved.displayQty
         }];
       }
     });
@@ -549,7 +626,8 @@ export const POSSaleForm: React.FC = () => {
 
     cart.forEach(line => {
       const itemTitle = line.item.title;
-      const qtyStr = line.qty.toString();
+      const resolved = resolveDisplayQtyAndUnit(line.qty, line.item, units as any);
+      const qtyStr = resolved.factor > 1 ? `${resolved.displayQty}${resolved.unitLabel}` : line.qty.toString();
       const priceStr = line.rate.toString(); 
       const amountStr = (line.qty * line.rate).toFixed(2);
       lines.push(format4Columns(itemTitle, qtyStr, priceStr, amountStr));
@@ -1839,7 +1917,18 @@ export const POSSaleForm: React.FC = () => {
 
           {/* Cart List */}
           <div className="pos-scrollbar" style={{ flex: 1, overflowY: 'auto', marginBottom: 16, borderBottom: '1px dashed #e2e8f0', paddingRight: 4 }}>
-            {cart.map(line => (
+            {cart.map(line => {
+              const selectableUnits = getSelectablePrimaryUnits(line.item, units as any);
+              const resolved = line.selectedUnitId
+                ? {
+                    displayQty: line.displayQty ?? line.qty,
+                    selectedUnitId: line.selectedUnitId,
+                    unitLabel: selectableUnits.find(u => u.unitId === line.selectedUnitId)?.label || '',
+                    factor: line.selectedUnitFactor || 1
+                  }
+                : resolveDisplayQtyAndUnit(line.qty, line.item, units as any);
+
+              return (
               <div 
                 key={line.item.id} 
                 style={{ 
@@ -1877,32 +1966,54 @@ export const POSSaleForm: React.FC = () => {
                     {line.item.title}
                   </Text>
                   <Text type="secondary" style={{ fontSize: 13, fontWeight: 500 }}>
-                    Rs. {line.rate} | Unit: {units.find(u => u.code === line.unit)?.title || line.unit}
+                    Rs. {line.rate} | Unit: {selectableUnits.find(u => u.unitId === (line.selectedUnitId || line.unit))?.label || units.find(u => u.code === line.unit)?.title || line.unit}
                   </Text>
                 </div>
                 
-                {/* Touch Quantity Controls */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'center' }}>
+                {/* Touch Quantity Controls + Conditional Sub-Unit Selector */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1.3, justifyContent: 'center' }}>
                   <Button 
                     className="pos-qty-btn"
                     shape="circle" 
                     icon={<MinusOutlined style={{ fontSize: 12, fontWeight: 900 }} />} 
                     onClick={() => handleUpdateQty(line.item.id, false)}
-                    style={{ width: 36, height: 36 }}
+                    style={{ width: 32, height: 32 }}
                   />
-                  <span style={{ fontSize: 16, fontWeight: 800, minWidth: 24, textAlign: 'center', color: '#0f172a' }}>{line.qty}</span>
+                  <InputNumber
+                    size="small"
+                    min={0.01}
+                    value={resolved.displayQty}
+                    onChange={(val) => handleSetCartItemDisplayQty(line.item.id, val)}
+                    controls={false}
+                    style={{ width: selectableUnits.length > 1 ? 58 : 48, textAlign: 'center', fontWeight: 800 }}
+                  />
+                  {selectableUnits.length > 1 && (
+                    <Select
+                      size="small"
+                      value={resolved.selectedUnitId}
+                      onChange={(unitId) => handleSetCartItemUnit(line.item.id, unitId)}
+                      style={{ width: 54 }}
+                      popupMatchSelectWidth={false}
+                    >
+                      {selectableUnits.map(u => (
+                        <Select.Option key={u.unitId} value={u.unitId}>
+                          {u.label}
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  )}
                   <Button 
                     className="pos-qty-btn"
                     shape="circle" 
                     icon={<PlusOutlined style={{ fontSize: 12, fontWeight: 900 }} />} 
                     onClick={() => handleUpdateQty(line.item.id, true)}
-                    style={{ width: 36, height: 36 }}
+                    style={{ width: 32, height: 32 }}
                   />
                 </div>
 
                 <div style={{ flex: 1, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
                   <Text strong style={{ fontSize: 15, color: '#0f172a' }}>
-                    Rs. {line.qty * line.rate}
+                    Rs. {Math.round((line.qty * line.rate) * 100) / 100}
                   </Text>
                   <Button 
                     type="text" 
@@ -1915,7 +2026,8 @@ export const POSSaleForm: React.FC = () => {
                   </Button>
                 </div>
               </div>
-            ))}
+              );
+            })}
             {cart.length === 0 && (
               <div style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>
                 <ShoppingCartOutlined style={{ fontSize: 48, marginBottom: 12, color: '#cbd5e1' }} />
@@ -2273,14 +2385,18 @@ export const POSSaleForm: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {cart.map(line => (
-                <tr key={line.item.id}>
-                  <td style={{ textAlign: 'left', padding: '6px 0' }}>{line.item.title}</td>
-                  <td style={{ textAlign: 'center', padding: '6px 0' }}>{line.qty}</td>
-                  <td style={{ textAlign: 'right', padding: '6px 0' }}>{line.rate}</td>
-                  <td style={{ textAlign: 'right', padding: '6px 0' }}>{(line.qty * line.rate).toFixed(2)}</td>
-                </tr>
-              ))}
+              {cart.map(line => {
+                const resolved = resolveDisplayQtyAndUnit(line.qty, line.item, units as any);
+                const qtyDisplay = resolved.factor > 1 ? `${resolved.displayQty} ${resolved.unitLabel}` : line.qty;
+                return (
+                  <tr key={line.item.id}>
+                    <td style={{ textAlign: 'left', padding: '6px 0' }}>{line.item.title}</td>
+                    <td style={{ textAlign: 'center', padding: '6px 0' }}>{qtyDisplay}</td>
+                    <td style={{ textAlign: 'right', padding: '6px 0' }}>{line.rate}</td>
+                    <td style={{ textAlign: 'right', padding: '6px 0' }}>{(line.qty * line.rate).toFixed(2)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 

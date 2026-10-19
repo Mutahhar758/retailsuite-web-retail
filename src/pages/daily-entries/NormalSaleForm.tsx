@@ -19,6 +19,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useAppStore } from '../../stores/useAppStore';
 import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, TRANSACTION_ENABLE_CARRIAGE_KEY, MOBILE_SHOP_ENABLE_KEY, BARCODE_FAST_SCAN_INCREMENT_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
+import { getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
 import { BarcodeFastScanBar } from '../../components/common/BarcodeFastScanBar';
 import { CustomerPriceHistoryModal } from '../../components/sale/CustomerPriceHistoryModal';
 
@@ -546,13 +547,37 @@ export const NormalSaleForm: React.FC = () => {
               updated.secUnit = item.secondaryUnit;
               updated.secRate = resolvedSecRate;
               updated.secQty = 0;
+              updated.selectedUnitId = item.primaryUnit;
+              updated.selectedUnitFactor = 1;
+              updated.displayQty = updated.qty || 1;
             }
           }
 
           const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
           const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
 
-          if (field === 'qty') updated.qty = numVal;
+          if (field === 'selectedUnitId') {
+            const selectable = getSelectablePrimaryUnits(item);
+            const selectedOpt = selectable.find(u => u.unitId === value);
+            const factor = selectedOpt?.factor || 1;
+            const currentDisplayQty = l.displayQty !== undefined
+              ? l.displayQty
+              : resolveDisplayQtyAndUnit(l.qty || 0, item).displayQty;
+            updated.selectedUnitId = value;
+            updated.selectedUnitFactor = factor;
+            updated.displayQty = currentDisplayQty;
+            updated.qty = toBasePrimaryQty(currentDisplayQty, factor);
+          }
+
+          if (field === 'qty') {
+            const resolved = l.selectedUnitId
+              ? { factor: l.selectedUnitFactor || 1, selectedUnitId: l.selectedUnitId }
+              : resolveDisplayQtyAndUnit(l.qty || 0, item);
+            updated.selectedUnitId = resolved.selectedUnitId;
+            updated.selectedUnitFactor = resolved.factor;
+            updated.displayQty = numVal;
+            updated.qty = toBasePrimaryQty(numVal, resolved.factor);
+          }
           if (field === 'rate') {
             updated.rate = numVal;
             const currentCust = form.getFieldValue('account');
@@ -996,16 +1021,44 @@ export const NormalSaleForm: React.FC = () => {
       title: hasSecondaryQty ? 'Single Qty' : 'Qty',
       dataIndex: 'qty',
       key: 'qty',
-      width: 90,
-      render: (val: number, record: any) => (
-        <InputNumber
-          style={{ width: '100%' }}
-          value={val}
-          min={0}
-          precision={2}
-          onChange={(v) => updateLine(record.key, 'qty', v)}
-        />
-      )
+      width: 145,
+      render: (val: number, record: any) => {
+        const item = items.find(i => String(i.id) === String(record.itemId));
+        const selectableUnits = getSelectablePrimaryUnits(item);
+        const resolved = record.selectedUnitId
+          ? {
+              displayQty: record.displayQty ?? val,
+              selectedUnitId: record.selectedUnitId,
+              factor: record.selectedUnitFactor || 1
+            }
+          : resolveDisplayQtyAndUnit(val || 0, item);
+
+        return (
+          <InputNumber
+            style={{ width: '100%' }}
+            value={resolved.displayQty}
+            min={0}
+            precision={resolved.factor > 1 ? 0 : 2}
+            onChange={(v) => updateLine(record.key, 'qty', v)}
+            addonAfter={
+              selectableUnits.length > 1 ? (
+                <Select
+                  value={resolved.selectedUnitId}
+                  onChange={(unitId) => updateLine(record.key, 'selectedUnitId', unitId)}
+                  style={{ width: 62 }}
+                  popupMatchSelectWidth={false}
+                >
+                  {selectableUnits.map(u => (
+                    <Select.Option key={u.unitId} value={u.unitId}>
+                      {u.label}
+                    </Select.Option>
+                  ))}
+                </Select>
+              ) : undefined
+            }
+          />
+        );
+      }
     },
     {
       title: hasSecondaryQty ? 'Single Rate' : 'Rate',
@@ -1491,7 +1544,7 @@ export const NormalSaleForm: React.FC = () => {
         onClose={() => setHistoryModalVisible(false)}
         accountId={form.getFieldValue('account')}
         customerName={
-          customers.find(c => c.account === form.getFieldValue('account') || c.id === form.getFieldValue('account'))?.title
+          customers.find(c => c.account === form.getFieldValue('account'))?.title
         }
         itemId={historyTargetItemId}
         itemTitle={items.find(i => String(i.id) === String(historyTargetItemId))?.title}

@@ -3,15 +3,25 @@ import api from './api';
 export interface UnitDto {
   code: string;
   title: string;
+  shortTitle?: string | null;
+  parentUnitId?: string | null;
+  parentUnitTitle?: string | null;
+  conversionRatio?: number | null;
 }
 
 export interface CreateUnitRequest {
   title: string;
+  shortTitle?: string | null;
+  parentUnitId?: string | null;
+  conversionRatio?: number | null;
   active: boolean;
 }
 
 export interface UpdateUnitRequest {
   title: string;
+  shortTitle?: string | null;
+  parentUnitId?: string | null;
+  conversionRatio?: number | null;
   active: boolean;
 }
 

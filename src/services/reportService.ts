@@ -39,6 +39,10 @@ export interface StockBalanceLine {
   qtyOut: number;
   qtyBal: number;
   rate: number;
+  priQtyDisplay?: string;
+  qtyInDisplay?: string;
+  qtyOutDisplay?: string;
+  qtyBalDisplay?: string;
   secUnit?: string;
   secPriQty?: number;
   secQtyIn?: number;
@@ -55,6 +59,10 @@ export interface StockLedgerLine {
   rate: number | null;
   costPrice?: number | null;
   costAmount?: number | null;
+  primaryUnit?: string;
+  qtyInDisplay?: string;
+  qtyOutDisplay?: string;
+  balanceDisplay?: string;
   secUnit?: string;
   secQtyIn?: number;
   secQtyOut?: number;

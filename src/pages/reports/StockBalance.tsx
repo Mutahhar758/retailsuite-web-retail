@@ -152,10 +152,10 @@ export const StockBalance: React.FC = () => {
         (idx + 1).toString(),
         `"${(line.item || '').replace(/"/g, '""')}"`,
         `"${(line.unit || 'Pcs').replace(/"/g, '""')}"`,
-        line.priQty.toFixed(2),
-        line.qtyIn.toFixed(2),
-        line.qtyOut.toFixed(2),
-        line.qtyBal.toFixed(2),
+        `"${line.priQtyDisplay || line.priQty.toFixed(2)}"`,
+        `"${line.qtyInDisplay || line.qtyIn.toFixed(2)}"`,
+        `"${line.qtyOutDisplay || line.qtyOut.toFixed(2)}"`,
+        `"${line.qtyBalDisplay || line.qtyBal.toFixed(2)}"`,
         line.rate.toFixed(2),
         val.toFixed(2)
       ];
@@ -218,10 +218,10 @@ export const StockBalance: React.FC = () => {
           <td style="text-align: center; border: 1px solid #e5e7eb; padding: 6px;">${idx + 1}</td>
           <td style="border: 1px solid #e5e7eb; padding: 6px; font-weight: 500;">${line.item}</td>
           <td style="text-align: center; border: 1px solid #e5e7eb; padding: 6px;">${line.unit || 'Pcs'}</td>
-          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${line.priQty.toFixed(2)}</td>
-          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: ${line.qtyIn > 0 ? '#15803d' : '#374151'};">${line.qtyIn.toFixed(2)}</td>
-          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: ${line.qtyOut > 0 ? '#b91c1c' : '#374151'};">${line.qtyOut.toFixed(2)}</td>
-          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; font-weight: bold;">${line.qtyBal.toFixed(2)}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${line.priQtyDisplay || line.priQty.toFixed(2)}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: ${line.qtyIn > 0 ? '#15803d' : '#374151'};">${line.qtyInDisplay || line.qtyIn.toFixed(2)}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: ${line.qtyOut > 0 ? '#b91c1c' : '#374151'};">${line.qtyOutDisplay || line.qtyOut.toFixed(2)}</td>
+          <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; font-weight: bold;">${line.qtyBalDisplay || line.qtyBal.toFixed(2)}</td>
           <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${line.rate.toFixed(2)}</td>
           <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; font-weight: bold;">${val.toFixed(2)}</td>
         </tr>

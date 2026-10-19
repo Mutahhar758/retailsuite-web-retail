@@ -9,6 +9,15 @@ export const CURRENT_BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? __BUIL
 const LAST_VERSION_KEY = 'app_installed_version';
 const LAST_BUILD_TIME_KEY = 'app_installed_build_time';
 const RELOAD_GUARD_KEY = 'app_auto_reload_guard';
+const LAST_ATTEMPTED_BUILD_KEY = 'app_last_attempted_build';
+
+// Clean up any lingering _v parameter from the URL bar immediately without reloading
+if (typeof window !== 'undefined' && window.location.search.includes('_v=')) {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('_v');
+  const cleanUrl = url.pathname + (url.search ? url.search : '') + url.hash;
+  window.history.replaceState(null, '', cleanUrl);
+}
 
 let isRefreshing = false;
 
@@ -19,7 +28,7 @@ export const performHardRefresh = async () => {
   if (isRefreshing) return;
   isRefreshing = true;
 
-  console.log('[AutoRefresh] Initiating hard refresh to load new build...');
+  console.log('[AutoRefresh] Initiating refresh to load new build...');
 
   try {
     // 1. Clear all CacheStorage entries (SW caches)
@@ -42,19 +51,21 @@ export const performHardRefresh = async () => {
   // Set guard to prevent rapid consecutive loops
   sessionStorage.setItem(RELOAD_GUARD_KEY, Date.now().toString());
 
-  // 3. Force hard navigation bypassing cache
-  window.location.replace(`/?_v=${Date.now()}`);
+  // 3. Clean reload current page without appending query parameter to URL
+  window.location.reload();
 };
 
 /**
  * Fetch /version.json with cache-busting headers to see if server has a newer build.
  */
 export const checkForNewVersion = async () => {
+  // Do not run in local development mode
+  if (import.meta.env.DEV) return;
   if (isRefreshing) return;
 
-  // Protect against rapid reload loops within 5 seconds
+  // Protect against rapid reload loops within 30 seconds
   const lastReload = sessionStorage.getItem(RELOAD_GUARD_KEY);
-  if (lastReload && Date.now() - Number(lastReload) < 5000) {
+  if (lastReload && Date.now() - Number(lastReload) < 30000) {
     return;
   }
 
@@ -76,21 +87,29 @@ export const checkForNewVersion = async () => {
     const storedBuildTime = localStorage.getItem(LAST_BUILD_TIME_KEY);
     const storedVersion = localStorage.getItem(LAST_VERSION_KEY);
 
-    // If server version is newer or build time has changed
-    const isNewBuild = (serverVersion && serverVersion !== CURRENT_APP_VERSION) ||
-                       (serverBuildTime && CURRENT_BUILD_TIME && serverBuildTime !== CURRENT_BUILD_TIME) ||
-                       (serverBuildTime && storedBuildTime && serverBuildTime !== storedBuildTime) ||
-                       (serverVersion && storedVersion && serverVersion !== storedVersion);
+    // If we already attempted a reload for this server build during this session, stop looping
+    const lastAttempted = sessionStorage.getItem(LAST_ATTEMPTED_BUILD_KEY);
+    if (serverBuildTime && lastAttempted === serverBuildTime) {
+      return;
+    }
+
+    // Detect if server has a newer release that client hasn't acknowledged yet
+    const isNewVersion = !!(serverVersion && CURRENT_APP_VERSION && serverVersion !== CURRENT_APP_VERSION && serverVersion !== storedVersion);
+    const isNewBuildTime = !!(serverBuildTime && CURRENT_BUILD_TIME && serverBuildTime !== CURRENT_BUILD_TIME && serverBuildTime !== storedBuildTime);
+    const isNewBuild = isNewVersion || isNewBuildTime;
 
     if (isNewBuild) {
       console.log(`[AutoRefresh] Newer web app build detected! Server: v${serverVersion} (${serverBuildTime}) vs Client: v${CURRENT_APP_VERSION} (${CURRENT_BUILD_TIME})`);
       localStorage.setItem(LAST_VERSION_KEY, serverVersion || CURRENT_APP_VERSION);
       localStorage.setItem(LAST_BUILD_TIME_KEY, serverBuildTime || CURRENT_BUILD_TIME);
+      if (serverBuildTime) {
+        sessionStorage.setItem(LAST_ATTEMPTED_BUILD_KEY, serverBuildTime);
+      }
 
       message.loading({ content: 'New update available! Refreshing to latest version...', key: 'version-update', duration: 2 });
       setTimeout(() => {
         performHardRefresh();
-      }, 400);
+      }, 500);
     }
   } catch {
     // Offline or network error — ignore silently
@@ -105,6 +124,11 @@ export const checkForNewVersion = async () => {
  * - Tab visibility / focus event listener
  */
 export const initAutoVersionRefresh = () => {
+  // Never run in local development mode
+  if (import.meta.env.DEV) {
+    return;
+  }
+
   // Sync initial version keys
   if (!localStorage.getItem(LAST_VERSION_KEY)) {
     localStorage.setItem(LAST_VERSION_KEY, CURRENT_APP_VERSION);
@@ -136,7 +160,7 @@ export const initAutoVersionRefresh = () => {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!swRefreshing) {
         swRefreshing = true;
-        console.log('[AutoRefresh] Service Worker controller changed. Performing hard refresh...');
+        console.log('[AutoRefresh] Service Worker controller changed. Performing refresh...');
         performHardRefresh();
       }
     });

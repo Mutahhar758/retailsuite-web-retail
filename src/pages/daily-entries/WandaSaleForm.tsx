@@ -1361,7 +1361,7 @@ export const WandaSaleForm: React.FC = () => {
         onClose={() => setHistoryModalVisible(false)}
         accountId={form.getFieldValue('account')}
         customerName={
-          customers.find(c => c.account === form.getFieldValue('account') || c.id === form.getFieldValue('account'))?.title
+          customers.find(c => c.account === form.getFieldValue('account'))?.title
         }
         itemId={historyTargetItemId}
         itemTitle={items.find(i => String(i.id) === String(historyTargetItemId))?.title}

@@ -31,6 +31,8 @@ export const InventoryItemForm: React.FC = () => {
 
   const [form] = Form.useForm();
   const itemType = Form.useWatch('itemType', form);
+  const selectedPrimaryUnitCode = Form.useWatch('primaryUnit', form);
+  const overrideSubUnits = Form.useWatch('overrideSubUnits', form);
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<ItemCategoryDto[]>([]);
   const [units, setUnits] = useState<UnitDto[]>([]);
@@ -138,6 +140,22 @@ export const InventoryItemForm: React.FC = () => {
               });
             }
           }
+          let hasCustomSubUnits = false;
+          let customSubUnitsList: Array<{ unitId: string; factor: number }> = [];
+          if (item.additionalUnits && item.additionalUnits.trim() !== '') {
+            try {
+              const parsed = JSON.parse(item.additionalUnits);
+              if (Array.isArray(parsed)) {
+                hasCustomSubUnits = true;
+                customSubUnitsList = parsed.map((u: any) => ({
+                  unitId: u.unitId,
+                  factor: Number(u.factor),
+                }));
+              }
+            } catch {
+              hasCustomSubUnits = false;
+            }
+          }
           form.setFieldsValue({
             ...item,
             requireImei: item.requireImei ?? false,
@@ -146,7 +164,9 @@ export const InventoryItemForm: React.FC = () => {
             storage: item.storage ?? undefined,
             ram: item.ram ?? undefined,
             color: item.color ?? undefined,
-            quickQtyPresets: quickQtyPresetsArray
+            quickQtyPresets: quickQtyPresetsArray,
+            overrideSubUnits: hasCustomSubUnits,
+            customAdditionalUnits: customSubUnitsList,
           });
           if (item.mediaUrl) {
             setImageUrl(item.mediaUrl);
@@ -171,11 +191,28 @@ export const InventoryItemForm: React.FC = () => {
     try {
       const values = await form.validateFields();
       setLoading(true);
+      let serializedAdditionalUnits: string | null = null;
+      if (values.overrideSubUnits) {
+        const list = (values.customAdditionalUnits || [])
+          .filter((x: any) => x && x.unitId && Number(x.factor) > 1)
+          .map((x: any) => {
+            const matchedUnit = units.find(u => u.code === x.unitId);
+            return {
+              unitId: x.unitId,
+              unitTitle: matchedUnit?.title || x.unitId,
+              shortTitle: matchedUnit?.shortTitle || null,
+              factor: Number(x.factor),
+            };
+          });
+        serializedAdditionalUnits = JSON.stringify(list);
+      }
+
       const apiValues = {
         ...values,
         quickQtyPresets: values.quickQtyPresets && values.quickQtyPresets.length > 0
           ? JSON.stringify(values.quickQtyPresets)
-          : null
+          : null,
+        additionalUnits: serializedAdditionalUnits,
       };
       if (isEdit) {
         await inventoryService.update(id!, apiValues);
@@ -524,6 +561,160 @@ export const InventoryItemForm: React.FC = () => {
                         </Form.Item>
                       </Space>
                     </div>
+                  </Col>
+                </Row>
+
+                <Row gutter={16}>
+                  <Col xs={24}>
+                    {(() => {
+                      const primaryUnitObj = units.find(u => u.code === selectedPrimaryUnitCode);
+                      const primaryLabel = primaryUnitObj?.shortTitle || primaryUnitObj?.title || 'Primary Unit';
+                      const inheritedSubUnits = units.filter(
+                        u => u.parentUnitId === selectedPrimaryUnitCode && u.conversionRatio && Number(u.conversionRatio) > 1
+                      );
+
+                      return (
+                        <div style={{
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '12px',
+                          padding: '16px 20px',
+                          backgroundColor: '#f8fafc',
+                          marginBottom: '16px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <div>
+                              <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                                ⚖️ Sub-Units for Fractional Quantities (e.g. 50g, 250g, 1250g)
+                              </div>
+                              <Text type="secondary" style={{ fontSize: 12 }}>
+                                Prices remain on Primary/Secondary Unit. Fractional quantities convert automatically on bills & reports.
+                              </Text>
+                            </div>
+                            <Form.Item name="overrideSubUnits" valuePropName="checked" noStyle>
+                              <Checkbox
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    const currentCustom = form.getFieldValue('customAdditionalUnits');
+                                    if (!currentCustom || currentCustom.length === 0) {
+                                      form.setFieldValue(
+                                        'customAdditionalUnits',
+                                        inheritedSubUnits.map(u => ({
+                                          unitId: u.code,
+                                          factor: Number(u.conversionRatio),
+                                        }))
+                                      );
+                                    }
+                                  }
+                                }}
+                              >
+                                Override for this Product
+                              </Checkbox>
+                            </Form.Item>
+                          </div>
+
+                          {!overrideSubUnits ? (
+                            <div style={{ fontSize: 13, color: '#475569', marginTop: 4 }}>
+                              {inheritedSubUnits.length > 0 ? (
+                                <span>
+                                  Using default sub-unit(s) from <strong>{primaryUnitObj?.title}</strong>:{' '}
+                                  {inheritedSubUnits.map(u => (
+                                    <span
+                                      key={u.code}
+                                      style={{
+                                        display: 'inline-block',
+                                        background: '#e0f2fe',
+                                        color: '#0369a1',
+                                        padding: '2px 8px',
+                                        borderRadius: 6,
+                                        fontWeight: 600,
+                                        marginRight: 6,
+                                      }}
+                                    >
+                                      {u.conversionRatio} {u.shortTitle || u.title} = 1 {primaryLabel}
+                                    </span>
+                                  ))}
+                                </span>
+                              ) : (
+                                <span>
+                                  No default sub-units configured for <strong>{primaryUnitObj?.title || 'selected Primary Unit'}</strong>. Check &ldquo;Override for this Product&rdquo; to add one specifically for this item, or configure a default Parent Unit in Units Setup.
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ marginTop: 12 }}>
+                              <Form.List name="customAdditionalUnits">
+                                {(fields, { add, remove }) => (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    {fields.map(({ key, name, ...restField }) => (
+                                      <Row key={key} gutter={12} align="middle">
+                                        <Col xs={12}>
+                                          <Form.Item
+                                            {...restField}
+                                            name={[name, 'unitId']}
+                                            style={{ marginBottom: 4 }}
+                                            rules={[{ required: true, message: 'Select sub-unit' }]}
+                                          >
+                                            <Select placeholder="Select smaller sub-unit (e.g. Gram)">
+                                              {units
+                                                .filter(u => u.code !== selectedPrimaryUnitCode)
+                                                .map(u => (
+                                                  <Option key={u.code} value={u.code}>
+                                                    {u.title}{u.shortTitle ? ` (${u.shortTitle})` : ''}
+                                                  </Option>
+                                                ))}
+                                            </Select>
+                                          </Form.Item>
+                                        </Col>
+                                        <Col xs={10}>
+                                          <Form.Item
+                                            {...restField}
+                                            name={[name, 'factor']}
+                                            style={{ marginBottom: 4 }}
+                                            rules={[
+                                              { required: true, message: 'Enter ratio > 1' },
+                                              {
+                                                validator: (_, val) =>
+                                                  val && Number(val) > 1
+                                                    ? Promise.resolve()
+                                                    : Promise.reject(new Error('Ratio must be > 1')),
+                                              },
+                                            ]}
+                                          >
+                                            <InputNumber
+                                              style={{ width: '100%' }}
+                                              min={1.0001}
+                                              placeholder={`How many in 1 ${primaryLabel}? (e.g. 1000)`}
+                                              addonAfter={`= 1 ${primaryLabel}`}
+                                            />
+                                          </Form.Item>
+                                        </Col>
+                                        <Col xs={2}>
+                                          <Button
+                                            danger
+                                            type="text"
+                                            icon={<DeleteOutlined />}
+                                            onClick={() => remove(name)}
+                                          />
+                                        </Col>
+                                      </Row>
+                                    ))}
+                                    <Button
+                                      type="dashed"
+                                      onClick={() => add({ unitId: undefined, factor: 1000 })}
+                                      icon={<PlusOutlined />}
+                                      size="small"
+                                      style={{ width: 220, marginTop: 4 }}
+                                    >
+                                      Add Custom Sub-Unit
+                                    </Button>
+                                  </div>
+                                )}
+                              </Form.List>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </Col>
                 </Row>
 
