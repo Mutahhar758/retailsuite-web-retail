@@ -5,8 +5,10 @@ import {
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
-  TruckOutlined, AppstoreOutlined, CopyOutlined
+  TruckOutlined, AppstoreOutlined, CopyOutlined, CameraOutlined, PaperClipOutlined
 } from '@ant-design/icons';
+import { ScanSupplySheetModal, type ScannedAttachmentMeta } from './components/ScanSupplySheetModal';
+import { SaleSupplyAttachmentsDrawer } from './components/SaleSupplyAttachmentsDrawer';
 import dayjs from 'dayjs';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { round } from '../../utils/numberUtils';
@@ -38,6 +40,11 @@ export const WandaSaleSupplyForm: React.FC = () => {
   const [categoryPrices, setCategoryPrices] = useState<ItemCustomerCategoryPriceDto[]>([]);
   const [supplyLines, setSupplyLines] = useState<any[]>([]);
   const [supplyOrders, setSupplyOrders] = useState<SupplyOrder[]>([]);
+  const [scanModalVisible, setScanModalVisible] = useState(false);
+  const [attachmentsDrawerVisible, setAttachmentsDrawerVisible] = useState(false);
+  const [stagedMediaIds, setStagedMediaIds] = useState<string[]>([]);
+  const [stagedAttachmentsMeta, setStagedAttachmentsMeta] = useState<Array<{ mediaId: string; fileName: string; fileUrl?: string }>>([]);
+  const [savedAttachmentCount, setSavedAttachmentCount] = useState<number>(0);
 
   // ── Calculated Totals ──────────────────────────────────────────────────────
   const totals = useMemo(() => {
@@ -177,6 +184,7 @@ export const WandaSaleSupplyForm: React.FC = () => {
 
     if (isEdit) {
       fetchDetail();
+      saleSupplyService.getAttachments(voucherNo!).then(atts => setSavedAttachmentCount(atts.length)).catch(() => {});
     } else {
       const copyFrom = (location.state as any)?.copyFrom;
       if (copyFrom) {
@@ -581,6 +589,53 @@ export const WandaSaleSupplyForm: React.FC = () => {
     setSupplyLines(newLines);
   };
 
+  const handleImportScannedLines = (
+    importedLines: any[],
+    attachmentsOrMediaId?: ScannedAttachmentMeta[] | string,
+    attachedFileName?: string,
+    previewUrl?: string
+  ) => {
+    let attachments: ScannedAttachmentMeta[] = [];
+    if (Array.isArray(attachmentsOrMediaId)) {
+      attachments = attachmentsOrMediaId;
+    } else if (typeof attachmentsOrMediaId === 'string' && attachmentsOrMediaId) {
+      attachments = [{ mediaId: attachmentsOrMediaId, fileName: attachedFileName, previewUrl }];
+    }
+
+    if (attachments.length > 0) {
+      const newMediaIds = attachments.map(a => a.mediaId);
+      setStagedMediaIds(prev => Array.from(new Set([...prev, ...newMediaIds])));
+      setStagedAttachmentsMeta(prev => [
+        ...prev,
+        ...attachments.map(a => ({
+          mediaId: a.mediaId,
+          fileName: a.fileName || `Scanned_Slip_${dayjs().format('HHmmss')}.jpg`,
+          fileUrl: a.previewUrl
+        }))
+      ]);
+      if (isEdit && voucherNo && voucherNo !== 'new') {
+        attachments.forEach(att => {
+          saleSupplyService.addAttachment(voucherNo, {
+            mediaId: att.mediaId,
+            fileName: att.fileName,
+            description: 'Scanned paper slip'
+          }).then(() => setSavedAttachmentCount(c => c + 1)).catch(() => {});
+        });
+      }
+    }
+
+    setSupplyLines(prev => {
+      const isBlankOnly = prev.length === 1 && !prev[0].customerId && (Number(prev[0].qty) || 0) <= 1 && (Number(prev[0].rate) || 0) === 0;
+      const baseSeq = isBlankOnly ? 0 : (prev.length > 0 ? Math.max(...prev.map(l => l.seq)) : 0);
+      const mapped = importedLines.map((line, idx) => ({
+        ...line,
+        key: Date.now() + idx,
+        seq: baseSeq + idx + 1
+      }));
+      return isBlankOnly ? mapped : [...prev, ...mapped];
+    });
+  };
+
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
@@ -603,6 +658,7 @@ export const WandaSaleSupplyForm: React.FC = () => {
         ...values,
         date: values.date.format('YYYY-MM-DD'),
         supplyOrderMasterId: values.supplyOrderMasterId,
+        attachmentMediaIds: stagedMediaIds,
         lines: validLines.map(l => {
           const masterItemId = form.getFieldValue('itemId') || values.itemId;
           const item = items.find(i => i.id === masterItemId);
@@ -1015,6 +1071,19 @@ export const WandaSaleSupplyForm: React.FC = () => {
                 Copy as New
               </Button>
             )}
+            <Button
+              icon={<CameraOutlined />}
+              onClick={() => setScanModalVisible(true)}
+              style={{ borderColor: '#1677ff', color: '#1677ff' }}
+            >
+              Scan Slip (AI)
+            </Button>
+            <Button
+              icon={<PaperClipOutlined />}
+              onClick={() => setAttachmentsDrawerVisible(true)}
+            >
+              Attachments {(isEdit ? savedAttachmentCount : stagedMediaIds.length) > 0 ? `(${isEdit ? savedAttachmentCount : stagedMediaIds.length})` : ''}
+            </Button>
             <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={loading}>
               Save Supply
             </Button>
@@ -1245,7 +1314,32 @@ export const WandaSaleSupplyForm: React.FC = () => {
             </span>
           ))}
         </div>
+
+        <ScanSupplySheetModal
+          visible={scanModalVisible}
+          onClose={() => setScanModalVisible(false)}
+          customers={customers}
+          initialDate={form.getFieldValue('date')?.format?.('YYYY-MM-DD') || dayjs().format('YYYY-MM-DD')}
+          onImportLines={handleImportScannedLines}
+        />
+        <SaleSupplyAttachmentsDrawer
+          visible={attachmentsDrawerVisible}
+          onClose={() => setAttachmentsDrawerVisible(false)}
+          voucherNo={voucherNo}
+          isEdit={isEdit}
+          stagedMediaIds={stagedMediaIds}
+          stagedAttachmentsMeta={stagedAttachmentsMeta}
+          onAddStagedMedia={(mediaId, meta) => {
+            setStagedMediaIds(prev => [...prev, mediaId]);
+            if (meta) setStagedAttachmentsMeta(prev => [...prev, { mediaId, ...meta }]);
+          }}
+          onRemoveStagedMedia={(mediaId) => {
+            setStagedMediaIds(prev => prev.filter(x => x !== mediaId));
+            setStagedAttachmentsMeta(prev => prev.filter(x => x.mediaId !== mediaId));
+          }}
+        />
       </Card>
     </div>
   );
 };
+

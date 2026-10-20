@@ -1,4 +1,5 @@
 import api from './api';
+import axios from 'axios';
 
 export interface SaleSupply {
   date: string;
@@ -31,13 +32,13 @@ export interface SaleSupplyLine {
   addLess: number;
   carriage?: number;
   amount: number;
-  secQty?: number;
-  secRate?: number;
   secUnit?: string | null;
-  qtyInPack?: number;
-  packing?: number;
-  createdBy: string;
-  createdOn: string;
+  secQty?: number | null;
+  secRate?: number | null;
+  qtyInPack?: number | null;
+  packing?: any;
+  createdBy?: string;
+  createdOn?: string;
   lastModifiedBy?: string;
   lastModifiedOn?: string;
 }
@@ -45,17 +46,18 @@ export interface SaleSupplyLine {
 export interface SaleSupplyLineRequest {
   seq: number;
   customerId: string;
-  unit: string | null;
+  unit?: string | null;
   qty: number;
   rate: number;
   discount: number;
   addLess: number;
   carriage?: number;
-  secQty?: number;
-  secRate?: number;
+  amount?: number;
   secUnit?: string | null;
-  qtyInPack?: number;
-  packing?: number;
+  secQty?: number | null;
+  secRate?: number | null;
+  qtyInPack?: number | null;
+  packing?: any;
 }
 
 export interface SaleSupplyCustomerLineUpdateRequest {
@@ -71,6 +73,7 @@ export interface SaleSupplyCreateRequest {
   narration?: string;
   description?: string;
   lines: SaleSupplyLineRequest[];
+  attachmentMediaIds?: string[];
 }
 
 export interface SaleSupplyUpdateRequest {
@@ -80,6 +83,41 @@ export interface SaleSupplyUpdateRequest {
   narration?: string;
   description?: string;
   lines: SaleSupplyLineRequest[];
+  attachmentMediaIds?: string[];
+}
+
+export interface ScannedSaleSupplyLine {
+  seq: number;
+  rawCustomerName: string;
+  matchedCustomerId?: string | null;
+  matchedCustomerName?: string | null;
+  qty: number;
+  rate: number;
+  discount: number;
+  addLess: number;
+  carriage: number;
+  amount: number;
+  isCustomerMatched: boolean;
+}
+
+export interface SaleSupplyScanResponse {
+  lines: ScannedSaleSupplyLine[];
+  remainingScansThisMonth: number;
+  monthlyLimit: number;
+  rawDetectedText?: string;
+}
+
+export interface SaleSupplyAttachment {
+  id: number;
+  vType?: string;
+  vNo?: string;
+  mediaId: string;
+  fileName: string;
+  fileUrl?: string;
+  downloadUrl?: string;
+  description?: string;
+  createdOn: string;
+  createdBy?: string;
 }
 
 export const saleSupplyService = {
@@ -118,8 +156,8 @@ export const saleSupplyService = {
     await api.put(`/api/SaleSupplies/${voucherNo}`, request);
   },
 
-  async updateLine(voucherNo: string, seq: number, request: SaleSupplyLineRequest) {
-    await api.put(`/api/SaleSupplies/${voucherNo}/lines/${seq}`, request);
+  async updateLine(voucherNo: string, seq: number, line: SaleSupplyLineRequest) {
+    await api.put(`/api/SaleSupplies/${voucherNo}/lines/${seq}`, line);
   },
 
   async updateCustomerLines(requests: SaleSupplyCustomerLineUpdateRequest[]) {
@@ -132,5 +170,60 @@ export const saleSupplyService = {
 
   async deleteLine(voucherNo: string, seq: number) {
     await api.delete(`/api/SaleSupplies/${voucherNo}/lines/${seq}`);
+  },
+
+  async scanSheet(files: File[] | File, targetDate?: string) {
+    const formData = new FormData();
+    const fileList = Array.isArray(files) ? files : [files];
+    for (const file of fileList) {
+      formData.append('files', file);
+    }
+    if (targetDate) {
+      formData.append('targetDate', targetDate);
+    }
+    const response = await api.post('/api/SaleSupplies/scan-sheet', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000 // 2 minutes timeout for AI vision scan
+    });
+    return response.data.body as SaleSupplyScanResponse;
+  },
+
+  async getAttachmentUploadUrl(fileName: string) {
+    const response = await api.post('/api/SaleSupplies/attachments/presigned-upload-url', null, { params: { fileName } });
+    const data = response?.data?.body;
+    if (!data?.uploadUrl) {
+      throw new Error(response?.data?.metadata?.message || 'Server did not return a valid upload URL for the attachment.');
+    }
+    return data as { fileId: string; uploadUrl: string; expiresAt?: string };
+  },
+
+  async uploadAttachmentDirect(file: File): Promise<{ mediaId: string; fileName: string }> {
+    const { fileId, uploadUrl } = await this.getAttachmentUploadUrl(file.name);
+    const formData = new FormData();
+    formData.append('File', file);
+    await axios.post(uploadUrl, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return { mediaId: fileId, fileName: file.name };
+  },
+
+  async getAttachments(voucherNo: string) {
+    const response = await api.get(`/api/SaleSupplies/${voucherNo}/attachments`);
+    return response.data.body as SaleSupplyAttachment[];
+  },
+
+  async addAttachment(voucherNo: string, request: { mediaId: string; fileName?: string; description?: string }) {
+    const response = await api.post(`/api/SaleSupplies/${voucherNo}/attachments`, {
+      vNo: voucherNo,
+      vType: 'SP',
+      ...request
+    });
+    return response.data.body as SaleSupplyAttachment;
+  },
+
+  async deleteAttachment(voucherNo: string, attachmentId: number) {
+    await api.delete(`/api/SaleSupplies/${voucherNo}/attachments/${attachmentId}`);
   }
 };
