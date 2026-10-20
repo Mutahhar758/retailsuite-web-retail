@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Row, Col, Typography, Button, Input, InputNumber, Space, message, Tag, Modal, List, Badge, Alert, Dropdown, Segmented, Select, Tooltip
+  Row, Col, Typography, Button, Input, InputNumber, Space, message, Tag, Modal, List, Badge, Alert, Dropdown, Segmented, Select, Tooltip, Popconfirm
 } from 'antd';
 import {
   useThermalPrinter,
@@ -33,8 +33,9 @@ import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCa
 import type { NarrationDto } from '../../services/narrationService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { kotService, type DiningTableDto, type KotOrderResponse } from '../../services/kotService';
-import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT, RESTAURANT_ENABLE_KOT_KEY, RESTAURANT_ENABLE_DINE_IN_KEY, BARCODE_FAST_SCAN_SOUND_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT, RESTAURANT_ENABLE_KOT_KEY, RESTAURANT_ENABLE_DINE_IN_KEY, RESTAURANT_ENABLE_KDS_KEY, RESTAURANT_ENABLE_VOICE_CALLOUT_KEY, RESTAURANT_VOICE_CALLOUT_SPEED_KEY, RESTAURANT_VOICE_CALLOUT_ACCENT_KEY, BARCODE_FAST_SCAN_SOUND_KEY } from '../../stores/useSettingsStore';
 import { printKotSlip } from '../../utils/kotPrint';
+import { speakKotOrder, type VoiceAccentType } from '../../utils/kotSpeech';
 import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
 import { parseBarcodePayload } from '../../utils/barcodeParser';
 import { getEffectiveSubUnits, getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
@@ -82,7 +83,13 @@ export const POSSaleForm: React.FC = () => {
   const settingKot = getSetting(RESTAURANT_ENABLE_KOT_KEY, '');
   const hasKotFeature = settingKot !== '' ? settingKot === 'true' : (currentOrg?.hasKotFeature ?? false);
   const settingDineIn = getSetting(RESTAURANT_ENABLE_DINE_IN_KEY, '');
-  const hasDineInFeature = settingDineIn !== '' ? settingDineIn === 'true' : hasKotFeature;
+  const hasDineInFeature = settingDineIn !== '' ? settingDineIn === 'true' : false;
+  const settingKds = getSetting(RESTAURANT_ENABLE_KDS_KEY, '');
+  const hasKdsFeature = hasKotFeature && (settingKds !== '' ? settingKds === 'true' : false);
+  const settingVoiceCallout = getSetting(RESTAURANT_ENABLE_VOICE_CALLOUT_KEY, '');
+  const hasVoiceCallout = hasKotFeature && (settingVoiceCallout !== '' ? settingVoiceCallout === 'true' : false);
+  const voiceSpeed = parseFloat(getSetting(RESTAURANT_VOICE_CALLOUT_SPEED_KEY, '1.0')) || 1.0;
+  const voiceAccent = (getSetting(RESTAURANT_VOICE_CALLOUT_ACCENT_KEY, 'pakistani_male') as VoiceAccentType) || 'pakistani_male';
 
   useEffect(() => {
     if (!settingsInitialized) {
@@ -809,6 +816,7 @@ export const POSSaleForm: React.FC = () => {
               customerId: selectedCustomer.account || undefined,
               remarks: remarks || undefined,
               saleVoucherNo: finalVoucherNo,
+              status: !hasKdsFeature ? 'Served' : 'Pending',
               lines: cart.map(line => ({
                 itemId: line.item.id,
                 qty: line.qty,
@@ -819,6 +827,15 @@ export const POSSaleForm: React.FC = () => {
             const createdKot = await kotService.create(kotRequest);
             tokenNumber = createdKot.tokenNo;
             fetchActiveKots();
+
+            if (hasVoiceCallout) {
+              speakKotOrder({
+                tokenNo: createdKot.tokenNo,
+                orderType: orderType || 'Takeaway',
+                tableName: diningTables.find(t => t.id === selectedTableId)?.name,
+                lines: cart.map(c => ({ itemTitle: c.item.title, qty: c.qty }))
+              }, { rate: voiceSpeed, accent: voiceAccent });
+            }
 
             try {
               await printKotSlip(createdKot, connectionMethod, { printerName, cutPaper });
@@ -972,6 +989,15 @@ export const POSSaleForm: React.FC = () => {
 
       if (isRunning) {
         message.success(`Running KOT #${kotOrder.tokenNo} sent to kitchen with ${newItemsToPrint.length} additional item(s)!`);
+        if (hasVoiceCallout) {
+          speakKotOrder({
+            tokenNo: kotOrder.tokenNo,
+            orderType: orderType || 'DineIn',
+            tableName: diningTables.find(t => t.id === selectedTableId)?.name,
+            lines: newItemsToPrint.map(c => ({ itemTitle: c.itemTitle, qty: c.qty })),
+            isRunning: true
+          }, { rate: voiceSpeed, accent: voiceAccent });
+        }
         try {
           // Print ONLY the newly added items on the kitchen slip!
           await printKotSlip(kotOrder, connectionMethod, { 
@@ -985,6 +1011,15 @@ export const POSSaleForm: React.FC = () => {
         }
       } else {
         message.success(`KOT #${kotOrder.tokenNo} sent to kitchen! (Bill #${voucherNoToLink} created, inventory deducted)`);
+        if (hasVoiceCallout) {
+          speakKotOrder({
+            tokenNo: kotOrder.tokenNo,
+            orderType: orderType || 'DineIn',
+            tableName: diningTables.find(t => t.id === selectedTableId)?.name,
+            lines: cart.map(c => ({ itemTitle: c.item.title, qty: c.qty })),
+            isRunning: false
+          }, { rate: voiceSpeed, accent: voiceAccent });
+        }
         try {
           await printKotSlip(kotOrder, connectionMethod, { printerName, cutPaper });
         } catch (printErr) {
@@ -2328,7 +2363,7 @@ export const POSSaleForm: React.FC = () => {
               }} 
             />
             <span style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>
-              Order sent to Kitchen Display ({savedOrderType})
+              {hasKdsFeature ? `Order sent to Kitchen Display (${savedOrderType})` : `Order completed & KOT printed (${savedOrderType})`}
             </span>
           </div>
         )}
@@ -2801,6 +2836,34 @@ export const POSSaleForm: React.FC = () => {
                       style={{ borderRadius: 8 }}
                     />
                   </Tooltip>
+                  <Popconfirm
+                    title="Cancel Order?"
+                    description="Are you sure you want to cancel this KOT order?"
+                    onConfirm={async () => {
+                      try {
+                        await kotService.updateOrderStatus(kot.id, 'Cancelled');
+                        message.success(`KOT order #${kot.tokenNo} cancelled`);
+                        fetchActiveKots();
+                        if (hasDineInFeature) {
+                          kotService.getDiningTables().then(setDiningTables).catch(console.error);
+                        }
+                      } catch (err) {
+                        message.error('Failed to cancel order');
+                      }
+                    }}
+                    okText="Yes"
+                    cancelText="No"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Tooltip title="Cancel Order">
+                      <Button
+                        danger
+                        type="text"
+                        icon={<DeleteOutlined />}
+                        style={{ borderRadius: 8 }}
+                      />
+                    </Tooltip>
+                  </Popconfirm>
                 </div>
               </List.Item>
             )}

@@ -15,7 +15,8 @@ import {
   Switch,
   Form,
   Alert,
-  Radio
+  Radio,
+  Select
 } from 'antd';
 import {
   SettingOutlined,
@@ -47,6 +48,10 @@ import {
   INVENTORY_ENABLE_SECONDARY_QTY_KEY,
   RESTAURANT_ENABLE_KOT_KEY,
   RESTAURANT_ENABLE_DINE_IN_KEY,
+  RESTAURANT_ENABLE_KDS_KEY,
+  RESTAURANT_ENABLE_VOICE_CALLOUT_KEY,
+  RESTAURANT_VOICE_CALLOUT_SPEED_KEY,
+  RESTAURANT_VOICE_CALLOUT_ACCENT_KEY,
   SUPPLY_ENABLE_KEY,
   TRANSACTION_ENABLE_CARRIAGE_KEY,
   BARCODE_FAST_SCAN_ENABLED_KEY,
@@ -58,6 +63,7 @@ import { useAppStore } from '../../stores/useAppStore';
 import { PrinterSettings } from './PrinterSettings';
 import { buildEmvCoPayload, normalizeToIban, isValidIban, formatIban } from '../../utils/emvcoQr';
 import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
+import { testKotSpeech, ACCENT_OPTIONS, type VoiceAccentType } from '../../utils/kotSpeech';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { parseBarcodePayload, type ParsedBarcodeResult } from '../../utils/barcodeParser';
 import QRCode from 'qrcode';
@@ -99,6 +105,10 @@ export const SettingsPage: React.FC = () => {
   // Local state for Restaurant, Dine-In & KOT settings
   const [kotEnabled, setKotEnabled] = useState(false);
   const [dineInEnabled, setDineInEnabled] = useState(false);
+  const [kdsEnabled, setKdsEnabled] = useState(false);
+  const [voiceCalloutEnabled, setVoiceCalloutEnabled] = useState(false);
+  const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
+  const [voiceAccent, setVoiceAccent] = useState<VoiceAccentType>('pakistani_male');
   const [savingKot, setSavingKot] = useState(false);
   const [kotLastSaved, setKotLastSaved] = useState<string | null>(null);
 
@@ -145,8 +155,16 @@ export const SettingsPage: React.FC = () => {
     setSupplyEnabled(supplySetting !== '' ? supplySetting === 'true' : orgSupply);
     const kotVal = getSetting(RESTAURANT_ENABLE_KOT_KEY, 'false') === 'true';
     setKotEnabled(kotVal);
-    const dineInSetting = getSetting(RESTAURANT_ENABLE_DINE_IN_KEY, '');
-    setDineInEnabled(dineInSetting !== '' ? dineInSetting === 'true' : kotVal);
+    const dineInVal = getSetting(RESTAURANT_ENABLE_DINE_IN_KEY, 'false') === 'true';
+    setDineInEnabled(dineInVal);
+    const kdsVal = getSetting(RESTAURANT_ENABLE_KDS_KEY, 'false') === 'true';
+    setKdsEnabled(kdsVal);
+    const voiceVal = getSetting(RESTAURANT_ENABLE_VOICE_CALLOUT_KEY, 'false') === 'true';
+    setVoiceCalloutEnabled(voiceVal);
+    const speedVal = parseFloat(getSetting(RESTAURANT_VOICE_CALLOUT_SPEED_KEY, '1.0')) || 1.0;
+    setVoiceSpeed(speedVal);
+    const accentVal = (getSetting(RESTAURANT_VOICE_CALLOUT_ACCENT_KEY, 'pakistani_male') as VoiceAccentType) || 'pakistani_male';
+    setVoiceAccent(accentVal);
     setFastScanEnabled(getSetting(BARCODE_FAST_SCAN_ENABLED_KEY, 'false') === 'true');
     setFastScanIncrement(getSetting(BARCODE_FAST_SCAN_INCREMENT_KEY, 'true') !== 'false');
     setFastScanSound(getSetting(BARCODE_FAST_SCAN_SOUND_KEY, 'true') !== 'false');
@@ -217,13 +235,37 @@ export const SettingsPage: React.FC = () => {
       await updateSetting(
         RESTAURANT_ENABLE_KOT_KEY,
         kotEnabled ? 'true' : 'false',
-        'Enable Kitchen Order Tickets (KOT) and Kitchen Display System (KDS)',
+        'Enable Kitchen Order Tickets (KOT)',
         'Restaurant'
       );
       await updateSetting(
         RESTAURANT_ENABLE_DINE_IN_KEY,
         dineInEnabled ? 'true' : 'false',
         'Enable Dine-In table management and Dining Table assignment',
+        'Restaurant'
+      );
+      await updateSetting(
+        RESTAURANT_ENABLE_KDS_KEY,
+        kdsEnabled ? 'true' : 'false',
+        'Enable Kitchen Display System (KDS) screen and kitchen mark served workflow',
+        'Restaurant'
+      );
+      await updateSetting(
+        RESTAURANT_ENABLE_VOICE_CALLOUT_KEY,
+        voiceCalloutEnabled ? 'true' : 'false',
+        'Enable voice text-to-speech callout for KOT orders on speaker',
+        'Restaurant'
+      );
+      await updateSetting(
+        RESTAURANT_VOICE_CALLOUT_SPEED_KEY,
+        voiceSpeed.toString(),
+        'Voice text-to-speech speaking speed',
+        'Restaurant'
+      );
+      await updateSetting(
+        RESTAURANT_VOICE_CALLOUT_ACCENT_KEY,
+        voiceAccent,
+        'Voice text-to-speech accent style (Pakistani, Urdu, English)',
         'Restaurant'
       );
       setKotLastSaved(new Date().toLocaleTimeString());
@@ -978,15 +1020,15 @@ export const SettingsPage: React.FC = () => {
                         Configure dining table management, Kitchen Order Tickets (KOT), and Kitchen Display System (KDS) for restaurant, cafe, or takeaway workflows.
                       </Paragraph>
 
-                      {/* 1. KOT & KDS Feature */}
+                      {/* 1. KOT Feature */}
                       <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
                         <Row align="middle" justify="space-between">
                           <Col span={18}>
                             <Text strong style={{ fontSize: 15, display: 'block' }}>
-                              Kitchen Order Tickets (KOT) & Kitchen Display (KDS)
+                              Kitchen Order Tickets (KOT)
                             </Text>
                             <Text type="secondary" style={{ fontSize: 13 }}>
-                              When enabled, orders can be dispatched to the kitchen via "Send to Kitchen" (KOT), tickets can be printed, and the Kitchen Display System (KDS) screen is accessible. Works for both Takeaway and Dine-In!
+                              When enabled, orders generate sequential KOT token numbers and tickets can be printed on thermal printers for kitchen preparation and customer collection. Works for both Takeaway and Dine-In.
                             </Text>
                           </Col>
                           <Col span={6} style={{ textAlign: 'right' }}>
@@ -1000,7 +1042,32 @@ export const SettingsPage: React.FC = () => {
                         </Row>
                       </div>
 
-                      {/* 2. Dine-In & Dining Tables Feature */}
+                      {/* 2. Kitchen Display System (KDS) & Kitchen Screen Workflow */}
+                      <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9', opacity: kotEnabled ? 1 : 0.5 }}>
+                        <Row align="middle" justify="space-between">
+                          <Col span={18}>
+                            <Text strong style={{ fontSize: 15, display: 'block' }}>
+                              Kitchen Display System (KDS) & Kitchen Tracking
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                              {kdsEnabled
+                                ? 'Enabled: Orders are dispatched to the Kitchen Display (KDS) screen where kitchen staff mark items as Ready and Served.'
+                                : 'Disabled (Print-Only KOT): Ideal if you do not have a computer/screen in the kitchen. KOT tickets are simply printed on the printer without requiring kitchen staff to mark orders Served.'}
+                            </Text>
+                          </Col>
+                          <Col span={6} style={{ textAlign: 'right' }}>
+                            <Switch
+                              checked={kdsEnabled && kotEnabled}
+                              disabled={!kotEnabled}
+                              onChange={setKdsEnabled}
+                              checkedChildren="Enabled"
+                              unCheckedChildren="Disabled"
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+
+                      {/* 3. Dine-In & Dining Tables Feature */}
                       <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
                         <Row align="middle" justify="space-between">
                           <Col span={18}>
@@ -1015,6 +1082,75 @@ export const SettingsPage: React.FC = () => {
                             <Switch
                               checked={dineInEnabled}
                               onChange={setDineInEnabled}
+                              checkedChildren="Enabled"
+                              unCheckedChildren="Disabled"
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+
+                      {/* 4. KOT Voice Callout (Text-To-Speech) Feature */}
+                      <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9', opacity: kotEnabled ? 1 : 0.5 }}>
+                        <Row align="middle" justify="space-between">
+                          <Col span={16}>
+                            <Text strong style={{ fontSize: 15, display: 'block' }}>
+                              🔊 KOT Voice Announcement (Text-To-Speech)
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                              Automatically call out new orders and items out loud over the speaker (e.g. <i>&quot;New order. Token 5. 2 Chicken Burgers, 1 Fries&quot;</i>). Perfect for kitchen staff listening to a Bluetooth or AUX speaker connected from the counter POS PC without needing a screen.
+                            </Text>
+                            {voiceCalloutEnabled && kotEnabled && (
+                              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+                                <div>
+                                  <Text strong style={{ fontSize: 13, marginRight: 8 }}>Accent:</Text>
+                                  <Select
+                                    size="small"
+                                    value={voiceAccent}
+                                    onChange={setVoiceAccent}
+                                    style={{ width: 220 }}
+                                  >
+                                    {ACCENT_OPTIONS.map(opt => (
+                                      <Select.Option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </Select.Option>
+                                    ))}
+                                  </Select>
+                                </div>
+
+                                <div>
+                                  <Text strong style={{ fontSize: 13, marginRight: 8 }}>Speed:</Text>
+                                  <Select
+                                    size="small"
+                                    value={voiceSpeed}
+                                    onChange={setVoiceSpeed}
+                                    style={{ width: 120 }}
+                                  >
+                                    <Select.Option value={0.85}>0.85x (Slow)</Select.Option>
+                                    <Select.Option value={1.0}>1.0x (Normal)</Select.Option>
+                                    <Select.Option value={1.2}>1.2x (Fast)</Select.Option>
+                                  </Select>
+                                </div>
+
+                                <Button
+                                  size="small"
+                                  type="primary"
+                                  ghost
+                                  icon={<SoundOutlined />}
+                                  onClick={() => testKotSpeech({ 
+                                    rate: voiceSpeed, 
+                                    accent: voiceAccent, 
+                                  })}
+                                >
+                                  Test Voice Speaker
+                                </Button>
+                              </div>
+                            )}
+                          </Col>
+                          <Col span={8} style={{ textAlign: 'right' }}>
+                            <Switch
+                              checked={voiceCalloutEnabled && kotEnabled}
+                              disabled={!kotEnabled}
+                              onChange={setVoiceCalloutEnabled}
                               checkedChildren="Enabled"
                               unCheckedChildren="Disabled"
                             />

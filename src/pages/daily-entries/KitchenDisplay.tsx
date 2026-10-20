@@ -11,6 +11,8 @@ import {
 import dayjs from 'dayjs';
 import { kotService, type KotOrderResponse, type PrepStationDto } from '../../services/kotService';
 import { printKotSlip } from '../../utils/kotPrint';
+import { useSettingsStore, RESTAURANT_ENABLE_VOICE_CALLOUT_KEY, RESTAURANT_VOICE_CALLOUT_SPEED_KEY, RESTAURANT_VOICE_CALLOUT_ACCENT_KEY } from '../../stores/useSettingsStore';
+import { speakTokenReady, type VoiceAccentType } from '../../utils/kotSpeech';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -24,6 +26,10 @@ export const KitchenDisplay: React.FC = () => {
   });
   const [currentTime, setCurrentTime] = useState(dayjs());
   const prevOrdersCountRef = useRef<number>(0);
+  const getSetting = useSettingsStore(state => state.getSetting);
+  const voiceCalloutEnabled = getSetting(RESTAURANT_ENABLE_VOICE_CALLOUT_KEY, 'false') === 'true';
+  const voiceSpeed = parseFloat(getSetting(RESTAURANT_VOICE_CALLOUT_SPEED_KEY, '1.0')) || 1.0;
+  const voiceAccent = (getSetting(RESTAURANT_VOICE_CALLOUT_ACCENT_KEY, 'pakistani_male') as VoiceAccentType) || 'pakistani_male';
 
   // Sound generator
   const playNewOrderSound = () => {
@@ -360,6 +366,12 @@ export const KitchenDisplay: React.FC = () => {
                                     .map(l => kotService.updateItemStatus(order.id, l.id, 'Ready'))
                                 );
                                 message.success('All items marked as Ready');
+                                if (voiceCalloutEnabled && order.tokenNo) {
+                                  speakTokenReady(order.tokenNo, {
+                                    rate: voiceSpeed,
+                                    accent: voiceAccent,
+                                  });
+                                }
                                 fetchOrders(selectedStation);
                               } catch (err) {
                                 message.error('Failed to update all items');

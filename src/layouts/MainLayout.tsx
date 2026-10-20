@@ -23,7 +23,7 @@ import {
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useAppStore } from '../stores/useAppStore';
-import { useSettingsStore, RESTAURANT_ENABLE_KOT_KEY, RESTAURANT_ENABLE_DINE_IN_KEY, SUPPLY_ENABLE_KEY, MOBILE_SHOP_ENABLE_KEY, MANUFACTURING_ENABLE_KEY } from '../stores/useSettingsStore';
+import { useSettingsStore, RESTAURANT_ENABLE_KOT_KEY, RESTAURANT_ENABLE_DINE_IN_KEY, RESTAURANT_ENABLE_KDS_KEY, SUPPLY_ENABLE_KEY, MOBILE_SHOP_ENABLE_KEY, MANUFACTURING_ENABLE_KEY } from '../stores/useSettingsStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useOfflineStore } from '../stores/useOfflineStore';
 import { profileService, logoutService } from '../services/profileService';
@@ -228,7 +228,9 @@ export const MainLayout: React.FC = () => {
   const settingKot = useSettingsStore(state => state.getSetting(RESTAURANT_ENABLE_KOT_KEY, ''));
   const hasKotFeature = settingKot !== '' ? settingKot === 'true' : (currentOrg?.hasKotFeature ?? false);
   const settingDineIn = useSettingsStore(state => state.getSetting(RESTAURANT_ENABLE_DINE_IN_KEY, ''));
-  const hasDineInFeature = settingDineIn !== '' ? settingDineIn === 'true' : hasKotFeature;
+  const hasDineInFeature = settingDineIn !== '' ? settingDineIn === 'true' : false;
+  const settingKds = useSettingsStore(state => state.getSetting(RESTAURANT_ENABLE_KDS_KEY, ''));
+  const hasKdsFeature = hasKotFeature && (settingKds !== '' ? settingKds === 'true' : false);
   const settingMobile = useSettingsStore(state => state.getSetting(MOBILE_SHOP_ENABLE_KEY, ''));
   const hasMobileShopFeature = settingMobile !== '' ? settingMobile === 'true' : (currentOrg?.hasMobileShopFeature ?? false);
   const settingManufacturing = useSettingsStore(state => state.getSetting(MANUFACTURING_ENABLE_KEY, ''));
@@ -282,7 +284,7 @@ export const MainLayout: React.FC = () => {
         { key: '/daily-entries/bank-reconciliation', label: 'Bank Reconciliation' },
         { key: '/daily-entries/payroll', label: 'Payroll' },
         { key: '/daily-entries/recurring-vouchers', label: 'Recurring Vouchers' },
-        hasKotFeature ? { key: '/daily-entries/kitchen-display', label: 'Kitchen Display (KDS)' } : null,
+        hasKdsFeature ? { key: '/daily-entries/kitchen-display', label: 'Kitchen Display (KDS)' } : null,
       ].filter(Boolean) as any[]
     },
     hasMobileShopFeature ? {

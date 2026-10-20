@@ -36,6 +36,10 @@ export const INVENTORY_ENABLE_SECONDARY_QTY_KEY = 'Inventory.EnableSecondaryQty'
 // Restaurant & KOT setting keys
 export const RESTAURANT_ENABLE_KOT_KEY = 'Restaurant.EnableKot';
 export const RESTAURANT_ENABLE_DINE_IN_KEY = 'Restaurant.EnableDineIn';
+export const RESTAURANT_ENABLE_KDS_KEY = 'Restaurant.EnableKds';
+export const RESTAURANT_ENABLE_VOICE_CALLOUT_KEY = 'Restaurant.EnableVoiceCallout';
+export const RESTAURANT_VOICE_CALLOUT_SPEED_KEY = 'Restaurant.VoiceCalloutSpeed';
+export const RESTAURANT_VOICE_CALLOUT_ACCENT_KEY = 'Restaurant.VoiceCalloutAccent';
 
 // Supply setting keys
 export const SUPPLY_ENABLE_KEY = 'Supply.EnableSupply';

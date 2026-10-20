@@ -58,6 +58,7 @@ export interface KotOrderCreateRequest {
   customerId?: string;
   remarks?: string;
   saleVoucherNo?: string | null;
+  status?: string;
   lines: KotOrderItemRequest[];
 }
 
