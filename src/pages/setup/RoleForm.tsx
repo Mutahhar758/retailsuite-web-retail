@@ -21,6 +21,7 @@ const MODULE_CATEGORIES: Record<string, string> = {
   Roles: 'Setup',
   ChartOfAccounts: 'Setup',
   DetailAccounts: 'Setup',
+  BankAccounts: 'Setup',
   Customers: 'Setup',
   Vendors: 'Setup',
   InventoryItems: 'Setup',
@@ -90,6 +91,7 @@ const MODULE_DISPLAY_NAMES: Record<string, string> = {
   ItemCategories: 'Item Categories',
   ChartOfAccounts: 'Chart Of Accounts',
   DetailAccounts: 'Detail Accounts',
+  BankAccounts: 'Bank Accounts',
   HRInfo: 'Employees',
 };
 

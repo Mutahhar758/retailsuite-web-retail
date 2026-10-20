@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Button,
   Table, Space, message, Checkbox, Statistic, Tag
@@ -22,6 +23,7 @@ export const BankReconciliation: React.FC = () => {
   const [data, setData] = useState<BankReconciliationLine[]>([]);
   const [reconcileBalance, setReconcileBalance] = useState(0);
   const [statementBalance, setStatementBalance] = useState(0);
+  const [searchParams] = useSearchParams();
 
   const rangePresets: { label: string; value: [dayjs.Dayjs, dayjs.Dayjs] }[] = [
     { label: 'Today', value: [dayjs(), dayjs()] },
@@ -37,6 +39,10 @@ export const BankReconciliation: React.FC = () => {
       try {
         const accounts = await chartOfAccountService.getCashBankAccounts();
         setBankAccounts(accounts);
+        const targetAcc = searchParams.get('account');
+        if (targetAcc) {
+          form.setFieldsValue({ bankAccount: targetAcc });
+        }
       } catch (error) {
         message.error('Failed to load bank accounts');
       }

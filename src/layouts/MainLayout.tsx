@@ -36,6 +36,7 @@ const permissionMap: Record<string, string> = {
   '/': 'Permissions.Dashboard.View',
   '/setup/chart-of-accounts': 'Permissions.ChartOfAccounts.View',
   '/setup/detail-accounts': 'Permissions.DetailAccounts.View',
+  '/setup/bank-accounts': 'Permissions.BankAccounts.View',
   '/setup/customers': 'Permissions.Customers.View',
   '/setup/customer-categories': 'Permissions.CustomerCategories.View',
   '/setup/vendors': 'Permissions.Vendors.View',
@@ -158,6 +159,7 @@ export const MainLayout: React.FC = () => {
       'item-details': 'Product',
       'item-categories': 'Product Category',
       'item-ledger': 'Product Ledger',
+      'bank-accounts': 'Bank Accounts',
       'bom': 'Bill of Materials',
       'manufacturing': 'Manufacturing Voucher',
     };
@@ -240,6 +242,7 @@ export const MainLayout: React.FC = () => {
       children: [
         { key: '/setup/chart-of-accounts', label: 'Chart of Accounts' },
         { key: '/setup/detail-accounts', label: 'Detail Accounts' },
+        { key: '/setup/bank-accounts', label: 'Bank Accounts' },
         { key: '/setup/customers', label: 'Customer' },
         { key: '/setup/customer-categories', label: 'Customer Category' },
         { key: '/setup/vendors', label: 'Vendor' },
@@ -404,6 +407,7 @@ export const MainLayout: React.FC = () => {
         const requiredPermission = permissionMap[item.key];
         if (requiredPermission && !user?.isOwner) {
           const hasPerm = permissions?.includes(requiredPermission) ||
+            (requiredPermission === 'Permissions.BankAccounts.View' && (permissions?.includes('Permissions.DetailAccounts.View') || permissions?.includes('Permissions.ChartOfAccounts.View'))) ||
             (requiredPermission === 'Permissions.PurchaseSupplyComparison.View' && permissions?.includes('Permissions.MilkComparison.View'));
           if (!hasPerm) return null;
         }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Typography, Form, DatePicker, Select, Button,
   Space, message, Radio, Empty, Spin, Tooltip
@@ -24,11 +25,22 @@ export const AccountStatement: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedAccountTitle, setSelectedAccountTitle] = useState<string>('');
   const [statementData, setStatementData] = useState<(AccountStatementLine & { balance: number })[]>([]);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     chartOfAccountService.getActiveAccounts().then(res => {
       const detailAccounts = res.filter(a => a.accType === 'Detail');
-      setAccounts(detailAccounts.map(a => ({ account: a.account, title: a.title })));
+      const mapped = detailAccounts.map(a => ({ account: a.account, title: a.title }));
+      setAccounts(mapped);
+
+      const targetAcc = searchParams.get('account');
+      if (targetAcc) {
+        form.setFieldsValue({ account: targetAcc });
+        const matched = mapped.find(a => a.account === targetAcc);
+        if (matched) {
+          setSelectedAccountTitle(matched.title);
+        }
+      }
     });
 
     return () => {

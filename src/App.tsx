@@ -60,6 +60,7 @@ import { PrinterSettings } from './pages/setup/PrinterSettings';
 import { SettingsPage } from './pages/setup/SettingsPage';
 import { ChartOfAccountList } from './pages/setup/ChartOfAccountList';
 import { DetailAccountList } from './pages/setup/DetailAccountList';
+import { BankAccountList } from './pages/setup/BankAccountList';
 import { InventoryItemList } from './pages/setup/InventoryItemList';
 import { InventoryItemForm } from './pages/setup/InventoryItemForm';
 import { CustomerList } from './pages/setup/CustomerList';
@@ -227,6 +228,7 @@ function App() {
             <Route path="setup/item-categories" element={<ItemCategoryList />} />
             <Route path="setup/chart-of-accounts" element={<ChartOfAccountList />} />
             <Route path="setup/detail-accounts" element={<DetailAccountList />} />
+            <Route path="setup/bank-accounts" element={<BankAccountList />} />
              <Route path="setup/item-details" element={<InventoryItemList />} />
             <Route path="setup/item-details/new" element={<InventoryItemForm />} />
             <Route path="setup/item-details/:id" element={<InventoryItemForm />} />
