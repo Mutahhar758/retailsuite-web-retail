@@ -16,7 +16,8 @@ import {
   Form,
   Alert,
   Radio,
-  Select
+  Select,
+  Modal
 } from 'antd';
 import {
   SettingOutlined,
@@ -33,7 +34,10 @@ import {
   CoffeeOutlined,
   BarcodeOutlined,
   ThunderboltOutlined,
-  SoundOutlined
+  SoundOutlined,
+  BookOutlined,
+  PlusOutlined,
+  DeleteOutlined
 } from '@ant-design/icons';
 import {
   useSettingsStore,
@@ -63,7 +67,13 @@ import { useAppStore } from '../../stores/useAppStore';
 import { PrinterSettings } from './PrinterSettings';
 import { buildEmvCoPayload, normalizeToIban, isValidIban, formatIban } from '../../utils/emvcoQr';
 import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
-import { testKotSpeech, ACCENT_OPTIONS, type VoiceAccentType } from '../../utils/kotSpeech';
+import { 
+  testKotSpeech, 
+  ACCENT_OPTIONS, 
+  type VoiceAccentType, 
+  getCustomVoiceDictionary, 
+  saveCustomVoiceDictionary 
+} from '../../utils/kotSpeech';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { parseBarcodePayload, type ParsedBarcodeResult } from '../../utils/barcodeParser';
 import QRCode from 'qrcode';
@@ -112,6 +122,12 @@ export const SettingsPage: React.FC = () => {
   const [savingKot, setSavingKot] = useState(false);
   const [kotLastSaved, setKotLastSaved] = useState<string | null>(null);
 
+  // Local state for KOT Voice Pronunciation Dictionary
+  const [dictModalVisible, setDictModalVisible] = useState(false);
+  const [customDict, setCustomDict] = useState<Record<string, string>>({});
+  const [newDictKey, setNewDictKey] = useState('');
+  const [newDictValue, setNewDictValue] = useState('');
+
   // Local state for Barcode Fast Scan settings
   const [fastScanEnabled, setFastScanEnabled] = useState(false);
   const [fastScanIncrement, setFastScanIncrement] = useState(true);
@@ -130,7 +146,31 @@ export const SettingsPage: React.FC = () => {
   useEffect(() => {
     fetchSettings();
     inventoryService.getItemsLookup().then(setTestItems).catch(() => {});
+    setCustomDict(getCustomVoiceDictionary());
   }, [fetchSettings, currentTenantIdentifier]);
+
+  const handleAddCustomWord = () => {
+    const k = newDictKey.trim().toLowerCase();
+    const v = newDictValue.trim();
+    if (!k || !v) {
+      message.warning('Please enter both word/abbreviation and pronunciation');
+      return;
+    }
+    const updated = { ...customDict, [k]: v };
+    setCustomDict(updated);
+    saveCustomVoiceDictionary(updated);
+    setNewDictKey('');
+    setNewDictValue('');
+    message.success(`Added "${k}" ➔ "${v}" to dictionary`);
+  };
+
+  const handleDeleteCustomWord = (key: string) => {
+    const updated = { ...customDict };
+    delete updated[key];
+    setCustomDict(updated);
+    saveCustomVoiceDictionary(updated);
+    message.info(`Removed "${key}" from dictionary`);
+  };
 
   // Sync Thank You and Default Bill Format state when store initialized or settings change
   useEffect(() => {
@@ -1143,6 +1183,14 @@ export const SettingsPage: React.FC = () => {
                                 >
                                   Test Voice Speaker
                                 </Button>
+
+                                <Button
+                                  size="small"
+                                  icon={<BookOutlined />}
+                                  onClick={() => setDictModalVisible(true)}
+                                >
+                                  Voice Dictionary {Object.keys(customDict).length > 0 && `(${Object.keys(customDict).length} Custom)`}
+                                </Button>
                               </div>
                             )}
                           </Col>
@@ -1156,6 +1204,80 @@ export const SettingsPage: React.FC = () => {
                             />
                           </Col>
                         </Row>
+
+                        {/* Voice Pronunciation Dictionary Modal */}
+                        <Modal
+                          title={
+                            <Space>
+                              <BookOutlined style={{ color: '#16a34a' }} />
+                              <span style={{ fontWeight: 600 }}>Custom Voice Pronunciation Dictionary</span>
+                            </Space>
+                          }
+                          open={dictModalVisible}
+                          onCancel={() => setDictModalVisible(false)}
+                          footer={[
+                            <Button key="close" type="primary" onClick={() => setDictModalVisible(false)}>
+                              Done
+                            </Button>
+                          ]}
+                          width={560}
+                        >
+                          <Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 16 }}>
+                            Add custom words, abbreviations, or shorthand to control how items are called out on the speaker. Custom entries will override any default pronunciations.
+                          </Paragraph>
+
+                          {/* Add custom word */}
+                          <Card size="small" style={{ marginBottom: 16, backgroundColor: '#f8fafc' }}>
+                            <Row gutter={8} align="middle">
+                              <Col span={10}>
+                                <Input
+                                  placeholder="Word / Spelling (e.g. Zing)"
+                                  value={newDictKey}
+                                  onChange={e => setNewDictKey(e.target.value)}
+                                  onPressEnter={handleAddCustomWord}
+                                />
+                              </Col>
+                              <Col span={10}>
+                                <Input
+                                  placeholder="Pronounce As (e.g. Zinger)"
+                                  value={newDictValue}
+                                  onChange={e => setNewDictValue(e.target.value)}
+                                  onPressEnter={handleAddCustomWord}
+                                />
+                              </Col>
+                              <Col span={4}>
+                                <Button type="primary" icon={<PlusOutlined />} onClick={handleAddCustomWord} block>
+                                  Add
+                                </Button>
+                              </Col>
+                            </Row>
+                          </Card>
+
+                          {/* Custom words list */}
+                          <div>
+                            <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
+                              Custom Pronunciations ({Object.keys(customDict).length}):
+                            </Text>
+                            {Object.keys(customDict).length === 0 ? (
+                              <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', border: '1px dashed #e2e8f0', borderRadius: 8 }}>
+                                No custom words added yet. Type a word and pronunciation above to add one.
+                              </div>
+                            ) : (
+                              <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: '4px 8px' }}>
+                                {Object.entries(customDict).map(([k, v]) => (
+                                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 4px', borderBottom: '1px dashed #f5f5f5' }}>
+                                    <Space>
+                                      <Tag color="blue" style={{ fontSize: 13, padding: '2px 8px' }}>{k}</Tag>
+                                      <span>➔</span>
+                                      <Text strong style={{ fontSize: 13 }}>{v}</Text>
+                                    </Space>
+                                    <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => handleDeleteCustomWord(k)} />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </Modal>
                       </div>
 
                       <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>

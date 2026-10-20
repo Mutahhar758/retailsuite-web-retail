@@ -287,16 +287,219 @@ export const resolveVoiceConfig = (accent: VoiceAccentType | string = 'pakistani
 };
 
 /**
- * Format quantity and item title into human natural speech
- * e.g. "2 Chicken Burgers, 1 Fries"
+ * Built-in Food, Fast-Food, and Dairy/Milk Shop Pronunciation Dictionary
+ * Maps common menu shorthand, Urdu items, and unit abbreviations into natural spoken words.
  */
-const formatLinesSpeech = (lines: KotSpeechItem[]): string => {
+export const BUILTIN_FOOD_AND_DAIRY_DICTIONARY: Record<string, string> = {
+  // --- Dairy & Milk Shop Items & Units (دودھ، دہی، مکھن، گھی، پنیر، کھویا) ---
+  '1/2 kg': 'Half Kilo',
+  '1/2kg': 'Half Kilo',
+  '1/4 kg': 'Quarter Kilo',
+  '1/4kg': 'Quarter Kilo',
+  '1/2 ltr': 'Half Liter',
+  '1/2ltr': 'Half Liter',
+  'kg': 'Kilo',
+  'k.g': 'Kilo',
+  'gm': 'Grams',
+  'gms': 'Grams',
+  'ltr': 'Liter',
+  'ltrs': 'Liters',
+  'pao': 'Pao',
+  'doodh': 'Doodh',
+  'dudh': 'Doodh',
+  'kcha': 'Kacha',
+  'pka': 'Paka',
+  'bhains': 'Bhains',
+  'gaye': 'Gaye',
+  'dahi': 'Dahi',
+  'dh': 'Dahi',
+  'mkhan': 'Makhan',
+  'makhan': 'Makhan',
+  'desi ghee': 'Desi Ghee',
+  'khoya': 'Khoya',
+  'khoa': 'Khoya',
+  'paneer': 'Paneer',
+  'panir': 'Paneer',
+  'malai': 'Malai',
+  'balai': 'Balai',
+  'rabri': 'Rabri',
+  'rabdi': 'Rabri',
+  'kheer': 'Kheer',
+  'khr': 'Kheer',
+  'lasi': 'Lassi',
+  'lassi': 'Lassi',
+  'm.lassi': 'Meethi Lassi',
+  'n.lassi': 'Namkeen Lassi',
+  'pera': 'Pera',
+  'perah': 'Pera',
+  'kulfi': 'Kulfi',
+  'falooda': 'Falooda',
+  'faluda': 'Falooda',
+  'rasgulla': 'Rasgulla',
+  'rsgla': 'Rasgulla',
+  'gulab jamun': 'Gulab Jamun',
+  'g.jamun': 'Gulab Jamun',
+  'gjamun': 'Gulab Jamun',
+  'barfi': 'Barfi',
+  'brfi': 'Barfi',
+  'cham cham': 'Cham Cham',
+  'jalebi': 'Jalebi',
+  'jlbi': 'Jalebi',
+  'halwa': 'Halwa',
+  'hlwa': 'Halwa',
+  'gajrela': 'Gajrela',
+
+  // --- Restaurant, Fast Food & Desi Kitchen Abbreviations ---
+  'chkn': 'Chicken',
+  'chk': 'Chicken',
+  'ch.': 'Chicken',
+  'bgr': 'Burger',
+  'brgr': 'Burger',
+  'zing': 'Zinger',
+  's/w': 'Sandwich',
+  'sndwch': 'Sandwich',
+  'pltr': 'Platter',
+  'shwrma': 'Shawarma',
+  'shw': 'Shawarma',
+  'brst': 'Broast',
+  'chwmin': 'Chowmein',
+  'chwmn': 'Chowmein',
+  'nug': 'Nuggets',
+  'ngts': 'Nuggets',
+  'frs': 'Fries',
+  'pza': 'Pizza',
+  'pz': 'Pizza',
+  'kbb': 'Kabab',
+  'krhi': 'Karahi',
+  'krahi': 'Karahi',
+  'hndi': 'Handi',
+  'qrma': 'Qorma',
+  'biry': 'Biryani',
+  'plao': 'Pulao',
+  'prtha': 'Paratha',
+  'prt': 'Paratha',
+  'rot': 'Roti',
+  'rt': 'Roti',
+  'nn': 'Naan',
+  'dpatti': 'Doodh Patti',
+  'd/patti': 'Doodh Patti',
+  'kahwa': 'Kehwa',
+  'qahwa': 'Kehwa',
+  'cld drk': 'Cold Drink',
+  'clddrk': 'Cold Drink',
+  'cld drnk': 'Cold Drink',
+  'pep': 'Pepsi',
+  'mrnd': 'Mirinda',
+  'mrnda': 'Mirinda',
+  'spcl': 'Special',
+  'spl': 'Special',
+  'reg': 'Regular',
+  'sml': 'Small',
+  'med': 'Medium',
+  'lrg': 'Large',
+  'qtr': 'Quarter',
+  'hf': 'Half',
+  '1/2': 'Half',
+  '1/4': 'Quarter',
+  'w/': 'with',
+  'wo/': 'without',
+  'ext': 'Extra',
+  'ex': 'Extra',
+  'btl': 'Bottle',
+  'pcs': 'Pieces',
+  'pc': 'Piece',
+};
+
+const CUSTOM_DICT_STORAGE_KEY = 'retailsuite_custom_voice_dict';
+
+/**
+ * Get custom dictionary defined by tenant in browser storage
+ */
+export const getCustomVoiceDictionary = (): Record<string, string> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(CUSTOM_DICT_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Save custom dictionary defined by tenant
+ */
+export const saveCustomVoiceDictionary = (dict: Record<string, string>) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(CUSTOM_DICT_STORAGE_KEY, JSON.stringify(dict));
+  } catch {}
+};
+
+const URDU_NUMBERS: Record<number, string> = {
+  1: 'Ek',
+  2: 'Do',
+  3: 'Teen',
+  4: 'Chaar',
+  5: 'Paanch',
+  6: 'Chhay',
+  7: 'Saat',
+  8: 'Aath',
+  9: 'Nau',
+  10: 'Das',
+  11: 'Gyaarah',
+  12: 'Baarah',
+  15: 'Pandra',
+  20: 'Bees',
+  25: 'Pachees',
+  50: 'Pachaas',
+};
+
+/**
+ * Normalize and expand food / dairy abbreviations using built-in & custom dictionaries
+ */
+export const normalizeFoodAndDairyText = (text: string, isUrdu: boolean = false): string => {
+  if (!text) return '';
+  let result = ` ${text} `;
+
+  const customDict = getCustomVoiceDictionary();
+  const combinedDict: Record<string, string> = {
+    ...BUILTIN_FOOD_AND_DAIRY_DICTIONARY,
+    ...customDict,
+  };
+
+  // 1. Replace multi-word and compound symbols first (sorted by descending length)
+  const sortedKeys = Object.keys(combinedDict).sort((a, b) => b.length - a.length);
+
+  for (const key of sortedKeys) {
+    const replacement = combinedDict[key];
+    // Escape special regex characters like /, ., etc.
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(?<=[\\s,;]|^)${escapedKey}(?=[\\s,;]|$)`, 'gi');
+    result = result.replace(regex, ` ${replacement} `);
+  }
+
+  // 2. In Urdu mode, adapt common fractions
+  if (isUrdu) {
+    result = result.replace(/\bHalf\b/gi, 'Aadha');
+    result = result.replace(/\bQuarter\b/gi, 'Pao');
+  }
+
+  return result.replace(/\s+/g, ' ').trim();
+};
+
+/**
+ * Format quantity and item title into human natural speech
+ * e.g. "2 Chicken Burger, 1 Fries, Half Kilo Khoya"
+ */
+const formatLinesSpeech = (lines: KotSpeechItem[], isUrdu: boolean = false): string => {
   if (!lines || lines.length === 0) return '';
   return lines
     .map(line => {
-      const qty = Number(line.qty) || 1;
+      const qtyNum = Number(line.qty) || 1;
       const title = line.itemTitle?.trim() || 'Item';
-      return `${qty} ${title}`;
+      const cleanTitle = normalizeFoodAndDairyText(title, isUrdu);
+      const qtyStr = isUrdu && URDU_NUMBERS[qtyNum] ? URDU_NUMBERS[qtyNum] : qtyNum.toString();
+      return `${qtyStr} ${cleanTitle}`;
     })
     .join(', ');
 };
@@ -370,7 +573,7 @@ export const speakKotOrder = (order: KotSpeechOrder, options?: KotSpeechOptions)
     }
   }
 
-  const itemsSpeech = formatLinesSpeech(order.lines);
+  const itemsSpeech = formatLinesSpeech(order.lines, isUrdu);
   if (itemsSpeech) {
     parts.push(itemsSpeech);
   }
@@ -392,13 +595,20 @@ export const speakTokenReady = (tokenNo: number | string, options?: KotSpeechOpt
 };
 
 /**
- * Sample test announcement for Settings page
+ * Sample test announcement for Settings page demonstrating restaurant and dairy items
  */
 export const testKotSpeech = (options?: KotSpeechOptions) => {
   const accent = (options?.accent || 'pakistani_male').toString();
   const isUrdu = accent.startsWith('urdu');
+  const testLines = [
+    { itemTitle: 'Chkn Bgr', qty: 2 },
+    { itemTitle: 'Fries', qty: 1 },
+    { itemTitle: '1/2 kg Khoya', qty: 1 },
+    { itemTitle: '1 Ltr Doodh', qty: 1 }
+  ];
+  const itemsText = formatLinesSpeech(testLines, isUrdu);
   const text = isUrdu
-    ? 'Speaker check. Naya order. Token number 1. Do Chicken Burger, Ek Fries.'
-    : 'Speaker check. New order. Token number 1. Two Chicken Biryani, Two Naan, One Cold drink.';
+    ? `Speaker check. Naya order. Token number 1. ${itemsText}.`
+    : `Speaker check. New order. Token number 1. ${itemsText}.`;
   speakText(text, options);
 };
