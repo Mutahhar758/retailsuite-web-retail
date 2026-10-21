@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   Modal, Button, Space, Typography, Table, Tag, Tooltip, message,
   Input, InputNumber, Select, Switch, Row, Col, Card, Alert, Radio,
-  Popconfirm
+  Popconfirm, Dropdown
 } from 'antd';
 import {
   DownloadOutlined, UploadOutlined, SnippetsOutlined, PlusOutlined,
   DeleteOutlined, SaveOutlined,
-  ExclamationCircleOutlined, SyncOutlined, ClearOutlined, FileExcelOutlined
+  ExclamationCircleOutlined, SyncOutlined, ClearOutlined, FileExcelOutlined,
+  CloudDownloadOutlined, DownOutlined, SearchOutlined, AppstoreOutlined
 } from '@ant-design/icons';
 import { parseCsv, parseClipboardTable, toCsv, downloadCsv } from '../../utils/csvUtils';
 import { customerService, type CustomerBulkItemDto, type BulkOperationResult } from '../../services/customerService';
@@ -23,23 +24,46 @@ const { TextArea } = Input;
 
 export type BulkEntityType = 'customers' | 'products' | 'vendors' | 'employees';
 
-interface BulkOperationModalProps {
+export interface BulkOperationModalProps {
   visible: boolean;
   onClose: () => void;
   onSuccess?: () => void;
   entityType: BulkEntityType;
+  initialRows?: any[];
+  autoPopulate?: boolean;
 }
+
+export const mapProductToBulkRow = (p: any) => ({
+  _key: `prod-${p.id}`,
+  id: p.id,
+  itemType: p.itemType || 'Product',
+  barcode: p.barcode || '',
+  itemCategoryCode: p.itemCategoryCode || '',
+  title: p.title || '',
+  brandId: p.brandId || '',
+  primaryUnit: p.primaryUnit || '',
+  secondaryUnit: p.secondaryUnit || '',
+  qtyInPack: p.qtyInPack ?? 1,
+  priRate: p.priRate ?? 0,
+  secRate: p.secRate ?? 0,
+  opnStock: p.itemType === 'Service' ? 0 : (p.opnStock ?? 0),
+  opnRate: p.itemType === 'Service' ? 0 : (p.opnRate ?? p.costRate ?? 0),
+});
 
 export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
   visible,
   onClose,
   onSuccess,
   entityType,
+  initialRows,
+  autoPopulate = false,
 }) => {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [populating, setPopulating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [filterMode, setFilterMode] = useState<'all' | 'new' | 'update' | 'error'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [pasteModalVisible, setPasteModalVisible] = useState(false);
   const [pasteText, setPasteText] = useState('');
 
@@ -62,15 +86,6 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
         setUnits(un);
         setBrands(br);
       });
-    }
-  }, [visible, entityType]);
-
-  // Reset state when entityType changes or modal opens
-  useEffect(() => {
-    if (visible) {
-      setRows([]);
-      setFilterMode('all');
-      setPasteText('');
     }
   }, [visible, entityType]);
 
@@ -105,14 +120,15 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           idField: 'id',
           idLabel: 'Item ID',
           sampleHeaders: [
-            'Id', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId',
+            'Id', 'Type', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId',
             'PrimaryUnit', 'SecondaryUnit', 'QtyInPack', 'PriRate',
             'SecRate', 'OpnStock', 'OpnRate'
           ],
           sampleData: [
-            ['', '', '01', 'Cooking Oil 1L', '', 'PCS', '', '1', '450', '450', '50', '380'],
-            ['', '', '01', 'Basmati Rice 5kg', '', 'KG', '', '1', '1200', '1200', '100', '1050'],
-            ['000001', '1000001', '01', 'Sugar 1kg Pack', '', 'KG', '', '1', '150', '150', '0', '0']
+            ['', 'Product', '', '01', 'Cooking Oil 1L', '', 'PCS', '', '1', '450', '450', '50', '380'],
+            ['', 'Product', '', '01', 'Basmati Rice 5kg', '', 'KG', '', '1', '1200', '1200', '100', '1050'],
+            ['', 'Service', '', '02', 'General Service / Labor', '', '', '', '1', '500', '0', '0', '0'],
+            ['000001', 'Product', '1000001', '01', 'Sugar 1kg Pack', '', 'KG', '', '1', '150', '150', '0', '0']
           ]
         };
       case 'employees':
@@ -129,6 +145,111 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
     }
   }, [entityType]);
 
+  // Populate existing data handler
+  const handlePopulateExisting = useCallback(async (categoryCode?: string) => {
+    try {
+      setPopulating(true);
+      let newRows: any[] = [];
+      if (entityType === 'products') {
+        const list = await inventoryService.getItems(categoryCode);
+        newRows = list.map(mapProductToBulkRow);
+      } else if (entityType === 'customers') {
+        const list = await customerService.getCustomers();
+        newRows = list.map(c => ({
+          _key: `cust-${c.account}`,
+          account: c.account,
+          title: c.title,
+          phone1: c.phone1 || '',
+          phone2: c.phone2 || '',
+          email: c.email || '',
+          cnic: c.cnic || '',
+          address: c.address || '',
+          qualification: c.qualification || '',
+          active: c.active ?? true
+        }));
+      } else if (entityType === 'vendors') {
+        const list = await vendorService.getVendors();
+        newRows = list.map(v => ({
+          _key: `vend-${v.account}`,
+          account: v.account,
+          title: v.title,
+          phone1: v.phone1 || '',
+          phone2: v.phone2 || '',
+          email: v.email || '',
+          cnic: v.cnic || '',
+          address: v.address || '',
+          showInSales: v.showInSales ?? false,
+          active: v.active ?? true
+        }));
+      } else if (entityType === 'employees') {
+        const list = await hrInfoService.getHRInfos();
+        newRows = list.map(e => ({
+          _key: `emp-${e.id}`,
+          id: e.id,
+          name: e.name,
+          fatherName: e.fatherName || '',
+          gender: e.gender || 'Male',
+          dob: e.dob || '',
+          cnic: e.cnic || '',
+          designation: e.designation || '',
+          salaryType: e.salaryType || 'Monthly',
+          salary: e.salary ?? 0,
+          joiningDate: e.joiningDate || ''
+        }));
+      }
+
+      const applyRows = (mode: 'replace' | 'append') => {
+        if (mode === 'replace') {
+          setRows(newRows);
+        } else {
+          setRows(prev => {
+            const idField = entityMeta.idField;
+            const existingIds = new Set(prev.map(r => r[idField]).filter(Boolean));
+            const distinctNew = newRows.filter(r => !existingIds.has(r[idField]));
+            return [...prev, ...distinctNew];
+          });
+        }
+        message.success(`Populated ${newRows.length} ${entityMeta.title} for bulk update`);
+      };
+
+      if (rows.length > 0) {
+        Modal.confirm({
+          title: 'Existing Data in Grid',
+          content: `There are currently ${rows.length} row(s) in the table. Would you like to Replace them or Append the loaded data?`,
+          okText: 'Replace All',
+          cancelText: 'Append New',
+          onOk: () => applyRows('replace'),
+          onCancel: (e) => {
+            if (e?.triggerCancel) return;
+            applyRows('append');
+          }
+        });
+      } else {
+        applyRows('replace');
+      }
+    } catch {
+      message.error(`Failed to load ${entityMeta.title}`);
+    } finally {
+      setPopulating(false);
+    }
+  }, [entityType, entityMeta.idField, entityMeta.title, rows.length]);
+
+  // Reset or initialize state when entityType changes or modal opens
+  useEffect(() => {
+    if (visible) {
+      if (initialRows && initialRows.length > 0) {
+        setRows(initialRows);
+      } else if (autoPopulate) {
+        handlePopulateExisting();
+      } else {
+        setRows([]);
+      }
+      setFilterMode('all');
+      setSearchQuery('');
+      setPasteText('');
+    }
+  }, [visible, entityType, initialRows, autoPopulate, handlePopulateExisting]);
+
   // Row validation logic
   const validateRow = useCallback((row: any) => {
     const errors: string[] = [];
@@ -137,14 +258,15 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
         errors.push('Name/Title is required');
       }
     } else if (entityType === 'products') {
+      const isService = row.itemType === 'Service';
       if (!row.title || !String(row.title).trim()) {
-        errors.push('Product Title is required');
+        errors.push(isService ? 'Service Title is required' : 'Product Title is required');
       }
       if (!row.itemCategoryCode || !String(row.itemCategoryCode).trim()) {
         errors.push('Category is required');
       }
-      if (!row.primaryUnit || !String(row.primaryUnit).trim()) {
-        errors.push('Primary Unit is required');
+      if (!isService && (!row.primaryUnit || !String(row.primaryUnit).trim())) {
+        errors.push('Primary Unit is required for Products');
       }
     } else if (entityType === 'employees') {
       if (!row.name || !String(row.name).trim()) {
@@ -165,7 +287,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
 
       return {
         ...row,
-        _key: row._key || `row-${index}-${Date.now()}`,
+        _key: row._key || (idVal ? `row-id-${idVal}` : `row-${index}-${Date.now()}`),
         _rowIndex: index + 1,
         _status: status,
         _errors: errors
@@ -175,9 +297,22 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
 
   // Filtered rows for display
   const displayRows = useMemo(() => {
-    if (filterMode === 'all') return processedRows;
-    return processedRows.filter(r => r._status === filterMode);
-  }, [processedRows, filterMode]);
+    let list = processedRows;
+    if (filterMode !== 'all') {
+      list = list.filter(r => r._status === filterMode);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(r => {
+        const title = String(r.title || r.name || '').toLowerCase();
+        const id = String(r.id || r.account || '').toLowerCase();
+        const barcode = String(r.barcode || '').toLowerCase();
+        const type = String(r.itemType || '').toLowerCase();
+        return title.includes(q) || id.includes(q) || barcode.includes(q) || type.includes(q);
+      });
+    }
+    return list;
+  }, [processedRows, filterMode, searchQuery]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -188,13 +323,9 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
     return { total, newCount, updateCount, errorCount };
   }, [processedRows]);
 
-  // Handle cell edit
-  const handleCellChange = (rowIndex: number, field: string, value: any) => {
-    setRows(prev => {
-      const next = [...prev];
-      next[rowIndex] = { ...next[rowIndex], [field]: value };
-      return next;
-    });
+  // Handle cell edit by row key
+  const handleCellChange = (key: string, field: string, value: any) => {
+    setRows(prev => prev.map(r => (r._key === key ? { ...r, [field]: value } : r)));
   };
 
   // Add row
@@ -204,6 +335,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       newRow.title = '';
       newRow.active = true;
     } else if (entityType === 'products') {
+      newRow.itemType = 'Product';
       newRow.title = '';
       newRow.itemCategoryCode = categories[0]?.code || '';
       newRow.primaryUnit = units[0]?.code || '';
@@ -221,9 +353,9 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
     setRows(prev => [...prev, newRow]);
   };
 
-  // Delete row
-  const handleDeleteRow = (index: number) => {
-    setRows(prev => prev.filter((_, i) => i !== index));
+  // Delete row by key
+  const handleDeleteRow = (key: string) => {
+    setRows(prev => prev.filter(r => r._key !== key));
   };
 
   // Download sample CSV template
@@ -255,12 +387,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           v.cnic || '', v.address || '', v.showInSales ? 'true' : 'false', v.active ? 'true' : 'false'
         ]);
       } else if (entityType === 'products') {
-        const list = await inventoryService.getItemsLookup();
-        headers = ['Id', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId', 'PrimaryUnit', 'SecondaryUnit', 'QtyInPack', 'PriRate', 'SecRate', 'OpnStock', 'OpnRate'];
+        const list = await inventoryService.getItems();
+        headers = ['Id', 'Type', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId', 'PrimaryUnit', 'SecondaryUnit', 'QtyInPack', 'PriRate', 'SecRate', 'OpnStock', 'OpnRate'];
         dataRows = list.map(p => [
-          p.id, p.barcode || '', p.itemCategoryCode || '', p.title, p.brandId || '',
+          p.id, p.itemType || 'Product', p.barcode || '', p.itemCategoryCode || '', p.title, p.brandId || '',
           p.primaryUnit || '', p.secondaryUnit || '', p.qtyInPack ?? 1, p.priRate, p.secRate,
-          p.opnStock ?? 0, p.opnRate ?? 0
+          p.itemType === 'Service' ? 0 : (p.opnStock ?? 0), p.itemType === 'Service' ? 0 : (p.opnRate ?? 0)
         ]);
       } else if (entityType === 'employees') {
         const list = await hrInfoService.getHRInfos();
@@ -300,6 +432,8 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           rowObj.account = val;
         } else if (h === 'id' || h === 'itemid' || h === 'productid' || h === 'empid' || h === 'employeeid') {
           rowObj.id = val;
+        } else if (h === 'type' || h === 'itemtype') {
+          rowObj.itemType = val.toLowerCase() === 'service' ? 'Service' : 'Product';
         } else if (h === 'title' || h === 'name' || h === 'customername' || h === 'vendorname' || h === 'productname' || h === 'employeename') {
           rowObj.title = val;
           rowObj.name = val;
@@ -448,20 +582,24 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
         }));
         result = await vendorService.bulkUpsert({ vendors: payload });
       } else if (entityType === 'products') {
-        const payload: InventoryItemBulkItemDto[] = validRows.map(r => ({
-          id: r.id?.trim() || undefined,
-          barcode: r.barcode?.trim() || undefined,
-          itemCategoryCode: r.itemCategoryCode?.trim() || '',
-          title: r.title?.trim() || '',
-          brandId: r.brandId?.trim() || undefined,
-          primaryUnit: r.primaryUnit?.trim() || '',
-          secondaryUnit: r.secondaryUnit?.trim() || undefined,
-          qtyInPack: r.qtyInPack ? Number(r.qtyInPack) : 1,
-          priRate: r.priRate ? Number(r.priRate) : 0,
-          secRate: r.secRate ? Number(r.secRate) : 0,
-          opnStock: r.opnStock ? Number(r.opnStock) : 0,
-          opnRate: r.opnRate ? Number(r.opnRate) : 0
-        }));
+        const payload: InventoryItemBulkItemDto[] = validRows.map(r => {
+          const isService = r.itemType === 'Service';
+          return {
+            id: r.id?.trim() || undefined,
+            itemType: isService ? 'Service' : 'Product',
+            barcode: isService ? undefined : (r.barcode?.trim() || undefined),
+            itemCategoryCode: r.itemCategoryCode?.trim() || '',
+            title: r.title?.trim() || '',
+            brandId: isService ? undefined : (r.brandId?.trim() || undefined),
+            primaryUnit: isService ? (r.primaryUnit?.trim() || '') : (r.primaryUnit?.trim() || ''),
+            secondaryUnit: isService ? undefined : (r.secondaryUnit?.trim() || undefined),
+            qtyInPack: isService ? 1 : (r.qtyInPack ? Number(r.qtyInPack) : 1),
+            priRate: r.priRate ? Number(r.priRate) : 0,
+            secRate: isService ? 0 : (r.secRate ? Number(r.secRate) : 0),
+            opnStock: isService ? 0 : (r.opnStock ? Number(r.opnStock) : 0),
+            opnRate: isService ? 0 : (r.opnRate ? Number(r.opnRate) : 0)
+          };
+        });
         result = await inventoryService.bulkUpsert({ items: payload });
       } else {
         const payload: HRInfoBulkItemDto[] = validRows.map(r => ({
@@ -558,13 +696,13 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'account',
           key: 'account',
           width: 130,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="Auto-assigned"
               size="small"
               style={{ fontFamily: 'monospace' }}
-              onChange={e => handleCellChange(idx, 'account', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'account', e.target.value)}
             />
           )
         },
@@ -573,7 +711,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'title',
           key: 'title',
           width: 200,
-          render: (val: string, _: any, idx: number) => {
+          render: (val: string, record: any) => {
             const hasError = !val || !val.trim();
             return (
               <Tooltip title={hasError ? 'Title is required' : ''}>
@@ -582,7 +720,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
                   placeholder="Required name"
                   size="small"
                   status={hasError ? 'error' : ''}
-                  onChange={e => handleCellChange(idx, 'title', e.target.value)}
+                  onChange={e => handleCellChange(record._key, 'title', e.target.value)}
                 />
               </Tooltip>
             );
@@ -593,12 +731,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'phone1',
           key: 'phone1',
           width: 130,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="Phone number"
               size="small"
-              onChange={e => handleCellChange(idx, 'phone1', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'phone1', e.target.value)}
             />
           )
         },
@@ -607,12 +745,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'phone2',
           key: 'phone2',
           width: 130,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="Alternate phone"
               size="small"
-              onChange={e => handleCellChange(idx, 'phone2', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'phone2', e.target.value)}
             />
           )
         },
@@ -621,12 +759,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'email',
           key: 'email',
           width: 170,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="Email address"
               size="small"
-              onChange={e => handleCellChange(idx, 'email', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'email', e.target.value)}
             />
           )
         },
@@ -635,12 +773,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'cnic',
           key: 'cnic',
           width: 140,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="CNIC / NTN"
               size="small"
-              onChange={e => handleCellChange(idx, 'cnic', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'cnic', e.target.value)}
             />
           )
         },
@@ -649,12 +787,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'address',
           key: 'address',
           width: 200,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="Address"
               size="small"
-              onChange={e => handleCellChange(idx, 'address', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'address', e.target.value)}
             />
           )
         }
@@ -667,11 +805,11 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           key: 'showInSales',
           width: 110,
           align: 'center',
-          render: (val: boolean, _: any, idx: number) => (
+          render: (val: boolean, record: any) => (
             <Switch
               size="small"
               checked={Boolean(val)}
-              onChange={checked => handleCellChange(idx, 'showInSales', checked)}
+              onChange={checked => handleCellChange(record._key, 'showInSales', checked)}
             />
           )
         });
@@ -683,11 +821,11 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
         key: 'active',
         width: 80,
         align: 'center',
-        render: (val: boolean, _: any, idx: number) => (
+        render: (val: boolean, record: any) => (
           <Switch
             size="small"
             checked={val !== false}
-            onChange={checked => handleCellChange(idx, 'active', checked)}
+            onChange={checked => handleCellChange(record._key, 'active', checked)}
           />
         )
       });
@@ -698,14 +836,35 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'id',
           key: 'id',
           width: 120,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="Auto-generated"
               size="small"
               style={{ fontFamily: 'monospace' }}
-              onChange={e => handleCellChange(idx, 'id', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'id', e.target.value)}
             />
+          )
+        },
+        {
+          title: 'Type',
+          dataIndex: 'itemType',
+          key: 'itemType',
+          width: 110,
+          render: (val: string, record: any) => (
+            <Select
+              value={val || 'Product'}
+              size="small"
+              style={{ width: '100%' }}
+              onChange={v => handleCellChange(record._key, 'itemType', v)}
+            >
+              <Select.Option value="Product">
+                <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>Product</Tag>
+              </Select.Option>
+              <Select.Option value="Service">
+                <Tag color="orange" style={{ margin: 0, fontSize: 11 }}>Service</Tag>
+              </Select.Option>
+            </Select>
           )
         },
         {
@@ -713,22 +872,25 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'barcode',
           key: 'barcode',
           width: 140,
-          render: (val: string, _: any, idx: number) => (
-            <Input
-              value={val}
-              placeholder="Auto-generated"
-              size="small"
-              style={{ fontFamily: 'monospace' }}
-              onChange={e => handleCellChange(idx, 'barcode', e.target.value)}
-            />
-          )
+          render: (val: string, record: any) => {
+            const isService = record.itemType === 'Service';
+            return (
+              <Input
+                value={val}
+                placeholder={isService ? 'Optional' : 'Auto-generated'}
+                size="small"
+                style={{ fontFamily: 'monospace' }}
+                onChange={e => handleCellChange(record._key, 'barcode', e.target.value)}
+              />
+            );
+          }
         },
         {
           title: 'Category *',
           dataIndex: 'itemCategoryCode',
           key: 'itemCategoryCode',
           width: 160,
-          render: (val: string, _: any, idx: number) => {
+          render: (val: string, record: any) => {
             const hasError = !val || !val.trim();
             return (
               <Select
@@ -737,7 +899,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
                 size="small"
                 status={hasError ? 'error' : ''}
                 style={{ width: '100%' }}
-                onChange={v => handleCellChange(idx, 'itemCategoryCode', v)}
+                onChange={v => handleCellChange(record._key, 'itemCategoryCode', v)}
                 showSearch
                 optionFilterProp="children"
               >
@@ -751,19 +913,20 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           }
         },
         {
-          title: 'Product Title *',
+          title: 'Title / Name *',
           dataIndex: 'title',
           key: 'title',
           width: 200,
-          render: (val: string, _: any, idx: number) => {
+          render: (val: string, record: any) => {
             const hasError = !val || !val.trim();
+            const isService = record.itemType === 'Service';
             return (
               <Input
                 value={val}
-                placeholder="Product name"
+                placeholder={isService ? 'Service name' : 'Product name'}
                 size="small"
                 status={hasError ? 'error' : ''}
-                onChange={e => handleCellChange(idx, 'title', e.target.value)}
+                onChange={e => handleCellChange(record._key, 'title', e.target.value)}
               />
             );
           }
@@ -773,40 +936,48 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'brandId',
           key: 'brandId',
           width: 130,
-          render: (val: string, _: any, idx: number) => (
-            <Select
-              value={val || undefined}
-              placeholder="Optional brand"
-              size="small"
-              allowClear
-              style={{ width: '100%' }}
-              onChange={v => handleCellChange(idx, 'brandId', v)}
-              showSearch
-              optionFilterProp="children"
-            >
-              {brands.map(b => (
-                <Select.Option key={b.id} value={b.id}>
-                  {b.title}
-                </Select.Option>
-              ))}
-            </Select>
-          )
-        },
-        {
-          title: 'Primary Unit *',
-          dataIndex: 'primaryUnit',
-          key: 'primaryUnit',
-          width: 130,
-          render: (val: string, _: any, idx: number) => {
-            const hasError = !val || !val.trim();
+          render: (val: string, record: any) => {
+            if (record.itemType === 'Service') {
+              return <Text type="secondary" style={{ fontSize: 11 }}>-</Text>;
+            }
             return (
               <Select
                 value={val || undefined}
-                placeholder="Unit"
+                placeholder="Optional brand"
+                size="small"
+                allowClear
+                style={{ width: '100%' }}
+                onChange={v => handleCellChange(record._key, 'brandId', v)}
+                showSearch
+                optionFilterProp="children"
+              >
+                {brands.map(b => (
+                  <Select.Option key={b.id} value={b.id}>
+                    {b.title}
+                  </Select.Option>
+                ))}
+              </Select>
+            );
+          }
+        },
+        {
+          title: 'Primary Unit',
+          dataIndex: 'primaryUnit',
+          key: 'primaryUnit',
+          width: 130,
+          render: (val: string, record: any) => {
+            const isService = record.itemType === 'Service';
+            const hasError = !isService && (!val || !val.trim());
+            return (
+              <Select
+                value={val || undefined}
+                placeholder={isService ? 'N/A' : 'Unit *'}
                 size="small"
                 status={hasError ? 'error' : ''}
+                disabled={isService}
+                allowClear={isService}
                 style={{ width: '100%' }}
-                onChange={v => handleCellChange(idx, 'primaryUnit', v)}
+                onChange={v => handleCellChange(record._key, 'primaryUnit', v)}
                 showSearch
                 optionFilterProp="children"
               >
@@ -824,52 +995,62 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'secondaryUnit',
           key: 'secondaryUnit',
           width: 120,
-          render: (val: string, _: any, idx: number) => (
-            <Select
-              value={val || undefined}
-              placeholder="Optional"
-              size="small"
-              allowClear
-              style={{ width: '100%' }}
-              onChange={v => handleCellChange(idx, 'secondaryUnit', v)}
-              showSearch
-              optionFilterProp="children"
-            >
-              {units.map(u => (
-                <Select.Option key={u.code} value={u.code}>
-                  {u.title}
-                </Select.Option>
-              ))}
-            </Select>
-          )
+          render: (val: string, record: any) => {
+            if (record.itemType === 'Service') {
+              return <Text type="secondary" style={{ fontSize: 11 }}>-</Text>;
+            }
+            return (
+              <Select
+                value={val || undefined}
+                placeholder="Optional"
+                size="small"
+                allowClear
+                style={{ width: '100%' }}
+                onChange={v => handleCellChange(record._key, 'secondaryUnit', v)}
+                showSearch
+                optionFilterProp="children"
+              >
+                {units.map(u => (
+                  <Select.Option key={u.code} value={u.code}>
+                    {u.title}
+                  </Select.Option>
+                ))}
+              </Select>
+            );
+          }
         },
         {
           title: 'Pack Qty',
           dataIndex: 'qtyInPack',
           key: 'qtyInPack',
           width: 90,
-          render: (val: number, _: any, idx: number) => (
-            <InputNumber
-              value={val}
-              size="small"
-              min={1}
-              style={{ width: '100%' }}
-              onChange={v => handleCellChange(idx, 'qtyInPack', v)}
-            />
-          )
+          render: (val: number, record: any) => {
+            if (record.itemType === 'Service') {
+              return <Text type="secondary" style={{ fontSize: 11 }}>-</Text>;
+            }
+            return (
+              <InputNumber
+                value={val}
+                size="small"
+                min={1}
+                style={{ width: '100%' }}
+                onChange={v => handleCellChange(record._key, 'qtyInPack', v)}
+              />
+            );
+          }
         },
         {
-          title: 'Sale Rate',
+          title: 'Rate / Price',
           dataIndex: 'priRate',
           key: 'priRate',
           width: 100,
-          render: (val: number, _: any, idx: number) => (
+          render: (val: number, record: any) => (
             <InputNumber
               value={val}
               size="small"
               min={0}
               style={{ width: '100%' }}
-              onChange={v => handleCellChange(idx, 'priRate', v)}
+              onChange={v => handleCellChange(record._key, 'priRate', v)}
             />
           )
         },
@@ -878,45 +1059,60 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'secRate',
           key: 'secRate',
           width: 100,
-          render: (val: number, _: any, idx: number) => (
-            <InputNumber
-              value={val}
-              size="small"
-              min={0}
-              style={{ width: '100%' }}
-              onChange={v => handleCellChange(idx, 'secRate', v)}
-            />
-          )
+          render: (val: number, record: any) => {
+            if (record.itemType === 'Service') {
+              return <Text type="secondary" style={{ fontSize: 11 }}>-</Text>;
+            }
+            return (
+              <InputNumber
+                value={val}
+                size="small"
+                min={0}
+                style={{ width: '100%' }}
+                onChange={v => handleCellChange(record._key, 'secRate', v)}
+              />
+            );
+          }
         },
         {
           title: 'Opn Stock',
           dataIndex: 'opnStock',
           key: 'opnStock',
           width: 100,
-          render: (val: number, _: any, idx: number) => (
-            <InputNumber
-              value={val}
-              size="small"
-              min={0}
-              style={{ width: '100%' }}
-              onChange={v => handleCellChange(idx, 'opnStock', v)}
-            />
-          )
+          render: (val: number, record: any) => {
+            if (record.itemType === 'Service') {
+              return <Text type="secondary" style={{ fontSize: 11 }}>N/A</Text>;
+            }
+            return (
+              <InputNumber
+                value={val}
+                size="small"
+                min={0}
+                style={{ width: '100%' }}
+                onChange={v => handleCellChange(record._key, 'opnStock', v)}
+              />
+            );
+          }
         },
         {
           title: 'Opn Rate / Cost',
           dataIndex: 'opnRate',
           key: 'opnRate',
           width: 110,
-          render: (val: number, _: any, idx: number) => (
-            <InputNumber
-              value={val}
-              size="small"
-              min={0}
-              style={{ width: '100%' }}
-              onChange={v => handleCellChange(idx, 'opnRate', v)}
-            />
-          )
+          render: (val: number, record: any) => {
+            if (record.itemType === 'Service') {
+              return <Text type="secondary" style={{ fontSize: 11 }}>N/A</Text>;
+            }
+            return (
+              <InputNumber
+                value={val}
+                size="small"
+                min={0}
+                style={{ width: '100%' }}
+                onChange={v => handleCellChange(record._key, 'opnRate', v)}
+              />
+            );
+          }
         }
       );
     } else if (entityType === 'employees') {
@@ -926,13 +1122,13 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'id',
           key: 'id',
           width: 110,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="Auto-assigned"
               size="small"
               style={{ fontFamily: 'monospace' }}
-              onChange={e => handleCellChange(idx, 'id', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'id', e.target.value)}
             />
           )
         },
@@ -941,7 +1137,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'name',
           key: 'name',
           width: 180,
-          render: (val: string, _: any, idx: number) => {
+          render: (val: string, record: any) => {
             const hasError = !val || !val.trim();
             return (
               <Input
@@ -949,7 +1145,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
                 placeholder="Full name"
                 size="small"
                 status={hasError ? 'error' : ''}
-                onChange={e => handleCellChange(idx, 'name', e.target.value)}
+                onChange={e => handleCellChange(record._key, 'name', e.target.value)}
               />
             );
           }
@@ -959,12 +1155,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'fatherName',
           key: 'fatherName',
           width: 150,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="Father's name"
               size="small"
-              onChange={e => handleCellChange(idx, 'fatherName', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'fatherName', e.target.value)}
             />
           )
         },
@@ -973,12 +1169,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'gender',
           key: 'gender',
           width: 110,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Select
               value={val || 'Male'}
               size="small"
               style={{ width: '100%' }}
-              onChange={v => handleCellChange(idx, 'gender', v)}
+              onChange={v => handleCellChange(record._key, 'gender', v)}
             >
               <Select.Option value="Male">Male</Select.Option>
               <Select.Option value="Female">Female</Select.Option>
@@ -991,12 +1187,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'dob',
           key: 'dob',
           width: 130,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="YYYY-MM-DD"
               size="small"
-              onChange={e => handleCellChange(idx, 'dob', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'dob', e.target.value)}
             />
           )
         },
@@ -1005,12 +1201,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'cnic',
           key: 'cnic',
           width: 140,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="35201-..."
               size="small"
-              onChange={e => handleCellChange(idx, 'cnic', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'cnic', e.target.value)}
             />
           )
         },
@@ -1019,12 +1215,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'designation',
           key: 'designation',
           width: 150,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="Role / Title"
               size="small"
-              onChange={e => handleCellChange(idx, 'designation', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'designation', e.target.value)}
             />
           )
         },
@@ -1033,12 +1229,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'salaryType',
           key: 'salaryType',
           width: 110,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Select
               value={val || 'Monthly'}
               size="small"
               style={{ width: '100%' }}
-              onChange={v => handleCellChange(idx, 'salaryType', v)}
+              onChange={v => handleCellChange(record._key, 'salaryType', v)}
             >
               <Select.Option value="Monthly">Monthly</Select.Option>
               <Select.Option value="Daily">Daily</Select.Option>
@@ -1051,13 +1247,13 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'salary',
           key: 'salary',
           width: 120,
-          render: (val: number, _: any, idx: number) => (
+          render: (val: number, record: any) => (
             <InputNumber
               value={val}
               size="small"
               min={0}
               style={{ width: '100%' }}
-              onChange={v => handleCellChange(idx, 'salary', v)}
+              onChange={v => handleCellChange(record._key, 'salary', v)}
             />
           )
         },
@@ -1066,12 +1262,12 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           dataIndex: 'joiningDate',
           key: 'joiningDate',
           width: 130,
-          render: (val: string, _: any, idx: number) => (
+          render: (val: string, record: any) => (
             <Input
               value={val}
               placeholder="YYYY-MM-DD"
               size="small"
-              onChange={e => handleCellChange(idx, 'joiningDate', e.target.value)}
+              onChange={e => handleCellChange(record._key, 'joiningDate', e.target.value)}
             />
           )
         }
@@ -1084,13 +1280,13 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       width: 70,
       align: 'center',
       fixed: 'right',
-      render: (_: any, __: any, idx: number) => (
+      render: (_: any, record: any) => (
         <Button
           type="text"
           danger
           size="small"
           icon={<DeleteOutlined />}
-          onClick={() => handleDeleteRow(idx)}
+          onClick={() => handleDeleteRow(record._key)}
         />
       )
     });
@@ -1143,6 +1339,57 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
                     Export Current (.CSV)
                   </Button>
 
+                  {entityType === 'products' ? (
+                    <Dropdown
+                      menu={{
+                        items: [
+                          {
+                            key: 'all',
+                            label: 'Populate All Products',
+                            icon: <AppstoreOutlined />,
+                            onClick: () => handlePopulateExisting(),
+                          },
+                          ...(categories.length > 0
+                            ? [
+                                {
+                                  type: 'divider' as const,
+                                },
+                                {
+                                  key: 'by-category',
+                                  label: 'Populate By Category',
+                                  children: categories.map(c => ({
+                                    key: c.code,
+                                    label: `${c.title} (${c.code})`,
+                                    onClick: () => handlePopulateExisting(c.code),
+                                  })),
+                                },
+                              ]
+                            : []),
+                        ],
+                      }}
+                    >
+                      <Button
+                        type="primary"
+                        ghost
+                        icon={<CloudDownloadOutlined />}
+                        loading={populating}
+                        style={{ borderColor: '#1677ff', fontWeight: 500 }}
+                      >
+                        Populate Existing Products <DownOutlined />
+                      </Button>
+                    </Dropdown>
+                  ) : (
+                    <Button
+                      type="primary"
+                      ghost
+                      icon={<CloudDownloadOutlined />}
+                      onClick={() => handlePopulateExisting()}
+                      loading={populating}
+                    >
+                      Populate Existing Data
+                    </Button>
+                  )}
+
                   <Button
                     icon={<UploadOutlined />}
                     type="primary"
@@ -1191,6 +1438,15 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
 
               <Col>
                 <Space>
+                  <Input
+                    placeholder="Search rows..."
+                    prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    allowClear
+                    size="small"
+                    style={{ width: 170 }}
+                  />
                   <Radio.Group
                     size="small"
                     value={filterMode}

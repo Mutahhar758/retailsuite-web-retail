@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
-  Input, Popconfirm, Tooltip
+  Input, Popconfirm, Tooltip, Dropdown
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, 
-  ReloadOutlined, ShoppingOutlined, SearchOutlined, BarcodeOutlined, FileExcelOutlined
+  ReloadOutlined, ShoppingOutlined, SearchOutlined, BarcodeOutlined, FileExcelOutlined,
+  DownOutlined, DatabaseOutlined, CheckSquareOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCategoryService';
 import { unitService, type UnitDto } from '../../services/unitService';
-import { BulkOperationModal } from '../../components/bulk/BulkOperationModal';
+import { BulkOperationModal, mapProductToBulkRow } from '../../components/bulk/BulkOperationModal';
 
 const { Title, Text } = Typography;
 
@@ -21,7 +22,12 @@ export const InventoryItemList: React.FC = () => {
   const [categories, setCategories] = useState<ItemCategoryDto[]>([]);
   const [units, setUnits] = useState<UnitDto[]>([]);
   const [searchText, setSearchText] = useState('');
-  const [bulkModalVisible, setBulkModalVisible] = useState(false);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [bulkModalState, setBulkModalState] = useState<{
+    visible: boolean;
+    initialRows?: any[];
+    autoPopulate?: boolean;
+  }>({ visible: false });
   const navigate = useNavigate();
 
   const fetchData = useCallback(async () => {
@@ -222,6 +228,30 @@ export const InventoryItemList: React.FC = () => {
     },
   ];
 
+  const handleOpenBulkModal = (mode: 'blank' | 'populateAll' | 'selected' | 'filtered') => {
+    if (mode === 'selected') {
+      const selectedItems = data.filter(d => selectedRowKeys.includes(d.id));
+      setBulkModalState({
+        visible: true,
+        initialRows: selectedItems.map(mapProductToBulkRow),
+      });
+    } else if (mode === 'filtered') {
+      setBulkModalState({
+        visible: true,
+        initialRows: filteredData.map(mapProductToBulkRow),
+      });
+    } else if (mode === 'populateAll') {
+      setBulkModalState({
+        visible: true,
+        autoPopulate: true,
+      });
+    } else {
+      setBulkModalState({
+        visible: true,
+      });
+    }
+  };
+
   return (
     <Card className="shadow-sm border-gray-100 rounded-xl">
       <div className="flex justify-between items-center mb-6">
@@ -248,12 +278,63 @@ export const InventoryItemList: React.FC = () => {
           >
             Refresh
           </Button>
-          <Button 
-            icon={<FileExcelOutlined style={{ color: '#52c41a' }} />} 
-            onClick={() => setBulkModalVisible(true)}
+
+          {selectedRowKeys.length > 0 && (
+            <Button
+              type="primary"
+              icon={<EditOutlined />}
+              onClick={() => handleOpenBulkModal('selected')}
+            >
+              Bulk Update ({selectedRowKeys.length})
+            </Button>
+          )}
+
+          <Dropdown
+            menu={{
+              items: [
+                {
+                  key: 'populateAll',
+                  label: `Bulk Update All Products (${data.length})`,
+                  icon: <DatabaseOutlined />,
+                  onClick: () => handleOpenBulkModal('populateAll'),
+                },
+                ...(searchText && filteredData.length !== data.length
+                  ? [
+                      {
+                        key: 'filtered',
+                        label: `Bulk Update Filtered (${filteredData.length})`,
+                        icon: <SearchOutlined />,
+                        onClick: () => handleOpenBulkModal('filtered'),
+                      },
+                    ]
+                  : []),
+                ...(selectedRowKeys.length > 0
+                  ? [
+                      {
+                        key: 'selected',
+                        label: `Bulk Update Selected (${selectedRowKeys.length})`,
+                        icon: <CheckSquareOutlined />,
+                        onClick: () => handleOpenBulkModal('selected'),
+                      },
+                    ]
+                  : []),
+                {
+                  type: 'divider' as const,
+                },
+                {
+                  key: 'blank',
+                  label: 'Blank Bulk Grid (Create / Manual)',
+                  icon: <PlusOutlined />,
+                  onClick: () => handleOpenBulkModal('blank'),
+                },
+              ],
+            }}
           >
-            Bulk Operations
-          </Button>
+            <Button icon={<FileExcelOutlined style={{ color: '#52c41a' }} />}>
+              Bulk Operations <DownOutlined />
+            </Button>
+          </Dropdown>
+
           <Button 
             type="primary" 
             icon={<PlusOutlined />} 
@@ -269,14 +350,23 @@ export const InventoryItemList: React.FC = () => {
         dataSource={filteredData} 
         loading={loading}
         rowKey="id"
+        rowSelection={{
+          selectedRowKeys,
+          onChange: (keys) => setSelectedRowKeys(keys),
+        }}
         pagination={{ pageSize: 10 }}
         className="border border-gray-100 rounded-lg overflow-hidden"
       />
 
       <BulkOperationModal
-        visible={bulkModalVisible}
-        onClose={() => setBulkModalVisible(false)}
-        onSuccess={fetchData}
+        visible={bulkModalState.visible}
+        initialRows={bulkModalState.initialRows}
+        autoPopulate={bulkModalState.autoPopulate}
+        onClose={() => setBulkModalState({ visible: false })}
+        onSuccess={() => {
+          fetchData();
+          setSelectedRowKeys([]);
+        }}
         entityType="products"
       />
     </Card>
