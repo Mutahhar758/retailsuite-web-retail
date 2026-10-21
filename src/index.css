@@ -275,3 +275,40 @@ html[data-theme='dark'] .bg-rose-50 { background-color: rgba(225, 29, 72, 0.1); 
     print-color-adjust: exact !important;
   }
 }
+
+/* ── Application-wide Number Stepper Suppression ─────────────────────────── */
+/* Hides up/down spin buttons and Ant Design stepper controls across the app */
+.ant-input-number-handler-wrap,
+.ant-input-number-handler,
+.ant-input-number-handler-up,
+.ant-input-number-handler-down,
+.ant-input-number-actions,
+.ant-input-number-action,
+.ant-input-number-action-up,
+.ant-input-number-action-down,
+.ant-input-number:hover .ant-input-number-handler-wrap,
+.ant-input-number-focused .ant-input-number-handler-wrap,
+.ant-input-number:hover .ant-input-number-actions,
+.ant-input-number-focused .ant-input-number-actions {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.ant-input-number-input {
+  padding-right: 11px !important;
+}
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+  display: none !important;
+}
+
+input[type=number] {
+  -moz-appearance: textfield !important;
+}

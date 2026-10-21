@@ -76,20 +76,21 @@ export const BarcodeFastScanBar: React.FC<BarcodeFastScanBarProps> = ({
     }
   }, [isEnabled, autoFocus, autoFocusSetting]);
 
-  // Global hotkey F2 or Alt+B to jump focus to the scanner input
+  // Global hotkey F3 or Alt+B to jump focus to the scanner input
   useEffect(() => {
     if (!isEnabled) return;
 
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F2' || (e.altKey && e.key.toLowerCase() === 'b')) {
+      if (e.key === 'F3' || (e.altKey && e.key.toLowerCase() === 'b')) {
         e.preventDefault();
+        e.stopPropagation();
         inputRef.current?.focus();
         inputRef.current?.select();
       }
     };
 
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    window.addEventListener('keydown', handleGlobalKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
   }, [isEnabled]);
 
   // Clear transient error notice after 4 seconds
@@ -198,14 +199,14 @@ export const BarcodeFastScanBar: React.FC<BarcodeFastScanBarProps> = ({
             onChange={(e) => setInputValue(e.target.value)}
             onPressEnter={() => handleScan()}
             placeholder={
-              placeholder || 'Scan barcode / item code and press Enter (or press F2 to focus)...'
+              placeholder || 'Scan barcode / item code and press Enter (or press F3 to focus)...'
             }
             prefix={
               <ThunderboltFilled style={{ color: '#16a34a', marginRight: 4, fontSize: 13 }} />
             }
             suffix={
               <Space size={4}>
-                <Tooltip title="Press F2 from anywhere to immediately focus this scanner input.">
+                <Tooltip title="Press F3 or Alt+B from anywhere to immediately focus this scanner input.">
                   <Tag
                     color="green"
                     style={{
@@ -218,7 +219,7 @@ export const BarcodeFastScanBar: React.FC<BarcodeFastScanBarProps> = ({
                     }}
                     onClick={() => inputRef.current?.focus()}
                   >
-                    F2
+                    F3
                   </Tag>
                 </Tooltip>
               </Space>

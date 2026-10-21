@@ -1,3 +1,4 @@
+import useFormShortcuts from '../../hooks/useFormShortcuts';
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
@@ -17,6 +18,10 @@ const { RangePicker } = DatePicker;
 
 export const PurchaseList: React.FC = () => {
   const navigate = useNavigate();
+  useFormShortcuts({
+    onNew: () => navigate('/daily-entries/purchase/new'),
+  });
+
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<Purchase[]>([]);
   const [vendors, setVendors] = useState<ChartOfAccountHeadDto[]>([]);
@@ -169,7 +174,7 @@ export const PurchaseList: React.FC = () => {
           onClick={() => navigate('/daily-entries/purchase/new')}
           style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
         >
-          New Purchase
+          New Purchase (F1)
         </Button>
       </div>
 

@@ -1,3 +1,4 @@
+import useFormShortcuts from '../../hooks/useFormShortcuts';
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
@@ -17,6 +18,10 @@ const { RangePicker } = DatePicker;
 
 export const PaymentVoucherList: React.FC = () => {
   const navigate = useNavigate();
+  useFormShortcuts({
+    onNew: () => navigate('/daily-entries/payment-voucher/new'),
+  });
+
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<PaymentDto[]>([]);
   const [cashBankAccounts, setCashBankAccounts] = useState<ChartOfAccountHeadDto[]>([]);
@@ -129,7 +134,7 @@ export const PaymentVoucherList: React.FC = () => {
           icon={<PlusOutlined />} 
           onClick={() => navigate('/daily-entries/payment-voucher/new')}
         >
-          New Payment
+          New Payment (F1)
         </Button>
       </div>
 

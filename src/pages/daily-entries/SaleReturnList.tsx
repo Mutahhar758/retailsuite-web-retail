@@ -1,3 +1,4 @@
+import useFormShortcuts from '../../hooks/useFormShortcuts';
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
@@ -17,6 +18,10 @@ const { RangePicker } = DatePicker;
 
 export const SaleReturnList: React.FC = () => {
   const navigate = useNavigate();
+  useFormShortcuts({
+    onNew: () => navigate('/daily-entries/sale-return/new'),
+  });
+
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<SaleReturn[]>([]);
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
@@ -121,7 +126,7 @@ export const SaleReturnList: React.FC = () => {
           icon={<PlusOutlined />} 
           onClick={() => navigate('/daily-entries/sale-return/new')}
         >
-          New Sale Return
+          New Sale Return (F1)
         </Button>
       </div>
 

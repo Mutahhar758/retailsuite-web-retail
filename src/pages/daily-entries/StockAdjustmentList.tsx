@@ -1,3 +1,4 @@
+import useFormShortcuts from '../../hooks/useFormShortcuts';
 import React, { useState, useEffect } from 'react';
 import { Table, Card, Typography, Space, Button, Form, DatePicker, Input, message, Tag } from 'antd';
 import { 
@@ -16,6 +17,10 @@ export const StockAdjustmentList: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<StockAdjustmentMaster[]>([]);
   const navigate = useNavigate();
+  useFormShortcuts({
+    onNew: () => navigate('/daily-entries/stock-adjustment/new'),
+  });
+
   const [form] = Form.useForm();
 
   const fetchData = async (values?: any) => {
@@ -105,7 +110,7 @@ export const StockAdjustmentList: React.FC = () => {
           onClick={() => navigate('/daily-entries/stock-adjustment/new')}
           style={{ backgroundColor: '#7c3aed', borderColor: '#7c3aed' }}
         >
-          New Adjustment
+          New Adjustment (F1)
         </Button>
       </div>
 

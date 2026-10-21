@@ -1,3 +1,4 @@
+import useFormShortcuts from '../../hooks/useFormShortcuts';
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
@@ -32,6 +33,10 @@ export const ManufacturingList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<ProductionStatus | undefined>(undefined);
   const [voucherNoFilter, setVoucherNoFilter] = useState('');
   const navigate = useNavigate();
+  useFormShortcuts({
+    onNew: () => navigate('/daily-entries/manufacturing/new'),
+  });
+
 
   const fetchData = useCallback(async () => {
     try {
@@ -269,7 +274,7 @@ export const ManufacturingList: React.FC = () => {
               />
               <Button icon={<ReloadOutlined />} onClick={fetchData}>Refresh</Button>
               <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/daily-entries/manufacturing/new')}>
-                New Production Run
+                New Production Run (F1)
               </Button>
             </Space>
           </Col>

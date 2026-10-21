@@ -1,3 +1,4 @@
+import useFormShortcuts from '../../hooks/useFormShortcuts';
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
@@ -16,6 +17,10 @@ const { RangePicker } = DatePicker;
 
 export const JournalVoucherList: React.FC = () => {
   const navigate = useNavigate();
+  useFormShortcuts({
+    onNew: () => navigate('/daily-entries/journal-voucher/new'),
+  });
+
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<JournalVoucherDto[]>([]);
   const [form] = Form.useForm();
@@ -119,7 +124,7 @@ export const JournalVoucherList: React.FC = () => {
           style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
           onClick={() => navigate('/daily-entries/journal-voucher/new')}
         >
-          New Journal
+          New Journal (F1)
         </Button>
       </div>
 

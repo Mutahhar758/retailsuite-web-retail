@@ -1,3 +1,4 @@
+import useFormShortcuts from '../../hooks/useFormShortcuts';
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
@@ -16,6 +17,10 @@ const { RangePicker } = DatePicker;
 
 export const PurchaseReturnList: React.FC = () => {
   const navigate = useNavigate();
+  useFormShortcuts({
+    onNew: () => navigate('/daily-entries/purchase-return/new'),
+  });
+
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<PurchaseReturn[]>([]);
   const [form] = Form.useForm();
@@ -118,7 +123,7 @@ export const PurchaseReturnList: React.FC = () => {
           icon={<PlusOutlined />} 
           onClick={() => navigate('/daily-entries/purchase-return/new')}
         >
-          New Purchase Return
+          New Purchase Return (F1)
         </Button>
       </div>
 

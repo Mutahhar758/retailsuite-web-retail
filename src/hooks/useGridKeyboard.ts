@@ -2,7 +2,7 @@ import { useRef, useCallback, useEffect } from 'react';
 
 /**
  * Column keys that are candidates for keyboard focus in the Enter navigation flow.
- * - rate: auto-filled, excluded from Enter
+ * - rate: auto-filled in sale supply, excluded from Enter by default
  * - unit: reachable by arrow keys only, excluded from Enter
  * - addLess: excluded from Enter/Tab, reachable by arrow keys/mouse
  * - discount: excluded from Enter/Tab, reachable by arrow keys/mouse
@@ -18,47 +18,49 @@ export type GridColKey =
 
 export type ArrowColKey = GridColKey | 'unit' | 'rate' | 'discount' | 'addLess' | 'carriage';
 
-interface UseGridKeyboardOptions {
+export interface UseGridKeyboardOptions<TColKey extends string = string> {
   rowCount: number;
-  hasSecondaryQty: boolean;
-  hasVariablePackFeature: boolean;
+  /** Custom columns for Enter navigation. If omitted, uses default customerId/qty columns for backwards-compatibility. */
+  enterCols?: TColKey[];
+  /** Custom columns for Arrow Left/Right navigation. Defaults to enterCols or arrow cols. */
+  arrowCols?: TColKey[];
+  /** First column to focus when moving to next row or adding new row. Defaults to enterCols[0] or 'customerId'. */
+  firstColKey?: TColKey;
+  hasSecondaryQty?: boolean;
+  hasVariablePackFeature?: boolean;
   /** Called when Enter is pressed on the last field of the last row. */
   onAddRow: () => void;
   /**
    * rowCount changes when a new row is added. Provide the index of the row
    * that should receive focus after the state update (used by addRow auto-focus).
    */
-  pendingFocusRef?: React.MutableRefObject<{ rowIdx: number; colKey: GridColKey } | null>;
+  pendingFocusRef?: React.MutableRefObject<{ rowIdx: number; colKey: TColKey | any } | null>;
+  /** Check if a given row has an item or account selected. */
+  isRowValid?: (rowIdx: number) => boolean;
+  /** Callback to trigger or focus save. */
+  onSave?: () => void;
 }
 
-interface UseGridKeyboardReturn {
+export interface UseGridKeyboardReturn<TColKey extends string = string> {
   /** Get (or lazily create) the ref for a given cell. Pass this as `ref` prop. */
-  getCellRef: (rowIdx: number, colKey: GridColKey | ArrowColKey) => React.RefObject<any>;
+  getCellRef: (rowIdx: number, colKey: TColKey | string) => React.RefObject<any>;
   /** Attach this as `onKeyDown` to every focusable grid cell. */
-  handleCellKeyDown: (rowIdx: number, colKey: GridColKey | ArrowColKey, e: React.KeyboardEvent) => void;
+  handleCellKeyDown: (rowIdx: number, colKey: TColKey | string, e: React.KeyboardEvent) => void;
   /**
    * Call this AFTER state has been updated with the new row.
-   * Schedules focus on the Customer cell of the given row index.
+   * Schedules focus on the specified cell of the given row index.
    */
-  focusCell: (rowIdx: number, colKey: GridColKey | ArrowColKey) => void;
+  focusCell: (rowIdx: number, colKey: TColKey | string) => void;
 }
 
 /**
- * Builds the ordered list of columns that Enter navigation will step through.
- *
- * Enter flow:
- *   Customer → Qty
- *     → SecQty (if hasSecondaryQty OR hasVariablePackFeature)
- *     → PackQty (if hasVariablePackFeature)
- *     → Packing (if hasVariablePackFeature)
- *     → SecRate (if hasSecondaryQty OR hasVariablePackFeature)
- *   → next row Customer (auto-creates row if last)
+ * Builds default columns for Sale Supply backward compatibility.
  */
 function buildEnterColumns(
-  hasSecondaryQty: boolean,
-  hasVariablePackFeature: boolean,
-): GridColKey[] {
-  const cols: GridColKey[] = ['customerId', 'qty'];
+  hasSecondaryQty?: boolean,
+  hasVariablePackFeature?: boolean,
+): string[] {
+  const cols: string[] = ['customerId', 'qty'];
 
   if (hasSecondaryQty || hasVariablePackFeature) {
     cols.push('secQty');
@@ -73,14 +75,11 @@ function buildEnterColumns(
   return cols;
 }
 
-/**
- * Arrow-key navigable columns (includes Unit if visible, Rate, Discount, Add/Less).
- */
 function buildArrowColumns(
-  hasSecondaryQty: boolean,
-  hasVariablePackFeature: boolean,
-): ArrowColKey[] {
-  const cols: ArrowColKey[] = ['customerId'];
+  hasSecondaryQty?: boolean,
+  hasVariablePackFeature?: boolean,
+): string[] {
+  const cols: string[] = ['customerId'];
 
   if (!hasSecondaryQty) {
     cols.push('unit');
@@ -106,39 +105,77 @@ function buildArrowColumns(
 }
 
 /**
- * Returns true when the keyboard event originated from inside an Ant Design
- * Select whose dropdown is currently open (detected by the `ant-select-open`
- * class that Ant Design adds to the root `.ant-select` wrapper).
+ * Returns true when the keyboard event originated from inside an open
+ * Ant Design Select or DatePicker popup.
  */
-function isAntSelectOpen(e: React.KeyboardEvent): boolean {
-  const selectWrapper = (e.target as HTMLElement).closest('.ant-select');
-  return selectWrapper?.classList.contains('ant-select-open') ?? false;
+function isDropdownOpen(e: React.KeyboardEvent): boolean {
+  const target = e.target as HTMLElement;
+  const selectWrapper = target.closest('.ant-select');
+  if (selectWrapper?.classList.contains('ant-select-open')) return true;
+
+  const pickerWrapper = target.closest('.ant-picker');
+  if (pickerWrapper?.classList.contains('ant-picker-focused')) {
+    if (document.querySelector('.ant-picker-dropdown:not(.ant-picker-dropdown-hidden)')) {
+      return true;
+    }
+  }
+  return false;
 }
 
-export function useGridKeyboard({
+export function useGridKeyboard<TColKey extends string = string>({
   rowCount,
+  enterCols: customEnterCols,
+  arrowCols: customArrowCols,
+  firstColKey,
   hasSecondaryQty,
   hasVariablePackFeature,
   onAddRow,
   pendingFocusRef,
-}: UseGridKeyboardOptions): UseGridKeyboardReturn {
+  isRowValid,
+  onSave,
+}: UseGridKeyboardOptions<TColKey>): UseGridKeyboardReturn<TColKey> {
   // Ref map: "rowIdx:colKey" → RefObject
   const refsMap = useRef<Map<string, React.RefObject<any>>>(new Map());
 
-  const enterCols = useRef<GridColKey[]>([]);
-  const arrowCols = useRef<ArrowColKey[]>([]);
+  const enterColsRef = useRef<string[]>([]);
+  const arrowColsRef = useRef<string[]>([]);
 
-  // Recompute column lists when feature flags change
+  const goToSave = useCallback(() => {
+    // 1. Look for explicit button marked with data-action="save" or form-save-btn
+    const saveBtn = document.querySelector<HTMLElement>('button[data-action="save"], .form-save-btn') ||
+      Array.from(document.querySelectorAll<HTMLElement>('button')).find(b => {
+        const t = b.textContent?.trim().toLowerCase() || '';
+        return t.startsWith('save') || t === 'save';
+      });
+
+    if (saveBtn) {
+      saveBtn.focus();
+    } else if (onSave) {
+      onSave();
+    }
+  }, [onSave]);
+
+  // Recompute column lists when props change
   useEffect(() => {
-    enterCols.current = buildEnterColumns(hasSecondaryQty, hasVariablePackFeature);
-    arrowCols.current = buildArrowColumns(hasSecondaryQty, hasVariablePackFeature);
-  }, [hasSecondaryQty, hasVariablePackFeature]);
+    if (customEnterCols && customEnterCols.length > 0) {
+      enterColsRef.current = customEnterCols;
+      arrowColsRef.current = customArrowCols && customArrowCols.length > 0 ? customArrowCols : customEnterCols;
+    } else {
+      enterColsRef.current = buildEnterColumns(hasSecondaryQty, hasVariablePackFeature);
+      arrowColsRef.current = customArrowCols || buildArrowColumns(hasSecondaryQty, hasVariablePackFeature);
+    }
+  }, [customEnterCols, customArrowCols, hasSecondaryQty, hasVariablePackFeature]);
 
-  // Also compute on mount synchronously so they're ready immediately
-  enterCols.current = buildEnterColumns(hasSecondaryQty, hasVariablePackFeature);
-  arrowCols.current = buildArrowColumns(hasSecondaryQty, hasVariablePackFeature);
+  // Synchronous initial assignment
+  if (customEnterCols && customEnterCols.length > 0) {
+    enterColsRef.current = customEnterCols;
+    arrowColsRef.current = customArrowCols && customArrowCols.length > 0 ? customArrowCols : customEnterCols;
+  } else if (enterColsRef.current.length === 0) {
+    enterColsRef.current = buildEnterColumns(hasSecondaryQty, hasVariablePackFeature);
+    arrowColsRef.current = customArrowCols || buildArrowColumns(hasSecondaryQty, hasVariablePackFeature);
+  }
 
-  const getCellRef = useCallback((rowIdx: number, colKey: GridColKey | ArrowColKey): React.RefObject<any> => {
+  const getCellRef = useCallback((rowIdx: number, colKey: string): React.RefObject<any> => {
     const key = `${rowIdx}:${colKey}`;
     if (!refsMap.current.has(key)) {
       refsMap.current.set(key, { current: null });
@@ -146,14 +183,14 @@ export function useGridKeyboard({
     return refsMap.current.get(key)!;
   }, []);
 
-  const focusCell = useCallback((rowIdx: number, colKey: GridColKey | ArrowColKey) => {
-    // Use rAF to allow React state updates to flush and DOM to update first
+  const focusCell = useCallback((rowIdx: number, colKey: string) => {
     requestAnimationFrame(() => {
       const ref = refsMap.current.get(`${rowIdx}:${colKey}`);
       if (ref?.current) {
-        // Ant Design Select / InputNumber expose .focus()
         if (typeof ref.current.focus === 'function') {
           ref.current.focus();
+        } else if (ref.current.input && typeof ref.current.input.focus === 'function') {
+          ref.current.input.focus();
         }
       }
     });
@@ -169,58 +206,65 @@ export function useGridKeyboard({
   }, [rowCount, focusCell, pendingFocusRef]);
 
   const handleCellKeyDown = useCallback(
-    (rowIdx: number, colKey: GridColKey | ArrowColKey, e: React.KeyboardEvent) => {
+    (rowIdx: number, colKey: string, e: React.KeyboardEvent) => {
       const { key } = e;
 
-      // ── Escape: let the cell handle it natively (closes dropdowns) ──────────
+      // Escape: let cell handle natively (closes dropdowns)
       if (key === 'Escape') return;
 
-      // ── Enter: smart forward navigation ──────────────────────────────────────
+      // Enter: smart forward navigation
       if (key === 'Enter') {
         e.preventDefault();
         e.stopPropagation();
 
-        const cols = enterCols.current;
-        const colIdx = cols.indexOf(colKey as GridColKey);
+        const cols = enterColsRef.current;
+        const colIdx = cols.indexOf(colKey);
 
         if (colIdx === -1) {
-          // This column is not in Enter flow (e.g. rate, discount) — do nothing
+          // If column is not in Enter flow, do nothing
+          return;
+        }
+
+        // If the user is on the last row and that row has no account or item selected:
+        // do not add new row or advance through empty row, go straight to the save button!
+        if (rowIdx === rowCount - 1 && isRowValid && !isRowValid(rowIdx)) {
+          goToSave();
           return;
         }
 
         const nextColIdx = colIdx + 1;
 
         if (nextColIdx < cols.length) {
-          // Move to next column in the same row
+          // Move to next column in current row
           focusCell(rowIdx, cols[nextColIdx]);
         } else {
-          // Last column in the row → move to next row's Customer
+          // Reached end of row -> advance to next row or create one
+          const targetCol = firstColKey || (cols.length > 0 ? cols[0] : 'customerId');
           const nextRow = rowIdx + 1;
           if (nextRow < rowCount) {
-            focusCell(nextRow, 'customerId');
+            focusCell(nextRow, targetCol);
           } else {
-            // We are on the last row — add a new row, then focus its Customer
-            onAddRow();
-            // The parent must set pendingFocusRef.current = { rowIdx: nextRow, colKey: 'customerId' }
-            // before calling onAddRow, OR we handle it via the useEffect above.
-            // We store the intent here so the useEffect picks it up after rowCount increments:
-            if (pendingFocusRef) {
-              pendingFocusRef.current = { rowIdx: nextRow, colKey: 'customerId' };
+            // On the last row:
+            if (isRowValid && !isRowValid(rowIdx)) {
+              // Last row has no item or account selected: do not add row, go to save button!
+              goToSave();
+            } else {
+              if (pendingFocusRef) {
+                pendingFocusRef.current = { rowIdx: nextRow, colKey: targetCol };
+              }
+              onAddRow();
             }
           }
         }
         return;
       }
 
-      // ── Arrow keys: navigate by column/row ──────────────────────────────────
-      const aCols = arrowCols.current;
-      const aColIdx = aCols.indexOf(colKey as ArrowColKey);
+      // Arrow keys navigation
+      const aCols = arrowColsRef.current;
+      const aColIdx = aCols.indexOf(colKey);
 
       if (key === 'ArrowRight' || key === 'ArrowLeft') {
-        // For Select cells: if the dropdown is open, Ant Design uses Left/Right
-        // internally — let the event pass through.
-        const isSelectOpen = isAntSelectOpen(e);
-        if (isSelectOpen) return;
+        if (isDropdownOpen(e)) return;
 
         e.preventDefault();
         const dir = key === 'ArrowRight' ? 1 : -1;
@@ -232,16 +276,9 @@ export function useGridKeyboard({
       }
 
       if (key === 'ArrowDown' || key === 'ArrowUp') {
-        // ── Select cells (customerId, unit) ──────────────────────────────────
-        // If the dropdown is open, Up/Down should navigate dropdown options —
-        // let those keys pass through to Ant Design's handler.
-        if (colKey === 'customerId' || colKey === 'unit') {
-          const isSelectOpen = isAntSelectOpen(e);
-          if (isSelectOpen) return; // dropdown navigates itself
-        }
+        if (isDropdownOpen(e)) return;
 
-        // Navigate rows (for closed Select or InputNumber cells)
-        // Prevent default & stop propagation so InputNumber never increments/decrements
+        // Stop increment/decrement on number inputs and navigate rows instead
         e.preventDefault();
         e.stopPropagation();
         const dir = key === 'ArrowDown' ? 1 : -1;
@@ -252,12 +289,12 @@ export function useGridKeyboard({
         return;
       }
     },
-    [rowCount, focusCell, onAddRow, pendingFocusRef],
+    [rowCount, focusCell, onAddRow, pendingFocusRef, firstColKey],
   );
 
   return {
-    getCellRef: getCellRef as UseGridKeyboardReturn['getCellRef'],
-    handleCellKeyDown: handleCellKeyDown as UseGridKeyboardReturn['handleCellKeyDown'],
-    focusCell: focusCell as UseGridKeyboardReturn['focusCell'],
+    getCellRef,
+    handleCellKeyDown,
+    focusCell,
   };
 }

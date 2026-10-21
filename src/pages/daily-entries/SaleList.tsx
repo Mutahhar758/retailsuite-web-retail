@@ -1,3 +1,4 @@
+import useFormShortcuts from '../../hooks/useFormShortcuts';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Table, Card, Button, Space, Typography, Tag, message,
@@ -36,6 +37,10 @@ interface DisplayRow {
 
 export const SaleList: React.FC = () => {
   const navigate = useNavigate();
+  useFormShortcuts({
+    onNew: () => navigate('/daily-entries/sale/new'),
+  });
+
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [data, setData] = useState<Sale[]>([]);
@@ -322,7 +327,7 @@ export const SaleList: React.FC = () => {
           onClick={() => navigate('/daily-entries/sale/new')}
           style={{ backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' }}
         >
-          New Sale
+          New Sale (F1)
         </Button>
       </div>
 

@@ -1,3 +1,4 @@
+import useFormShortcuts from '../../hooks/useFormShortcuts';
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
@@ -17,6 +18,10 @@ const { RangePicker } = DatePicker;
 
 export const SaleSupplyList: React.FC = () => {
   const navigate = useNavigate();
+  useFormShortcuts({
+    onNew: () => navigate('/daily-entries/sale-supply/new'),
+  });
+
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<SaleSupply[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -179,7 +184,7 @@ export const SaleSupplyList: React.FC = () => {
             onClick={() => navigate('/daily-entries/sale-supply/new')}
             style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}
           >
-            New Sale Supply
+            New Sale Supply (F1)
           </Button>
         </Space>
       </div>

@@ -1,3 +1,4 @@
+import useFormShortcuts from '../../hooks/useFormShortcuts';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
@@ -133,6 +134,8 @@ export const WandaSaleSupplyForm: React.FC = () => {
     hasVariablePackFeature: true,
     onAddRow: handleAddRow,
     pendingFocusRef,
+    isRowValid: (idx) => !!supplyLines[idx]?.customerId,
+    onSave: () => handleSave(),
   });
 
   // Header field refs
@@ -142,31 +145,6 @@ export const WandaSaleSupplyForm: React.FC = () => {
 
   // Form wrapper ref — receives global key events
   const formWrapperRef = useRef<HTMLDivElement>(null);
-
-  // ── Global shortcut keys ───────────────────────────────────────────────────
-  const handleFormKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    switch (e.key) {
-      case 'F1':
-        e.preventDefault();
-        handleNew();
-        break;
-      case 'F2':
-        e.preventDefault();
-        itemSelectRef.current?.focus();
-        break;
-      case 'F5':
-        e.preventDefault();
-        handleSave();
-        break;
-      case 'Insert':
-        e.preventDefault();
-        pendingFocusRef.current = { rowIdx: supplyLines.length, colKey: 'customerId' };
-        handleAddRow();
-        break;
-      default:
-        break;
-    }
-  }, [supplyLines.length, handleAddRow]);
 
   const handleNew = useCallback(() => {
     form.resetFields();
@@ -695,6 +673,17 @@ export const WandaSaleSupplyForm: React.FC = () => {
     }
   };
 
+  // ── Global shortcut keys ───────────────────────────────────────────────────
+  useFormShortcuts({
+    onNew: handleNew,
+    onFocusSearch: () => focusCell(0, 'customerId'),
+    onSave: handleSave,
+    onAddRow: () => {
+      pendingFocusRef.current = { rowIdx: supplyLines.length, colKey: 'customerId' };
+      handleAddRow();
+    },
+  });
+
   const handleDelete = async () => {
     setLoading(true);
     try {
@@ -1026,7 +1015,6 @@ export const WandaSaleSupplyForm: React.FC = () => {
   return (
     <div
       ref={formWrapperRef}
-      onKeyDown={handleFormKeyDown}
       tabIndex={-1}
       style={{ outline: 'none' }}
     >
@@ -1084,7 +1072,7 @@ export const WandaSaleSupplyForm: React.FC = () => {
             >
               Attachments {(isEdit ? savedAttachmentCount : stagedMediaIds.length) > 0 ? `(${isEdit ? savedAttachmentCount : stagedMediaIds.length})` : ''}
             </Button>
-            <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={loading}>
+            <Button type="primary" icon={<SaveOutlined />} data-action="save" className="form-save-btn" onClick={handleSave} loading={loading}>
               Save Supply
             </Button>
           </Space>

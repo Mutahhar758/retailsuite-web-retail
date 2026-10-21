@@ -1,3 +1,4 @@
+import KeyboardShortcutsBar from '../../components/common/KeyboardShortcutsBar';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
@@ -22,6 +23,7 @@ import { round } from '../../utils/numberUtils';
 import { getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
 import { BarcodeFastScanBar } from '../../components/common/BarcodeFastScanBar';
 import { CustomerPriceHistoryModal } from '../../components/sale/CustomerPriceHistoryModal';
+import { useGridKeyboard } from '../../hooks/useGridKeyboard';
 
 const { Title, Text } = Typography;
 
@@ -52,6 +54,12 @@ export const NormalSaleForm: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [form] = Form.useForm();
+
+  // Keyboard navigation & Focus management
+  const pendingFocusRef = useRef<{ rowIdx: number; colKey: string } | null>(null);
+  const datePickerRef = useRef<any>(null);
+  const customerSelectRef = useRef<any>(null);
+  const narrationSelectRef = useRef<any>(null);
   const [loading, setLoading] = useState(false);
   const { isOnline } = useNetworkStatus();
 
@@ -280,13 +288,21 @@ export const NormalSaleForm: React.FC = () => {
   };
 
   const focusCustomerSelect = () => {
+    if (customerSelectRef.current) {
+      customerSelectRef.current.focus();
+    }
     setTimeout(() => {
-      const customerInput = document.querySelector('.pos-customer-select .ant-select-selection-search-input') as HTMLInputElement;
+      if (customerSelectRef.current) {
+        customerSelectRef.current.focus();
+      }
+      const customerInput = document.querySelector<HTMLInputElement>(
+        '.pos-customer-select .ant-select-selection-search-input, .pos-customer-select input, [name="account"] input'
+      );
       if (customerInput) {
         customerInput.focus();
-        customerInput.select();
+        customerInput.select?.();
       }
-    }, 20);
+    }, 30);
   };
 
   useEffect(() => {
@@ -455,21 +471,33 @@ export const NormalSaleForm: React.FC = () => {
     }
   };
 
-  const focusLastRowSelect = () => {
-    setTimeout(() => {
-      const selectInputs = document.querySelectorAll('.ant-select-selection-search-input');
-      if (selectInputs.length > 0) {
-        const lastInput = selectInputs[selectInputs.length - 1] as HTMLInputElement;
-        if (lastInput) {
-          lastInput.focus();
-          lastInput.click();
-        }
-      }
-    }, 100);
-  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F1') {
+        e.preventDefault();
+        handleAddTab();
+        return;
+      }
+      if (e.key === 'F2') {
+        e.preventDefault();
+        e.stopPropagation();
+        focusCustomerSelect();
+        return;
+      }
+      if (e.key === 'F5') {
+        e.preventDefault();
+        handleSave();
+        return;
+      }
+      if (e.key === 'Insert') {
+        e.preventDefault();
+        if (pendingFocusRef) {
+          pendingFocusRef.current = { rowIdx: saleLines.length, colKey: 'itemId' };
+        }
+        handleAddRow();
+        return;
+      }
       if (e.altKey && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
         const tabIndex = parseInt(e.key) - 1;
@@ -504,19 +532,52 @@ export const NormalSaleForm: React.FC = () => {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    const handleHelp = (e: Event) => {
+      e.preventDefault();
+      return false;
+    };
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    window.addEventListener('help', handleHelp, { capture: true });
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      window.removeEventListener('help', handleHelp, { capture: true });
     };
   }, [tabs, activeTabId, saleLines, items, form]);
+
+
+
+  const enterCols = [
+    'itemId',
+    'qty',
+    ...(hasSecondaryQty ? ['secQty', 'secRate'] : [])
+  ];
+
+  const arrowCols = [
+    'itemId',
+    'qty',
+    'rate',
+    ...(hasSecondaryQty ? ['secQty', 'secRate'] : []),
+    'discount',
+    ...(enableCarriage ? ['carriage'] : [])
+  ];
 
   const handleAddRow = () => {
     setSaleLines(prev => {
       const newSeq = prev.length > 0 ? Math.max(...prev.map(l => l.seq)) + 1 : 1;
       return [...prev, { key: Date.now(), seq: newSeq, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0 }];
     });
-    focusLastRowSelect();
   };
+
+  const { getCellRef, handleCellKeyDown, focusCell } = useGridKeyboard({
+    rowCount: saleLines.length,
+    enterCols,
+    arrowCols,
+    firstColKey: 'itemId',
+    onAddRow: handleAddRow,
+    pendingFocusRef,
+    isRowValid: (idx) => !!saleLines[idx]?.itemId,
+    onSave: () => handleSave(),
+  });
 
   const handleRemoveRow = async (key: number, seq: number) => {
     if (isEdit && typeof key === 'number' && key < 1000000000) {
@@ -893,8 +954,9 @@ export const NormalSaleForm: React.FC = () => {
       title: 'Item Description',
       dataIndex: 'itemId',
       key: 'itemId',
-      render: (text: string, record: any) => (
+      render: (text: string, record: any, rowIdx: number) => (
         <Select
+          ref={getCellRef(rowIdx, 'itemId')}
           showSearch
           style={{ width: '100%' }}
           placeholder="Select Item"
@@ -906,6 +968,7 @@ export const NormalSaleForm: React.FC = () => {
           }
           options={items.map(i => ({ value: i.id, label: `${i.title} (${i.id})` }))}
           onKeyDown={(e) => {
+            handleCellKeyDown(rowIdx, 'itemId', e);
             if (e.key === 'Tab' && !record.itemId) {
               e.preventDefault();
               const cashReceiptInput = document.querySelector('.pos-cash-receipt input') as HTMLInputElement;
@@ -982,6 +1045,8 @@ export const NormalSaleForm: React.FC = () => {
             placeholder="Mo"
             min={0}
             max={60}
+            controls={false}
+            keyboard={false}
             style={{ width: '100%' }}
             onChange={(v) => updateLine(record.key, 'warrantyMonths', v)}
           />
@@ -998,6 +1063,8 @@ export const NormalSaleForm: React.FC = () => {
             placeholder="%"
             min={0}
             max={100}
+            controls={false}
+            keyboard={false}
             style={{ width: '100%' }}
             onChange={(v) => updateLine(record.key, 'batteryHealth', v)}
           />
@@ -1022,7 +1089,7 @@ export const NormalSaleForm: React.FC = () => {
       dataIndex: 'qty',
       key: 'qty',
       width: 145,
-      render: (val: number, record: any) => {
+      render: (val: number, record: any, rowIdx: number) => {
         const item = items.find(i => String(i.id) === String(record.itemId));
         const selectableUnits = getSelectablePrimaryUnits(item);
         const resolved = record.selectedUnitId
@@ -1035,11 +1102,15 @@ export const NormalSaleForm: React.FC = () => {
 
         return (
           <InputNumber
+            ref={getCellRef(rowIdx, 'qty')}
             style={{ width: '100%' }}
             value={resolved.displayQty}
             min={0}
+            controls={false}
+            keyboard={false}
             precision={resolved.factor > 1 ? 0 : 2}
             onChange={(v) => updateLine(record.key, 'qty', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'qty', e)}
             addonAfter={
               selectableUnits.length > 1 ? (
                 <Select
@@ -1065,17 +1136,21 @@ export const NormalSaleForm: React.FC = () => {
       dataIndex: 'rate',
       key: 'rate',
       width: 140,
-      render: (val: number, record: any) => (
+      render: (val: number, record: any, rowIdx: number) => (
         <Space.Compact style={{ width: '100%' }}>
           <InputNumber
+            ref={getCellRef(rowIdx, 'rate')}
             style={{ width: '100%' }}
             value={val}
             min={0}
+            controls={false}
+            keyboard={false}
             precision={4}
             step={0.01}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             parser={value => value?.replace(/[^0-9.]/g, '') as any}
             onChange={(v) => updateLine(record.key, 'rate', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'rate', e)}
             tabIndex={-1}
           />
           <Tooltip title="View last sale price & history">
@@ -1100,6 +1175,8 @@ export const NormalSaleForm: React.FC = () => {
             style={{ width: '100%' }}
             value={val}
             min={0}
+            controls={false}
+            keyboard={false}
             onChange={(v) => updateLine(record.key, 'secQty', v)}
           />
         )
@@ -1114,6 +1191,8 @@ export const NormalSaleForm: React.FC = () => {
             style={{ width: '100%' }}
             value={val}
             min={0}
+            controls={false}
+            keyboard={false}
             precision={4}
             step={0.01}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
@@ -1129,12 +1208,16 @@ export const NormalSaleForm: React.FC = () => {
       dataIndex: 'discount',
       key: 'discount',
       width: 90,
-      render: (val: number, record: any) => (
+      render: (val: number, record: any, rowIdx: number) => (
         <InputNumber
+          ref={getCellRef(rowIdx, 'discount')}
           style={{ width: '100%' }}
           value={val}
           min={0}
+          controls={false}
+          keyboard={false}
           onChange={(v) => updateLine(record.key, 'discount', v)}
+          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'discount', e)}
           tabIndex={-1}
         />
       )
@@ -1373,9 +1456,8 @@ export const NormalSaleForm: React.FC = () => {
           <Button
             type="primary"
             icon={<SaveOutlined />}
-            onClick={handleSave}
+            data-action="save" className="pos-save-btn form-save-btn" onClick={handleSave}
             loading={loading}
-            className="pos-save-btn"
             style={{
               backgroundColor: '#0ea5e9',
               borderColor: '#0ea5e9',
@@ -1409,18 +1491,35 @@ export const NormalSaleForm: React.FC = () => {
           </Col>
           <Col xs={24} sm={8} lg={4}>
             <Form.Item label="Date" name="date" rules={[{ required: true }]}>
-              <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" />
+              <DatePicker
+                ref={datePickerRef}
+                style={{ width: '100%' }}
+                format="DD-MMM-YYYY"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    focusCustomerSelect();
+                  }
+                }}
+              />
             </Form.Item>
           </Col>
           <Col xs={24} sm={8} lg={6}>
             <Form.Item label="Customer" name="account" rules={[{ required: true }]}>
               <Select
+                ref={customerSelectRef}
                 showSearch
                 placeholder="Walk-in Customer"
                 optionFilterProp="children"
                 className="pos-customer-select"
                 prefix={<UserOutlined />}
                 onChange={handleCustomerChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    narrationSelectRef.current?.focus();
+                  }
+                }}
                 filterOption={(input, option) =>
                   (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
                 }
@@ -1431,10 +1530,17 @@ export const NormalSaleForm: React.FC = () => {
           <Col xs={24} sm={12} lg={5}>
             <Form.Item label="Narration" name="narration">
               <Select
+                ref={narrationSelectRef}
                 showSearch
                 placeholder="Select Narration"
                 optionFilterProp="children"
                 allowClear
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    focusCell(0, 'itemId');
+                  }
+                }}
                 filterOption={(input, option) =>
                   (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
                 }
@@ -1471,6 +1577,7 @@ export const NormalSaleForm: React.FC = () => {
           size="small"
           bordered
         />
+        <KeyboardShortcutsBar shortcuts={[{ key: 'F1', label: 'New Tab' }, { key: 'F2', label: 'Customer' }, { key: 'F3', label: 'Barcode' }, { key: 'F5', label: 'Save' }, { key: 'Ins', label: 'Add Row' }, { key: 'Enter', label: 'Next Field' }, { key: '↑↓←→', label: 'Navigate' }, { key: 'Esc', label: 'Cancel Edit' }]} />
 
         <div style={{ marginTop: 24, padding: 16, backgroundColor: '#f8fafc', borderRadius: 8 }}>
           <Row gutter={24} align="middle">
@@ -1490,6 +1597,8 @@ export const NormalSaleForm: React.FC = () => {
                       className="pos-cash-receipt"
                       style={{ width: '100%', fontSize: 16, fontWeight: 'bold' }}
                       min={0}
+                      controls={false}
+                      keyboard={false}
                       precision={2}
                       formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                       parser={value => value?.replace(/\$\s?|(,*)/g, '') as any}
@@ -1512,6 +1621,8 @@ export const NormalSaleForm: React.FC = () => {
                         color: cashBack > 0 ? '#10b981' : undefined
                       }}
                       min={0}
+                      controls={false}
+                      keyboard={false}
                       precision={2}
                       readOnly
                       formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}

@@ -9,6 +9,8 @@ export interface Item {
   itemKey?: string;
   priRate: number;
   secRate: number;
+  costRate?: number;
+  secCostRate?: number;
   primaryUnit?: string;
   primaryUnitTitle?: string;
   secondaryUnit?: string;

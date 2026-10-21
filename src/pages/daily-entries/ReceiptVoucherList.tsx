@@ -1,3 +1,4 @@
+import useFormShortcuts from '../../hooks/useFormShortcuts';
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
@@ -17,6 +18,10 @@ const { RangePicker } = DatePicker;
 
 export const ReceiptVoucherList: React.FC = () => {
   const navigate = useNavigate();
+  useFormShortcuts({
+    onNew: () => navigate('/daily-entries/receipt-voucher/new'),
+  });
+
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ReceiptDto[]>([]);
   const [cashBankAccounts, setCashBankAccounts] = useState<ChartOfAccountHeadDto[]>([]);
@@ -131,7 +136,7 @@ export const ReceiptVoucherList: React.FC = () => {
           onClick={() => navigate('/daily-entries/receipt-voucher/new')}
           style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
         >
-          New Receipt
+          New Receipt (F1)
         </Button>
       </div>
 
