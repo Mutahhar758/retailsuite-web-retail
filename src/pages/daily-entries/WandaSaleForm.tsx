@@ -412,7 +412,8 @@ export const WandaSaleForm: React.FC = () => {
       const qty = l.qty || 1;
       const disc = l.discount || 0;
       const carriage = l.carriage || 0;
-      const amount = round((qty * kgR) - disc + carriage, 2);
+      const secQty = l.secQty || 0;
+      const amount = round((qty * kgR) - disc + (secQty * carriage), 2);
       return {
         ...l,
         rate: kgR,
@@ -445,7 +446,7 @@ export const WandaSaleForm: React.FC = () => {
           savedRate: d.rate,
           discount: d.discount,
           carriage: d.carriage || 0,
-          amount: d.amount != null ? d.amount : ((d.qty * d.rate) - (d.discount || 0) + (d.carriage || 0)),
+          amount: d.amount != null ? d.amount : ((d.qty * d.rate) - (d.discount || 0) + ((d.secQty || 0) * (d.carriage || 0))),
           secUnit: d.secUnit,
           secQty: d.secQty,
           secRate: d.secRate,
@@ -693,7 +694,8 @@ export const WandaSaleForm: React.FC = () => {
           const rate = updated.rate || 0;
           const disc = updated.discount || 0;
           const carriage = updated.carriage || 0;
-          updated.amount = round((qty * rate) - disc + carriage, 2);
+          const secQty = updated.secQty || 0;
+          updated.amount = round((qty * rate) - disc + (secQty * carriage), 2);
           return updated;
         }
         return l;

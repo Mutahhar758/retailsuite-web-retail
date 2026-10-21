@@ -181,7 +181,8 @@ export const WandaSupplyRegister: React.FC = () => {
         const addLess = updated.addLess || 0;
 
         // Wanda line amount: (Weight * Rate) - Disc + Carriage + AddLess
-        updated.amount = round(((updated.qty * updated.rate) - disc + carriage + addLess), 2);
+        const secQty = updated.secQty || 0;
+        updated.amount = round(((updated.qty * updated.rate) - disc + (secQty * carriage) + addLess), 2);
         return updated;
       }
       return line;

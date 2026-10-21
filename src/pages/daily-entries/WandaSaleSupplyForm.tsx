@@ -72,7 +72,7 @@ export const WandaSaleSupplyForm: React.FC = () => {
       totalPackQty += pq;
       totalDiscount += disc;
       totalAddLess += al;
-      totalCarriage += c;
+      totalCarriage += (sq * c);
       totalAmount += amt;
 
       if (l.customerId) {
@@ -314,7 +314,7 @@ export const WandaSaleSupplyForm: React.FC = () => {
           const lineDiscount = setting?.discount != null ? setting.discount : 0;
           const lineAddLess = setting?.addLess != null ? setting.addLess : 0;
           const lineCarriage = setting?.carriage != null ? setting.carriage : 0;
-          const amount = round((qty * lineRate) - lineDiscount + lineCarriage + lineAddLess, 2);
+          const amount = round((qty * lineRate) - lineDiscount + (secQty * lineCarriage) + lineAddLess, 2);
 
           return {
             key: Date.now() + index,
@@ -397,7 +397,7 @@ export const WandaSaleSupplyForm: React.FC = () => {
         const lineDiscount = setting?.discount != null ? setting.discount : (line.discount || 0);
         const lineAddLess = setting?.addLess != null ? setting.addLess : (line.addLess || 0);
         const lineCarriage = setting?.carriage != null ? setting.carriage : (line.carriage || 0);
-        const amount = round((qty * lineRate) - lineDiscount + lineCarriage + lineAddLess, 2);
+        const amount = round((qty * lineRate) - lineDiscount + (secQty * lineCarriage) + lineAddLess, 2);
 
         return {
           ...line,
@@ -559,7 +559,8 @@ export const WandaSaleSupplyForm: React.FC = () => {
         const disc = updated.discount || 0;
         const addLess = updated.addLess || 0;
         const carriage = updated.carriage || 0;
-        updated.amount = round(((qty * rate) - disc + carriage + addLess), 2);
+        const secQty = updated.secQty || 0;
+        updated.amount = round(((qty * rate) - disc + (secQty * carriage) + addLess), 2);
         return updated;
       }
       return l;
@@ -735,7 +736,7 @@ export const WandaSaleSupplyForm: React.FC = () => {
         const lineAddLess = customAddLess ?? (l.addLess || 0);
         const linePacking = pSize > 0 ? pSize : (l.packing || 0);
         const linePackQty = (defSecQty > 0 && defQty > 0) ? round(defQty / defSecQty, 2) : (pSize > 0 ? pSize : (l.packQty || 0));
-        const amount = round((defQty * lineRate) - lineDiscount + defCarriage + lineAddLess, 2);
+        const amount = round((defQty * lineRate) - lineDiscount + (defSecQty * defCarriage) + lineAddLess, 2);
         return {
           ...l,
           customerId,
