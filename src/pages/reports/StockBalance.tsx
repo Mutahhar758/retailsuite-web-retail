@@ -44,7 +44,9 @@ export const StockBalance: React.FC = () => {
       const filter = {
         fromDate: values.dateRange[0].format('YYYY-MM-DD'),
         toDate: values.dateRange[1].format('YYYY-MM-DD'),
-        catagory: values.category,
+        catagory: values.category || undefined,
+        category: values.category || undefined,
+        filter: values.stockFilter || 'All',
         showStockValue
       };
 
@@ -133,7 +135,7 @@ export const StockBalance: React.FC = () => {
       return;
     }
 
-    const headers = ['#', 'Item / Product Name', 'Unit', 'Opening Qty', 'Inward (+)', 'Outward (-)', 'Closing Qty', 'Rate', 'Total Value'];
+    const headers = ['#', 'Item / Product Name', 'Unit', 'Opening Qty', 'Inward (+)', 'Outward (-)', 'Closing Qty', 'Status', 'Rate', 'Total Value'];
     let sumOpening = 0;
     let sumIn = 0;
     let sumOut = 0;
@@ -169,6 +171,7 @@ export const StockBalance: React.FC = () => {
       sumIn.toFixed(2),
       sumOut.toFixed(2),
       sumBal.toFixed(2),
+      '-',
       '-',
       sumVal.toFixed(2)
     ]);
@@ -222,6 +225,7 @@ export const StockBalance: React.FC = () => {
           <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: ${line.qtyIn > 0 ? '#15803d' : '#374151'};">${line.qtyInDisplay || line.qtyIn.toFixed(2)}</td>
           <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; color: ${line.qtyOut > 0 ? '#b91c1c' : '#374151'};">${line.qtyOutDisplay || line.qtyOut.toFixed(2)}</td>
           <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; font-weight: bold;">${line.qtyBalDisplay || line.qtyBal.toFixed(2)}</td>
+          <td style="text-align: center; border: 1px solid #e5e7eb; padding: 6px; font-weight: 500; color: ${line.status === 'Low Stock' ? '#d97706' : (line.status === 'Out of Stock' ? '#dc2626' : '#16a34a')};">${line.status || 'In Stock'}</td>
           <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px;">${line.rate.toFixed(2)}</td>
           <td style="text-align: right; border: 1px solid #e5e7eb; padding: 6px; font-weight: bold;">${val.toFixed(2)}</td>
         </tr>
@@ -372,7 +376,8 @@ export const StockBalance: React.FC = () => {
                 layout="vertical"
                 onFinish={handleSearch}
                 initialValues={{
-                  dateRange: [dayjs().startOf('month'), dayjs()]
+                  dateRange: [dayjs().startOf('month'), dayjs()],
+                  stockFilter: 'All'
                 }}
               >
                 <Form.Item
@@ -403,6 +408,22 @@ export const StockBalance: React.FC = () => {
                         {cat.title}
                       </Select.Option>
                     ))}
+                  </Select>
+                </Form.Item>
+
+                <Form.Item
+                  name="stockFilter"
+                  label={<span style={{ fontSize: 12, fontWeight: 500 }}>Stock Filter</span>}
+                >
+                  <Select
+                    placeholder="All Items"
+                    style={{ width: '100%' }}
+                  >
+                    <Select.Option value="All">All Stock</Select.Option>
+                    <Select.Option value="LowStock">Low Stock Only</Select.Option>
+                    <Select.Option value="Greater">Positive Stock (&gt; 0)</Select.Option>
+                    <Select.Option value="Equal">Zero Balance (= 0)</Select.Option>
+                    <Select.Option value="Less">Negative Stock (&lt; 0)</Select.Option>
                   </Select>
                 </Form.Item>
 

@@ -33,6 +33,7 @@ export const InventoryItemForm: React.FC = () => {
   const itemType = Form.useWatch('itemType', form);
   const selectedPrimaryUnitCode = Form.useWatch('primaryUnit', form);
   const overrideSubUnits = Form.useWatch('overrideSubUnits', form);
+  const lowStockAlert = Form.useWatch('lowStockAlert', form);
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<ItemCategoryDto[]>([]);
   const [units, setUnits] = useState<UnitDto[]>([]);
@@ -209,6 +210,7 @@ export const InventoryItemForm: React.FC = () => {
 
       const apiValues = {
         ...values,
+        lowStockQty: values.lowStockAlert ? (values.lowStockQty ?? null) : null,
         quickQtyPresets: values.quickQtyPresets && values.quickQtyPresets.length > 0
           ? JSON.stringify(values.quickQtyPresets)
           : null,
@@ -337,7 +339,7 @@ export const InventoryItemForm: React.FC = () => {
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ itemType: 'Product', alert: false, priRate: 0, secRate: 0, qtyInPack: 1 }}
+        initialValues={{ itemType: 'Product', alert: false, lowStockAlert: false, priRate: 0, secRate: 0, qtyInPack: 1 }}
       >
         {/* Hidden field to bind mediaId to form submit values */}
         <Form.Item name="mediaId" noStyle><Input type="hidden" /></Form.Item>
@@ -550,7 +552,7 @@ export const InventoryItemForm: React.FC = () => {
                       <InputNumber style={{ width: '100%' }} min={1} />
                     </Form.Item>
                   </Col>
-                  <Col xs={24} md={12}>
+                  <Col xs={24} md={lowStockAlert ? 6 : 12}>
                     <div style={{ marginTop: '32px' }}>
                       <Space size="large">
                         <Form.Item name="alert" valuePropName="checked" noStyle>
@@ -562,6 +564,17 @@ export const InventoryItemForm: React.FC = () => {
                       </Space>
                     </div>
                   </Col>
+                  {lowStockAlert && (
+                    <Col xs={24} md={6}>
+                      <Form.Item
+                        name="lowStockQty"
+                        label="Low Stock Qty"
+                        rules={[{ required: true, message: 'Please enter low stock quantity' }]}
+                      >
+                        <InputNumber min={0} style={{ width: '100%' }} placeholder="Alert on or below qty" />
+                      </Form.Item>
+                    </Col>
+                  )}
                 </Row>
 
                 <Row gutter={16}>

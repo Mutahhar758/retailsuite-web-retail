@@ -53,8 +53,10 @@ const stockColumns = [
   { title: 'Code', dataIndex: 'code', key: 'code', render: (t: string) => <a className="text-gray-600 font-mono">{t}</a> },
   { title: 'Item Name', dataIndex: 'name', key: 'name' },
   {
-    title: 'Quantity', dataIndex: 'qty', key: 'qty', render: (q: number) => (
-      <span className={q < 10 ? 'text-red-600 font-bold' : 'text-green-600'}>{q.toLocaleString()}</span>
+    title: 'Quantity', dataIndex: 'qty', key: 'qty', render: (q: number, record: StockStatusDto) => (
+      <span className={record.status === 'Low Stock' ? 'text-amber-600 font-bold' : (record.status === 'Out of Stock' ? 'text-red-600 font-bold' : 'text-green-600 font-semibold')}>
+        {q.toLocaleString()}
+      </span>
     )
   },
   { title: 'Value', dataIndex: 'value', key: 'value', render: (v: number) => `Rs. ${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` },
@@ -285,7 +287,7 @@ export const Dashboard: React.FC = () => {
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={14}>
           <Card title={<span className="font-bold text-gray-700">Stock Inventory (Top Items)</span>} bordered={true} className={cardClass}>
-            <Table columns={stockColumns} dataSource={stockStatus} pagination={false} size="small" rowKey="code" loading={loading.stock} />
+            <Table columns={stockColumns} dataSource={stockStatus} pagination={false} size="small" rowKey={(record: StockStatusDto) => record.code || record.name} loading={loading.stock} />
           </Card>
         </Col>
         <Col xs={24} lg={10}>

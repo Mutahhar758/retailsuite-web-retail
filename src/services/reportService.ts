@@ -31,6 +31,7 @@ export interface AccountStatementWithDueLine extends AccountStatementLine {
 }
 
 export interface StockBalanceLine {
+  itemId?: string;
   item: string;
   unit: string;
   priQty: number;
@@ -48,6 +49,9 @@ export interface StockBalanceLine {
   secQtyIn?: number;
   secQtyOut?: number;
   secQtyBal?: number;
+  lowStockAlert?: boolean;
+  lowStockQty?: number;
+  status?: string;
 }
 
 export interface StockLedgerLine {
@@ -67,6 +71,9 @@ export interface StockLedgerLine {
   secQtyIn?: number;
   secQtyOut?: number;
   secQtyBal?: number;
+  lowStockAlert?: boolean;
+  lowStockQty?: number;
+  status?: string;
 }
 
 export interface BalanceSheetLine {
@@ -224,12 +231,12 @@ export const reportService = {
     return response.data as Blob;
   },
 
-  async getStockBalance(params: { fromDate: string; toDate: string; catagory?: string; showStockValue?: boolean }) {
+  async getStockBalance(params: { fromDate: string; toDate: string; catagory?: string; showStockValue?: boolean; filter?: string; qty?: number }) {
     const response = await api.get('/api/reports/stock-balance', { params });
     return response.data.body as StockBalanceLine[];
   },
 
-  async getStockBalancePdf(params: { fromDate: string; toDate: string; catagory?: string; showStockValue?: boolean }): Promise<Blob> {
+  async getStockBalancePdf(params: { fromDate: string; toDate: string; catagory?: string; showStockValue?: boolean; filter?: string; qty?: number }): Promise<Blob> {
     const response = await api.get('/api/reports/stock-balance/pdf', {
       params,
       responseType: 'blob'

@@ -24,11 +24,13 @@ export interface RecentExpenseDto {
 }
 
 export interface StockStatusDto {
-  code: string;
+  code?: string;
   name: string;
   qty: number;
   value: number;
   status: string;
+  lowStockQty?: number;
+  lowStockAlert?: boolean;
 }
 
 export interface RecentPaymentDto {
