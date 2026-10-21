@@ -2000,9 +2000,16 @@ export const POSSaleForm: React.FC = () => {
                   <Text strong style={{ display: 'block', fontSize: 16, color: '#0f172a', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                     {line.item.title}
                   </Text>
-                  <Text type="secondary" style={{ fontSize: 13, fontWeight: 500 }}>
-                    Rs. {line.rate} | Unit: {selectableUnits.find(u => u.unitId === (line.selectedUnitId || line.unit))?.label || units.find(u => u.code === line.unit)?.title || line.unit}
-                  </Text>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <Text type="secondary" style={{ fontSize: 13, fontWeight: 500 }}>
+                      Rs. {line.rate} | Unit: {selectableUnits.find(u => u.unitId === (line.selectedUnitId || line.unit))?.label || units.find(u => u.code === line.unit)?.title || line.unit}
+                    </Text>
+                    {!!line.item.minSalePrice && Number(line.item.minSalePrice) > 0 && Number(line.rate || 0) <= Number(line.item.minSalePrice) && (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#b45309', backgroundColor: '#fef3c7', padding: '1px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                        ⚠️ Min Cap (Rs. {line.item.minSalePrice})
+                      </span>
+                    )}
+                  </div>
                 </div>
                 
                 {/* Touch Quantity Controls + Conditional Sub-Unit Selector */}
