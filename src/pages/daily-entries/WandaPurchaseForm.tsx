@@ -100,7 +100,7 @@ export const WandaPurchaseForm: React.FC = () => {
     const fetchLookups = async () => {
       try {
         const [itemsRes, vendorsRes, narrsRes] = await Promise.all([
-          inventoryService.getItemsLookup(),
+          inventoryService.getItemsLookup(undefined, true),
           chartOfAccountService.getDetailAccounts(),
           narrationService.getActiveNarrationsLookup()
         ]);
@@ -233,10 +233,10 @@ export const WandaPurchaseForm: React.FC = () => {
           const item = items.find(i => String(i.id) === String(value));
           if (item) {
             updated.unit = item.defaultUnit || item.primaryUnit || '';
-            updated.rate = item.costRate || 0;
+            updated.rate = item.lastPurchaseRate ?? item.costRate ?? 0;
             updated.secUnit = item.secondaryUnit || '';
             const pSize = Number(item.qtyInPack || (item as any)?.QtyInPack || (item as any)?.qty_in_pack || 0);
-            updated.secRate = item.secCostRate || ((item.costRate || 0) * (pSize > 0 ? pSize : 1));
+            updated.secRate = item.lastPurchaseSecRate ?? item.secCostRate ?? ((updated.rate || 0) * (pSize > 0 ? pSize : 1));
             updated.packQty = pSize;
             updated.packing = (item as any)?.packing || 0;
           }

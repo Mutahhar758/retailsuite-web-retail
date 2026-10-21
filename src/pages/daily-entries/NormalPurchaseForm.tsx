@@ -126,7 +126,7 @@ export const NormalPurchaseForm: React.FC = () => {
       try {
         fetchSettings('Inventory');
         const [itemsRes, vendorsRes, narrsRes] = await Promise.all([
-          inventoryService.getItemsLookup(),
+          inventoryService.getItemsLookup(undefined, true),
           chartOfAccountService.getDetailAccounts(),
           narrationService.getActiveNarrationsLookup()
         ]);
@@ -266,9 +266,9 @@ export const NormalPurchaseForm: React.FC = () => {
           if (currentItem) {
             const hasSec = !!(currentItem.secondaryUnit && currentItem.secondaryUnit.trim());
             const isSec = hasSec && !!(currentItem.defaultUnit && currentItem.defaultUnit.trim().toLowerCase() === currentItem.secondaryUnit?.trim().toLowerCase());
-            const baseRate = (isSec && (currentItem.secCostRate || 0) > 0) ? (currentItem.secCostRate || 0) : (currentItem.costRate || 0);
+            const baseRate = currentItem.lastPurchaseRate ?? ((isSec && (currentItem.secCostRate || 0) > 0) ? (currentItem.secCostRate || 0) : (currentItem.costRate || 0));
             const pSize = Number(currentItem.qtyInPack || (currentItem as any)?.QtyInPack || (currentItem as any)?.qty_in_pack || 0);
-            const baseSecRate = currentItem.secCostRate || ((currentItem.costRate || 0) * (pSize > 0 ? pSize : 1));
+            const baseSecRate = currentItem.lastPurchaseSecRate ?? (currentItem.secCostRate || ((currentItem.costRate || 0) * (pSize > 0 ? pSize : 1)));
 
             updated.unit = currentItem.defaultUnit || currentItem.primaryUnit || '';
             updated.rate = baseRate;
@@ -326,7 +326,7 @@ export const NormalPurchaseForm: React.FC = () => {
       const existingIndex = prev.findIndex(l => l.itemId === scannedItem.id);
       const effectiveRate = customRate !== undefined
         ? customRate
-        : (scannedItem.costRate !== undefined && scannedItem.costRate !== null ? scannedItem.costRate : 0);
+        : (scannedItem.lastPurchaseRate ?? (scannedItem.costRate !== undefined && scannedItem.costRate !== null ? scannedItem.costRate : 0));
 
       if (existingIndex >= 0) {
         const updatedLines = [...prev];

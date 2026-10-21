@@ -10,6 +10,8 @@ export interface Item {
   priRate: number;
   secRate: number;
   costRate?: number;
+  lastPurchaseRate?: number | null;
+  lastPurchaseSecRate?: number | null;
   secCostRate?: number;
   primaryUnit?: string;
   primaryUnitTitle?: string;
@@ -81,8 +83,8 @@ export const inventoryService = {
     return response.data.body as Item[];
   },
 
-  async getItemsLookup(categoryCode?: string) {
-    const response = await api.get('/api/inventory/items/lookup', { params: { itemCategoryCode: categoryCode } });
+  async getItemsLookup(categoryCode?: string, includeLastPurchaseRate: boolean = false) {
+    const response = await api.get('/api/inventory/items/lookup', { params: { itemCategoryCode: categoryCode, ...(includeLastPurchaseRate ? { includeLastPurchaseRate: true } : {}) } });
     return response.data.body as Item[];
   },
 
