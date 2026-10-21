@@ -211,6 +211,7 @@ export const InventoryItemForm: React.FC = () => {
       const apiValues = {
         ...values,
         lowStockQty: values.lowStockAlert ? (values.lowStockQty ?? null) : null,
+        minSalePrice: values.minSalePrice ?? null,
         quickQtyPresets: values.quickQtyPresets && values.quickQtyPresets.length > 0
           ? JSON.stringify(values.quickQtyPresets)
           : null,
@@ -577,6 +578,23 @@ export const InventoryItemForm: React.FC = () => {
                   )}
                 </Row>
 
+                <Row gutter={16}>
+                  <Col xs={24} md={6}>
+                    <Form.Item
+                      name="minSalePrice"
+                      label="Minimum Sale Price"
+                      tooltip="Sale forms show an indicator when the selling rate is at or below this price"
+                    >
+                      <InputNumber<any>
+                        style={{ width: '100%' }}
+                        min={0}
+                        placeholder="Optional"
+                        formatter={value => `Rs. ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                        parser={value => value ? value.replace(/Rs\.\s?|(,*)/g, '') : ''}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
                 <Row gutter={16}>
                   <Col xs={24}>
                     {(() => {

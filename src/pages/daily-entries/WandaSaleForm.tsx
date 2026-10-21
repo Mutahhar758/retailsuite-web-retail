@@ -7,7 +7,7 @@ import {
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
   RocketOutlined, UserOutlined, FileTextOutlined, WifiOutlined, DisconnectOutlined,
-  CopyOutlined, HistoryOutlined
+  CopyOutlined, HistoryOutlined, WarningOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -964,10 +964,14 @@ export const WandaSaleForm: React.FC = () => {
       title: 'Rate (/Kg)',
       dataIndex: 'rate',
       key: 'rate',
-      width: 140,
-      render: (val: number, record: any) => (
+      width: 165,
+      render: (val: number, record: any) => {
+        const minPrice = Number(items.find(i => String(i.id) === String(record.itemId))?.minSalePrice ?? 0);
+        const atMinPrice = !!record.itemId && minPrice > 0 && Number(val || 0) <= minPrice;
+        return (
         <Space.Compact style={{ width: '100%' }}>
           <InputNumber
+            status={atMinPrice ? 'warning' : undefined}
             style={{ width: '100%' }}
             value={val}
             min={0}
@@ -995,8 +999,14 @@ export const WandaSaleForm: React.FC = () => {
               tabIndex={-1}
             />
           </Tooltip>
+        {atMinPrice && (
+          <Tooltip title={`Price is at the minimum sale price (Rs. ${minPrice.toLocaleString()})`}>
+            <Button icon={<WarningOutlined style={{ color: '#faad14' }} />} style={{ borderColor: '#faad14' }} tabIndex={-1} />
+          </Tooltip>
+        )}
         </Space.Compact>
-      )
+      );
+      }
     },
     {
       title: 'Bag Rate',
