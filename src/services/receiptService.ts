@@ -57,16 +57,34 @@ export interface ReceiptUpdateRequest {
   lines: ReceiptLineRequest[];
 }
 
+export interface ReceiptListParams {
+  fromDate?: string;
+  toDate?: string;
+  cashBankAccount?: string;
+  account?: string;
+  narration?: string;
+  voucherNo?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedReceipts {
+  data: ReceiptDto[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
+}
+
 export const receiptService = {
-  async getList(params?: {
-    fromDate?: string;
-    toDate?: string;
-    cashBankAccount?: string;
-    account?: string;
-    narration?: string;
-  }) {
-    const response = await api.get('/api/receipts', { params });
-    return response.data.body as ReceiptDto[];
+  async getList(params?: ReceiptListParams) {
+    const response = await api.get('/api/receipts/paged', { params });
+    const body = response.data.body;
+    return {
+      data: (body?.data ?? []) as ReceiptDto[],
+      totalCount: (body?.metadata?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? params?.pageSize ?? 20) as number,
+    } as PaginatedReceipts;
   },
 
   async getDetail(voucherNo: string, cashBankAccount?: string) {
