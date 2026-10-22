@@ -317,6 +317,7 @@ export const BarcodePrint: React.FC = () => {
     return {
       items: itemsToPrint,
       layout,
+      sideStickersSpreadMm: 2.0,
       includeCompanyName,
       includeTitle,
       includePrice,

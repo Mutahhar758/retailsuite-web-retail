@@ -125,9 +125,9 @@ async function printViaWebUsb(lines: string[], options: PrinterOptions) {
   } catch (err: any) {
     if (
       err instanceof DOMException &&
-      (err.name === 'NotFoundError' || 
-       err.message.includes('No device selected') || 
-       err.message.includes('cancelled'))
+      (err.name === 'NotFoundError' ||
+        err.message.includes('No device selected') ||
+        err.message.includes('cancelled'))
     ) {
       throw new Error('WebUSB connection cancelled: No device was selected or printer permission denied.');
     }

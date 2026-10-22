@@ -1,16 +1,16 @@
 import dayjs from 'dayjs';
 import { message } from 'antd';
 import type { KotOrderResponse } from '../services/kotService';
-import { 
-  printDirect, 
-  divider, 
-  ESC_ALIGN_CENTER, 
-  ESC_ALIGN_LEFT, 
-  ESC_DOUBLE_ON, 
-  ESC_DOUBLE_OFF, 
-  ESC_BOLD_ON, 
+import {
+  printDirect,
+  divider,
+  ESC_ALIGN_CENTER,
+  ESC_ALIGN_LEFT,
+  ESC_DOUBLE_ON,
+  ESC_DOUBLE_OFF,
+  ESC_BOLD_ON,
   ESC_BOLD_OFF,
-  type ConnectionMethod 
+  type ConnectionMethod
 } from '../hooks/useThermalPrinter';
 
 export interface KotPrintOptions {
@@ -77,7 +77,7 @@ export const printKotViaBrowser = (kotOrder: KotOrderResponse, options?: KotPrin
       ${isDuplicate ? '<div class="text-center duplicate-banner">*** DUPLICATE ***</div>' : ''}
       <div class="text-center token">TOKEN #${kotOrder.tokenNo}</div>
       <div class="double-divider"></div>
-      <div class="meta-row"><span>Order ID: ${kotOrder.id}</span><span>${dateStr}</span></div>
+      <div class="meta-row"><span>${dateStr}</span></div>
       <div class="meta-row"><span class="bold">Type: ${typeStr}</span>${kotOrder.saleVoucherNo ? `<span>Bill #${kotOrder.saleVoucherNo}</span>` : ''}</div>
       ${kotOrder.customerName ? `<div class="meta-row"><span>Customer: ${kotOrder.customerName}</span></div>` : ''}
       <div class="divider"></div>
@@ -144,7 +144,6 @@ export const printKotSlip = async (
   }
   lines.push(ESC_ALIGN_CENTER + ESC_BOLD_ON + `Token No: #${kotOrder.tokenNo}` + ESC_BOLD_OFF);
   lines.push(ESC_ALIGN_LEFT + divider('-', width));
-  lines.push(`Order ID: ${kotOrder.id}`);
   lines.push(`Date: ${dayjs(`${kotOrder.orderDate}T${kotOrder.orderTime}`).format('DD-MMM-YYYY HH:mm')}`);
   lines.push(`Type: ${kotOrder.orderType === 'DineIn' ? `Dine-In (${kotOrder.tableName || 'N/A'})` : 'Takeaway'}`);
   if (kotOrder.saleVoucherNo) {

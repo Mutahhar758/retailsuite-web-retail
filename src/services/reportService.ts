@@ -582,6 +582,7 @@ export interface BarcodePrintItem {
 export interface BarcodePrintRequest {
   items: BarcodePrintItem[];
   layout?: 'Roll4Inch3Up' | 'ThermalRoll' | 'SheetA4';
+  sideStickersSpreadMm?: number;
   includePrice?: boolean;
   includeTitle?: boolean;
   includeCompanyName?: boolean;
