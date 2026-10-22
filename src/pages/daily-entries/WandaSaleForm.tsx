@@ -2,12 +2,13 @@ import KeyboardShortcutsBar from '../../components/common/KeyboardShortcutsBar';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
-  Table, Space, message, InputNumber, Popconfirm, Tag, Alert, Modal, Tooltip
+  Table, Space, message, InputNumber, Popconfirm, Tag, Alert, Modal, Tooltip,
+  Dropdown
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
   RocketOutlined, UserOutlined, FileTextOutlined, WifiOutlined, DisconnectOutlined,
-  CopyOutlined, HistoryOutlined, WarningOutlined
+  CopyOutlined, HistoryOutlined, WarningOutlined, PrinterOutlined, DownOutlined, EyeOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -16,11 +17,23 @@ import { offlineCacheService, OfflineCacheMissError } from '../../services/offli
 import type { ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import type { NarrationDto } from '../../services/narrationService';
 import { inventoryService, type Item, type ItemCustomerCategoryPriceDto } from '../../services/inventoryService';
-import { useSettingsStore, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
+import {
+  useSettingsStore,
+  TRANSACTION_ENABLE_CARRIAGE_KEY,
+  BILL_THANK_YOU_KEY,
+  BILL_THANK_YOU_DEFAULT
+} from '../../stores/useSettingsStore';
+import { useAppStore } from '../../stores/useAppStore';
 import { round } from '../../utils/numberUtils';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { CustomerPriceHistoryModal } from '../../components/sale/CustomerPriceHistoryModal';
 import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+import { SaleReceiptModal } from '../../components/SaleReceiptModal';
+import {
+  printSaleReceiptDirect,
+  type SaleReceiptData,
+  type SaleReceiptLineItem
+} from '../../utils/saleReceiptPrint';
 
 const { Title, Text } = Typography;
 
@@ -37,6 +50,8 @@ interface SaleTab {
 }
 
 export const WandaSaleForm: React.FC = () => {
+  const { licenses, currentTenantIdentifier } = useAppStore();
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
   const navigate = useNavigate();
@@ -56,6 +71,7 @@ export const WandaSaleForm: React.FC = () => {
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [units, setUnits] = useState<{ code: string; title: string; shortTitle?: string | null }[]>([]);
   const [categoryPrices, setCategoryPrices] = useState<ItemCustomerCategoryPriceDto[]>([]);
   const [saleLines, setSaleLines] = useState<any[]>([]);
   const [cacheMissError, setCacheMissError] = useState<string | null>(null);
@@ -66,6 +82,101 @@ export const WandaSaleForm: React.FC = () => {
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [historyTargetLineKey, setHistoryTargetLineKey] = useState<number | null>(null);
   const [historyTargetItemId, setHistoryTargetItemId] = useState<string | null>(null);
+
+  // Sale Receipt modal state
+  const [receiptModalVisible, setReceiptModalVisible] = useState(false);
+  const [activeReceiptData, setActiveReceiptData] = useState<SaleReceiptData | null>(null);
+
+  const getResolvedUnitTitle = (unitCodeOrTitle?: string | null, item?: Item | null): string => {
+    const code = unitCodeOrTitle;
+    if (!code && !item) return '';
+
+    const matched = units.find(u =>
+      u.code?.toLowerCase() === String(code || '').toLowerCase() ||
+      u.title?.toLowerCase() === String(code || '').toLowerCase()
+    );
+    if (matched) {
+      return (matched.shortTitle && matched.shortTitle.trim()) || matched.title;
+    }
+
+    if (item) {
+      if (code && item.defaultUnit && item.defaultUnit.toLowerCase() === String(code).toLowerCase() && (item as any).defaultUnitTitle) {
+        return (item as any).defaultUnitTitle;
+      }
+      if (code && item.primaryUnit && item.primaryUnit.toLowerCase() === String(code).toLowerCase() && item.primaryUnitTitle) {
+        return item.primaryUnitTitle;
+      }
+      if (code && item.secondaryUnit && item.secondaryUnit.toLowerCase() === String(code).toLowerCase() && item.secondaryUnitTitle) {
+        return item.secondaryUnitTitle;
+      }
+      if (!code && (item.primaryUnitTitle || (item as any).defaultUnitTitle)) {
+        return (item as any).defaultUnitTitle || item.primaryUnitTitle;
+      }
+    }
+
+    return code || '';
+  };
+
+  const buildReceiptData = (overrideVoucherNo?: string, isReprint: boolean = false): SaleReceiptData | null => {
+    const values = form.getFieldsValue();
+    const validLines = saleLines.filter(l => l.itemId && l.qty > 0);
+    if (validLines.length === 0) return null;
+
+    const currentAcc = customers.find(a => a.account === values.account);
+    const currentNarr = narrations.find(n => n.code === values.narration);
+
+    const receiptLines: SaleReceiptLineItem[] = validLines.map((l, idx) => {
+      const item = items.find(i => i.id === l.itemId);
+      const amount = (l.qty * l.rate) - (l.discount || 0);
+      const displayUnit = item?.itemType === 'Service' ? '' : getResolvedUnitTitle(l.unit, item);
+      return {
+        seq: idx + 1,
+        itemTitle: item?.title || 'Item',
+        unit: displayUnit,
+        qty: l.qty,
+        rate: l.rate,
+        discount: l.discount || 0,
+        amount
+      };
+    });
+
+    const grossTotal = validLines.reduce((acc, l) => acc + (l.qty * l.rate), 0);
+    const totalDiscount = validLines.reduce((acc, l) => acc + (l.discount || 0), 0);
+    const cashReceiptVal = values.cashReceipt || 0;
+    const cashBackVal = values.cashBack || 0;
+    const netAmount = totalAmount;
+
+    return {
+      voucherNo: overrideVoucherNo || (isEdit ? `SL-${voucherNo}` : 'DRAFT'),
+      date: values.date || dayjs(),
+      customerName: currentAcc?.title || 'Walk-in Customer',
+      customerPhone: (currentAcc as any)?.phone || undefined,
+      narration: currentNarr?.title,
+      description: values.description,
+      lines: receiptLines,
+      grossTotal,
+      totalDiscount,
+      netAmount,
+      cashReceived: cashReceiptVal,
+      cashBack: cashBackVal,
+      balance: Math.max(0, netAmount - cashReceiptVal),
+      orgName: currentOrg?.name,
+      orgAddress: (currentOrg as any)?.address,
+      orgPhone: (currentOrg as any)?.phone,
+      thankYouMessage: getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT),
+      isDuplicate: isReprint || isEdit
+    };
+  };
+
+  const handleOpenPreview = () => {
+    const data = buildReceiptData();
+    if (!data) {
+      message.error('Please add at least one item before previewing the receipt');
+      return;
+    }
+    setActiveReceiptData(data);
+    setReceiptModalVisible(true);
+  };
 
   // Multi-tab state management for rapid checkout drafts
   const [tabs, setTabs] = useState<SaleTab[]>(() => {
@@ -344,15 +455,17 @@ export const WandaSaleForm: React.FC = () => {
 
   const loadReferenceData = async () => {
     try {
-      const [customers, narrations, items] = await Promise.all([
+      const [customers, narrations, items, unitsList] = await Promise.all([
         offlineCacheService.getCustomers(),
         offlineCacheService.getNarrations(),
         offlineCacheService.getItems(),
+        offlineCacheService.getUnits().catch(() => []),
       ]);
       fetchSettings();
       setCustomers(customers);
       setNarrations(narrations);
       setItems(items);
+      setUnits(unitsList || []);
       inventoryService.getCustomerCategoryPrices().then(setCategoryPrices).catch(() => []);
       setCacheMissError(null);
       focusCustomerSelect();
@@ -478,7 +591,12 @@ export const WandaSaleForm: React.FC = () => {
       }
       if (e.key === 'F5') {
         e.preventDefault();
-        handleSave();
+        handleSave({ shouldPrint: false });
+        return;
+      }
+      if (e.key === 'F12') {
+        e.preventDefault();
+        handleSave({ shouldPrint: true });
         return;
       }
       if (e.key === 'Insert') {
@@ -510,9 +628,15 @@ export const WandaSaleForm: React.FC = () => {
         return;
       }
 
+      if (e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handleSave({ shouldPrint: true });
+        return;
+      }
+
       if ((e.altKey && e.key.toLowerCase() === 's') || e.key === 'F8') {
         e.preventDefault();
-        handleSave();
+        handleSave({ shouldPrint: false });
         return;
       }
 
@@ -761,7 +885,8 @@ export const WandaSaleForm: React.FC = () => {
     }
   }, [totalAmount, cashReceipt, isEdit, loading]);
 
-  const handleSave = async () => {
+  const handleSave = async (options: { shouldPrint?: boolean } = {}) => {
+    const shouldPrint = options.shouldPrint ?? true;
     if (isEdit && !isOnline) {
       message.error('Editing existing vouchers requires an internet connection.');
       return;
@@ -776,6 +901,7 @@ export const WandaSaleForm: React.FC = () => {
         return;
       }
 
+      const receiptDraft = buildReceiptData();
       setLoading(true);
       const request = {
         ...values,
@@ -804,6 +930,11 @@ export const WandaSaleForm: React.FC = () => {
       if (isEdit) {
         await saleService.update(voucherNo!, request);
         message.success('Sale updated successfully');
+        if (shouldPrint && receiptDraft) {
+          receiptDraft.voucherNo = `SL-${voucherNo}`;
+          receiptDraft.isDuplicate = true;
+          await printSaleReceiptDirect(receiptDraft);
+        }
       } else {
         const newVno = await saleService.create(request, { offlineFallback: true });
 
@@ -815,6 +946,12 @@ export const WandaSaleForm: React.FC = () => {
         } else {
           message.success(`Sale created successfully. Voucher: SL-${newVno}`);
         }
+
+        if (shouldPrint && receiptDraft) {
+          receiptDraft.voucherNo = `SL-${newVno}`;
+          await printSaleReceiptDirect(receiptDraft);
+        }
+
         handleCloseActiveTabAfterSave();
       }
     } catch (error) {
@@ -1261,10 +1398,26 @@ export const WandaSaleForm: React.FC = () => {
           )}
           {isEdit && (
             <Button
+              icon={<PrinterOutlined />}
+              onClick={() => {
+                const receiptData = buildReceiptData(`SL-${voucherNo}`, true);
+                if (receiptData) {
+                  setActiveReceiptData(receiptData);
+                  setReceiptModalVisible(true);
+                } else {
+                  message.error('No items found to generate receipt');
+                }
+              }}
+            >
+              Print Receipt
+            </Button>
+          )}
+          {isEdit && (
+            <Button
               icon={<CopyOutlined />}
               onClick={() => {
                 const values = form.getFieldsValue();
-                navigate('/daily-entries/sale/new', {
+                navigate('/daily-entries/sale/wanda/new', {
                   state: {
                     copyFrom: {
                       account: values.account,
@@ -1281,23 +1434,37 @@ export const WandaSaleForm: React.FC = () => {
               Copy as New
             </Button>
           )}
-          <Button
+          <Dropdown.Button
             type="primary"
-            icon={<SaveOutlined />}
-            data-action="save" className="pos-save-btn form-save-btn" onClick={handleSave}
+            icon={<DownOutlined />}
+            data-action="save"
+            className="pos-save-btn form-save-btn"
+            onClick={() => handleSave({ shouldPrint: true })}
             loading={loading}
+            menu={{
+              items: [
+                {
+                  key: 'save-only',
+                  icon: <SaveOutlined />,
+                  label: 'Save Only (Alt+S / F5)',
+                  onClick: () => handleSave({ shouldPrint: false })
+                },
+                {
+                  key: 'preview-receipt',
+                  icon: <EyeOutlined />,
+                  label: 'Preview Receipt',
+                  onClick: handleOpenPreview
+                }
+              ]
+            }}
             style={{
-              backgroundColor: '#0ea5e9',
-              borderColor: '#0ea5e9',
               height: 38,
-              padding: '0 20px',
-              fontSize: 14,
-              fontWeight: 600,
               boxShadow: '0 2px 4px rgba(14, 165, 233, 0.2)'
             }}
           >
-            {isEdit ? 'Update Sale (Alt+S)' : 'Complete Sale (Alt+S)'}
-          </Button>
+            <PrinterOutlined style={{ marginRight: 6 }} />
+            {isEdit ? 'Update & Print (Alt+P)' : 'Save & Print (Alt+P)'}
+          </Dropdown.Button>
         </Space>
       </div>
 
@@ -1400,7 +1567,7 @@ export const WandaSaleForm: React.FC = () => {
           size="small"
           bordered
         />
-        <KeyboardShortcutsBar shortcuts={[{ key: 'F1', label: 'New Tab' }, { key: 'F2', label: 'Customer' }, { key: 'F3', label: 'Barcode' }, { key: 'F5', label: 'Save' }, { key: 'Ins', label: 'Add Row' }, { key: 'Enter', label: 'Next Field' }, { key: '↑↓←→', label: 'Navigate' }, { key: 'Esc', label: 'Cancel Edit' }]} />
+        <KeyboardShortcutsBar shortcuts={[{ key: 'F1', label: 'New Tab' }, { key: 'F2', label: 'Customer' }, { key: 'F3', label: 'Barcode' }, { key: 'Alt+P / F12', label: 'Save & Print' }, { key: 'Alt+S / F5', label: 'Save Only' }, { key: 'Ins', label: 'Add Row' }, { key: 'Enter', label: 'Next Field' }, { key: '↑↓←→', label: 'Navigate' }, { key: 'Esc', label: 'Cancel Edit' }]} />
 
         <div style={{ marginTop: 24, padding: 16, backgroundColor: '#f8fafc', borderRadius: 8 }}>
           <Row gutter={24} align="middle">
@@ -1484,6 +1651,12 @@ export const WandaSaleForm: React.FC = () => {
         itemTitle={items.find(i => String(i.id) === String(historyTargetItemId))?.title}
         hasSecondaryQty={true}
         onApplyRate={handleApplyHistoricalRate}
+      />
+
+      <SaleReceiptModal
+        visible={receiptModalVisible}
+        receiptData={activeReceiptData}
+        onClose={() => setReceiptModalVisible(false)}
       />
     </Card>
   );

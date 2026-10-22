@@ -21,7 +21,7 @@ import {
   PrinterOutlined, RedoOutlined, CheckCircleOutlined, UserOutlined,
   FileTextOutlined, SearchOutlined, DollarOutlined,
   DisconnectOutlined, CloudServerOutlined, DownOutlined,
-  FireOutlined, ReloadOutlined, InboxOutlined, BookOutlined
+  FireOutlined, ReloadOutlined, InboxOutlined, BookOutlined, SaveOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
@@ -620,6 +620,9 @@ export const POSSaleForm: React.FC = () => {
     lines.push(ESC_ALIGN_LEFT + divider('-', width));
 
     lines.push(`Customer: ${selectedCustomer?.title || 'Walk-in Customer'}`);
+    if (activeType) {
+      lines.push(`Type:     ${activeType}`);
+    }
     if (selectedNarration) {
       lines.push(`Narration: ${selectedNarration.title}`);
     }
@@ -739,7 +742,7 @@ export const POSSaleForm: React.FC = () => {
     setOrderType('Takeaway');
   };
 
-  const handleSaveSale = async () => {
+  const handleSaveSale = async (shouldPrintReceipt: boolean = true) => {
     if (cart.length === 0) {
       message.error('Cart is empty. Please add at least one item');
       return;
@@ -848,12 +851,14 @@ export const POSSaleForm: React.FC = () => {
       setSavedTokenNo(tokenNumber);
       setSavedOrderType(orderType || 'Takeaway');
 
-      // Auto-print customer bill receipt on sale creation (prints both KOT and Bill for takeaway)
-      try {
-        const billLines = generateReceiptTextLines(finalVoucherNo, tokenNumber, orderType || 'Takeaway');
-        await printDirect(billLines, connectionMethod, { printerName, openDrawer, cutPaper });
-      } catch (billPrintErr) {
-        console.warn('Failed to auto-print bill receipt', billPrintErr);
+      // Customer bill receipt on sale creation
+      if (shouldPrintReceipt) {
+        try {
+          const billLines = generateReceiptTextLines(finalVoucherNo, tokenNumber, orderType || 'Takeaway');
+          await printDirect(billLines, connectionMethod, { printerName, openDrawer, cutPaper });
+        } catch (billPrintErr) {
+          console.warn('Failed to auto-print bill receipt', billPrintErr);
+        }
       }
 
       const isOfflineResult = finalVoucherNo ? (finalVoucherNo.includes('-') && finalVoucherNo.length <= 10) : false;
@@ -2707,27 +2712,44 @@ export const POSSaleForm: React.FC = () => {
             </Button>
           </div>
 
-          {/* Checkout Save Button */}
-          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+          {/* Checkout Action Buttons */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
             <Button
               size="large"
               onClick={() => setIsPaymentModalVisible(false)}
-              style={{ flex: 1, height: 48, borderRadius: 10, fontWeight: 700, fontSize: 14 }}
+              style={{ flex: 1, height: 48, borderRadius: 10, fontWeight: 700, fontSize: 13 }}
             >
               Cancel
             </Button>
             <Button
+              size="large"
+              icon={<SaveOutlined style={{ fontSize: 15 }} />}
+              loading={loading}
+              onClick={() => handleSaveSale(false)}
+              style={{
+                flex: 1.2,
+                height: 48,
+                borderRadius: 10,
+                fontWeight: 700,
+                fontSize: 13,
+                borderColor: '#0284c7',
+                color: '#0284c7'
+              }}
+            >
+              Save Only
+            </Button>
+            <Button
               type="primary"
               size="large"
-              icon={<DollarOutlined style={{ fontSize: 16 }} />}
+              icon={<PrinterOutlined style={{ fontSize: 16 }} />}
               loading={loading}
-              onClick={handleSaveSale}
+              onClick={() => handleSaveSale(true)}
               style={{
                 flex: 2,
                 height: 48,
                 borderRadius: 10,
                 fontWeight: 800,
-                fontSize: 15,
+                fontSize: 14,
                 backgroundColor: '#16a34a',
                 borderColor: '#16a34a',
                 boxShadow: '0 4px 10px rgba(22, 163, 74, 0.2)',
@@ -2737,7 +2759,7 @@ export const POSSaleForm: React.FC = () => {
                 gap: 6
               }}
             >
-              {hasKotFeature && orderType === 'Takeaway' ? 'CONFIRM & PRINT (KOT + BILL)' : 'CONFIRM & SAVE TRANSACTION'}
+              {hasKotFeature && orderType === 'Takeaway' ? 'SAVE & PRINT (KOT+BILL)' : 'SAVE & PRINT RECEIPT'}
             </Button>
           </div>
         </Space>

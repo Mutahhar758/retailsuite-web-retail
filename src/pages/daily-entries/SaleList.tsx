@@ -7,7 +7,7 @@ import {
 import {
   PlusOutlined, EditOutlined, RocketOutlined,
   SearchOutlined, ReloadOutlined, CloudSyncOutlined,
-  CloudServerOutlined, WarningOutlined, CopyOutlined
+  CloudServerOutlined, WarningOutlined, CopyOutlined, PrinterOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -16,8 +16,11 @@ import { offlineCacheService } from '../../services/offlineCacheService';
 import { offlineSyncService } from '../../services/offlineSyncService';
 import { useOfflineStore } from '../../stores/useOfflineStore';
 import { useAppStore } from '../../stores/useAppStore';
+import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT } from '../../stores/useSettingsStore';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import type { ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
+import { SaleReceiptModal } from '../../components/SaleReceiptModal';
+import { type SaleReceiptData, type SaleReceiptLineItem } from '../../utils/saleReceiptPrint';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -46,9 +49,90 @@ export const SaleList: React.FC = () => {
   const [data, setData] = useState<Sale[]>([]);
   const [offlineQueue, setOfflineQueue] = useState<OfflineSaleEntry[]>([]);
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
+  const [receiptModalVisible, setReceiptModalVisible] = useState(false);
+  const [activeReceiptData, setActiveReceiptData] = useState<SaleReceiptData | null>(null);
+  const { licenses, currentTenantIdentifier } = useAppStore();
+  const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
+  const { getSetting } = useSettingsStore();
   const [form] = Form.useForm();
   const { isOnline } = useNetworkStatus();
   const { pendingCount, isSyncing } = useOfflineStore();
+
+  const handlePrintReceipt = async (voucherNo: string) => {
+    try {
+      setLoading(true);
+      const [details, itemsList, unitsList] = await Promise.all([
+        saleService.getDetail(voucherNo),
+        offlineCacheService.getItems().catch(() => []),
+        offlineCacheService.getUnits().catch(() => [])
+      ]);
+
+      if (!details || details.length === 0) {
+        message.error('No lines found for this sale voucher');
+        return;
+      }
+
+      const first = details[0];
+      const customer = customers.find(c => c.account === first.accountId);
+
+      const lines: SaleReceiptLineItem[] = details.map((d, idx) => {
+        const itm = itemsList.find(i => String(i.id) === String(d.itemId));
+        const matchedUnit = unitsList.find(u =>
+          u.code?.toLowerCase() === String(d.unit || '').toLowerCase() ||
+          u.title?.toLowerCase() === String(d.unit || '').toLowerCase()
+        );
+        const resolvedUnit = matchedUnit
+          ? (((matchedUnit as any).shortTitle && (matchedUnit as any).shortTitle.trim()) || matchedUnit.title)
+          : (itm?.primaryUnitTitle || (itm as any)?.defaultUnitTitle || d.unit || '');
+
+        return {
+          seq: d.seq || idx + 1,
+          itemTitle: itm?.title || `Item #${d.itemId}`,
+          unit: resolvedUnit,
+          qty: d.qty,
+          rate: d.rate,
+          discount: d.discount || 0,
+          amount: d.amount || (d.qty * d.rate - (d.discount || 0)),
+          imei: d.imei
+        };
+      });
+
+      const grossTotal = lines.reduce((acc, l) => acc + (l.qty * l.rate), 0);
+      const totalDiscount = lines.reduce((acc, l) => acc + (l.discount || 0), 0);
+      const netAmount = details.reduce((acc, l) => acc + (l.amount || 0), 0);
+      const cashReceipt = first.cashReceipt || 0;
+      const cashBack = first.cashBack || 0;
+
+      const receipt: SaleReceiptData = {
+        voucherNo: `SL-${voucherNo}`,
+        date: first.date || dayjs(),
+        customerName: customer?.title || first.accountId || 'Walk-in Customer',
+        customerPhone: (customer as any)?.phone,
+        narration: first.narration,
+        description: first.description,
+        lines,
+        grossTotal,
+        totalDiscount,
+        netAmount,
+        cashReceived: cashReceipt,
+        cashBack,
+        balance: Math.max(0, netAmount - cashReceipt),
+        orgName: currentOrg?.name,
+        orgAddress: (currentOrg as any)?.address,
+        orgPhone: (currentOrg as any)?.phone,
+        thankYouMessage: getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT),
+        isDuplicate: true
+      };
+
+      setActiveReceiptData(receipt);
+      setReceiptModalVisible(true);
+    } catch (err) {
+      console.error(err);
+      message.error('Failed to load receipt details');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadOfflineQueue = async () => {
     const { currentTenantIdentifier } = useAppStore.getState();
@@ -226,6 +310,13 @@ export const SaleList: React.FC = () => {
               Edit
             </Button>
             <Button
+              icon={<PrinterOutlined />}
+              size="small"
+              onClick={() => handlePrintReceipt(record.voucherNo!)}
+            >
+              Receipt
+            </Button>
+            <Button
               icon={<CopyOutlined />}
               size="small"
               onClick={async () => {
@@ -382,6 +473,12 @@ export const SaleList: React.FC = () => {
           }
         })}
         className="border border-gray-100 rounded-lg overflow-hidden"
+      />
+
+      <SaleReceiptModal
+        visible={receiptModalVisible}
+        receiptData={activeReceiptData}
+        onClose={() => setReceiptModalVisible(false)}
       />
     </Card>
   );
