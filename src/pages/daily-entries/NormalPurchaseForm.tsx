@@ -24,6 +24,97 @@ import { useGridKeyboard } from '../../hooks/useGridKeyboard';
 
 const { Title, Text } = Typography;
 
+
+interface ItemSelectCellProps {
+  rowIdx: number;
+  record: any;
+  value: string;
+  items: Array<{ id: string | number; title: string }>;
+  getCellRef: (rowIdx: number, colKey: string) => React.RefObject<any>;
+  handleCellKeyDown: (rowIdx: number, colKey: string, e: React.KeyboardEvent) => void;
+  updateRow: (key: number, field: string, val: any) => void;
+  focusCell: (rowIdx: number, colKey: string) => void;
+}
+
+const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
+  rowIdx,
+  record,
+  value,
+  items,
+  getCellRef,
+  handleCellKeyDown,
+  updateRow,
+  focusCell
+}) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Select
+      ref={getCellRef(rowIdx, 'itemId')}
+      className={`grid-select-itemId grid-select-row-${rowIdx}`}
+      showSearch
+      open={open}
+      onOpenChange={setOpen}
+      style={{ width: '100%' }}
+      placeholder="Select Item"
+      optionFilterProp="children"
+      value={value}
+      onSelect={(val) => {
+        setOpen(false);
+        updateRow(record.key, 'itemId', val);
+        focusCell(rowIdx, 'qty');
+      }}
+      onChange={(val) => {
+        updateRow(record.key, 'itemId', val);
+        setOpen(false);
+      }}
+      onBlur={() => {
+        setOpen(false);
+      }}
+      filterOption={(input, option) =>
+        (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+      }
+      options={items.map(i => ({ value: i.id, label: `${i.title} (${i.id})` }))}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          if (open) {
+            return;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(false);
+
+          if (record.itemId) {
+            focusCell(rowIdx, 'qty');
+          } else {
+            const cashPaidInput = document.querySelector('.purchase-cash-paid input') as HTMLInputElement;
+            if (cashPaidInput) {
+              cashPaidInput.focus();
+              cashPaidInput.select();
+            }
+          }
+          return;
+        }
+
+        if (e.key === 'Tab') {
+          setOpen(false);
+          if (!record.itemId) {
+            e.preventDefault();
+            const cashPaidInput = document.querySelector('.purchase-cash-paid input') as HTMLInputElement;
+            if (cashPaidInput) {
+              cashPaidInput.focus();
+              cashPaidInput.select();
+            }
+          }
+          return;
+        }
+
+        handleCellKeyDown(rowIdx, 'itemId', e);
+      }}
+    />
+  );
+};
+
 export const NormalPurchaseForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
@@ -43,7 +134,7 @@ export const NormalPurchaseForm: React.FC = () => {
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [purchaseLines, setPurchaseLines] = useState<any[]>([]);
 
-  const isEdit = !!voucherNo && voucherNo !== 'new';
+  const isEdit = !!voucherNo && voucherNo !== 'new' && voucherNo !== '[object Object]';
 
   // Keyboard navigation refs
   const pendingFocusRef = useRef<{ rowIdx: number; colKey: string } | null>(null);
@@ -80,8 +171,7 @@ export const NormalPurchaseForm: React.FC = () => {
   const enterCols = [
     'itemId',
     'qty',
-    'rate',
-    ...(hasSecondaryQty ? ['secQty', 'secRate'] : [])
+    ...(hasSecondaryQty ? ['secQty'] : [])
   ];
 
   const arrowCols = [
@@ -102,6 +192,55 @@ export const NormalPurchaseForm: React.FC = () => {
     isRowValid: (idx) => !!purchaseLines[idx]?.itemId,
     onSave: () => handleSave(),
   });
+
+  
+  const focusVendorSelect = () => {
+    const doFocus = () => {
+      if (vendorSelectRef.current) {
+        try {
+          vendorSelectRef.current.focus();
+        } catch {}
+      }
+      const vendorInput = document.querySelector<HTMLInputElement>(
+        '.purchase-vendor-select .ant-select-selection-search-input, .purchase-vendor-select input, [name="account"] input'
+      );
+      if (vendorInput) {
+        vendorInput.focus();
+        vendorInput.select?.();
+      }
+    };
+
+    doFocus();
+    requestAnimationFrame(doFocus);
+    setTimeout(doFocus, 50);
+    setTimeout(doFocus, 150);
+  };
+
+  const focusBarcodeInput = () => {
+    const doFocus = () => {
+      const barcodeInput = document.querySelector<HTMLInputElement>(
+        '.barcode-fast-scan-bar input, input[placeholder*="barcode" i], input[placeholder*="scan" i]'
+      );
+      if (barcodeInput) {
+        barcodeInput.focus();
+        barcodeInput.select?.();
+        return true;
+      }
+      return false;
+    };
+
+    if (!doFocus()) {
+      setTimeout(() => {
+        if (!doFocus()) {
+          focusCell(0, 'itemId');
+        }
+      }, 50);
+    }
+  };
+
+  useEffect(() => {
+    focusVendorSelect();
+  }, []);
 
   const handleNew = useCallback(() => {
     form.resetFields();
@@ -492,7 +631,8 @@ export const NormalPurchaseForm: React.FC = () => {
         await purchaseService.update(voucherNo!, request);
         message.success('Purchase updated successfully');
       } else {
-        const newVNo = await purchaseService.create(request);
+        const res = await purchaseService.create(request);
+        const newVNo = (typeof res === 'object' && res !== null) ? ((res as any).body || (res as any).voucherNo || String(res)) : String(res);
         message.success('Purchase created successfully');
         navigate(`/daily-entries/purchase/${newVNo}`);
       }
@@ -524,7 +664,7 @@ export const NormalPurchaseForm: React.FC = () => {
   const handleVendorKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      setTimeout(() => narrationSelectRef.current?.focus(), 50);
+      focusBarcodeInput();
     }
   };
 
@@ -545,19 +685,15 @@ export const NormalPurchaseForm: React.FC = () => {
       title: 'Item Description',
       dataIndex: 'itemId',
       render: (text: string, record: any, rowIdx: number) => (
-        <Select
-          ref={getCellRef(rowIdx, 'itemId')}
-          showSearch
-          style={{ width: '100%' }}
-          placeholder="Select Item"
-          optionFilterProp="children"
+        <ItemSelectCell
+          rowIdx={rowIdx}
+          record={record}
           value={text}
-          onChange={(val) => updateRow(record.key, 'itemId', val)}
-          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'itemId', e)}
-          filterOption={(input, option) =>
-            (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-          }
-          options={items.map(i => ({ value: i.id, label: `${i.title} (${i.id})` }))}
+          items={items}
+          getCellRef={getCellRef}
+          handleCellKeyDown={handleCellKeyDown}
+          updateRow={updateRow}
+          focusCell={focusCell}
         />
       )
     },
@@ -657,6 +793,11 @@ export const NormalPurchaseForm: React.FC = () => {
             ref={getCellRef(rowIdx, 'qty')}
             value={resolved.displayQty}
             style={{ width: '100%' }}
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+              setTimeout(() => input?.select?.(), 20);
+            }}
             onChange={(val) => updateRow(record.key, 'qty', val)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'qty', e)}
             min={0}
@@ -690,8 +831,14 @@ export const NormalPurchaseForm: React.FC = () => {
       render: (text: number, record: any, rowIdx: number) => (
         <InputNumber
           ref={getCellRef(rowIdx, 'rate')}
+          tabIndex={-1}
           value={text}
           style={{ width: '100%' }}
+          onFocus={(e) => {
+            const input = e.target as HTMLInputElement;
+            input?.select?.();
+            setTimeout(() => input?.select?.(), 20);
+          }}
           onChange={(val) => updateRow(record.key, 'rate', val)}
           onKeyDown={(e) => handleCellKeyDown(rowIdx, 'rate', e)}
           min={0}
@@ -714,6 +861,11 @@ export const NormalPurchaseForm: React.FC = () => {
             ref={getCellRef(rowIdx, 'secQty')}
             value={text}
             style={{ width: '100%' }}
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+              setTimeout(() => input?.select?.(), 20);
+            }}
             onChange={(val) => updateRow(record.key, 'secQty', val)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secQty', e)}
             controls={false}
@@ -731,6 +883,12 @@ export const NormalPurchaseForm: React.FC = () => {
             ref={getCellRef(rowIdx, 'secRate')}
             value={text}
             style={{ width: '100%' }}
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+              setTimeout(() => input?.select?.(), 20);
+            }}
+            tabIndex={-1}
             onChange={(val) => updateRow(record.key, 'secRate', val)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secRate', e)}
             min={0}
@@ -753,6 +911,12 @@ export const NormalPurchaseForm: React.FC = () => {
           ref={getCellRef(rowIdx, 'addLess')}
           value={text}
           style={{ width: '100%' }}
+          onFocus={(e) => {
+            const input = e.target as HTMLInputElement;
+            input?.select?.();
+            setTimeout(() => input?.select?.(), 20);
+          }}
+          tabIndex={-1}
           controls={false}
           keyboard={false}
           onChange={(val) => updateRow(record.key, 'addLess', val)}
@@ -859,10 +1023,16 @@ export const NormalPurchaseForm: React.FC = () => {
               <Form.Item label="Vendor / Supplier" name="account" rules={[{ required: true }]}>
                 <Select
                   ref={vendorSelectRef}
+                  className="purchase-vendor-select"
                   showSearch
                   placeholder="Select Vendor"
                   prefix={<UserOutlined />}
                   optionFilterProp="children"
+                  onSelect={() => {
+                    setTimeout(() => {
+                      focusBarcodeInput();
+                    }, 40);
+                  }}
                   onKeyDown={handleVendorKeyDown}
                 >
                   {vendors.map(v => (
@@ -919,6 +1089,11 @@ export const NormalPurchaseForm: React.FC = () => {
           <BarcodeFastScanBar
             items={items}
             onScanItem={handleBarcodeScanned}
+            onEmptyEnter={() => {
+              const emptyIdx = purchaseLines.findIndex(l => !l.itemId);
+              const targetRow = emptyIdx >= 0 ? emptyIdx : Math.max(0, purchaseLines.length - 1);
+              focusCell(targetRow, 'itemId');
+            }}
           />
 
           <Table
@@ -959,6 +1134,17 @@ export const NormalPurchaseForm: React.FC = () => {
                   <InputNumber
                     className="purchase-cash-paid"
                     style={{ width: '100%' }}
+                    onFocus={(e) => {
+                      const input = e.target as HTMLInputElement;
+                      input?.select?.();
+                      setTimeout(() => input?.select?.(), 20);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSave();
+                      }
+                    }}
                     size="large"
                     min={0}
                     controls={false}
@@ -973,6 +1159,11 @@ export const NormalPurchaseForm: React.FC = () => {
                   <InputNumber
                     className="purchase-cash-back"
                     style={{ width: '100%' }}
+                    onFocus={(e) => {
+                      const input = e.target as HTMLInputElement;
+                      input?.select?.();
+                      setTimeout(() => input?.select?.(), 20);
+                    }}
                     size="large"
                     min={0}
                     controls={false}

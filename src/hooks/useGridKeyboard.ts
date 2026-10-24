@@ -162,7 +162,7 @@ export function useGridKeyboard<TColKey extends string = string>({
     closeOpenSelectDropdowns();
 
     // 1. If cash receipt input exists (POS flow), focus it first
-    const cashReceiptInput = document.querySelector<HTMLInputElement>('.pos-cash-receipt input');
+    const cashReceiptInput = document.querySelector<HTMLInputElement>('.pos-cash-receipt input, .purchase-cash-paid input');
     if (cashReceiptInput) {
       cashReceiptInput.focus();
       cashReceiptInput.select?.();
