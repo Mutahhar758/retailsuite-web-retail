@@ -54,6 +54,100 @@ interface SaleTab {
   saleLines: any[];
 }
 
+
+interface ItemSelectCellProps {
+  rowIdx: number;
+  record: any;
+  value: string;
+  items: Array<{ id: string | number; title: string }>;
+  getCellRef: (rowIdx: number, colKey: string) => React.RefObject<any>;
+  handleCellKeyDown: (rowIdx: number, colKey: string, e: React.KeyboardEvent) => void;
+  updateLine: (key: number, field: string, val: any) => void;
+  focusCell: (rowIdx: number, colKey: string) => void;
+}
+
+const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
+  rowIdx,
+  record,
+  value,
+  items,
+  getCellRef,
+  handleCellKeyDown,
+  updateLine,
+  focusCell
+}) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Select
+      ref={getCellRef(rowIdx, 'itemId')}
+      className={`grid-select-itemId grid-select-row-${rowIdx}`}
+      showSearch
+      open={open}
+      onOpenChange={setOpen}
+      style={{ width: '100%' }}
+      placeholder="Select Item"
+      optionFilterProp="children"
+      value={value}
+      onSelect={(val) => {
+        setOpen(false);
+        updateLine(record.key, 'itemId', val);
+        focusCell(rowIdx, 'qty');
+      }}
+      onChange={(val) => {
+        updateLine(record.key, 'itemId', val);
+        setOpen(false);
+      }}
+      onBlur={() => {
+        setOpen(false);
+      }}
+      filterOption={(input, option) =>
+        (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+      }
+      options={items.map(i => ({ value: i.id, label: `${i.title} (${i.id})` }))}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          // If dropdown is open and user pressed enter, let Select's native handler choose the item via onSelect
+          if (open) {
+            return;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(false);
+
+          if (record.itemId) {
+            // Item already selected -> go to qty
+            focusCell(rowIdx, 'qty');
+          } else {
+            // No item selected -> go to cash tendered
+            const cashReceiptInput = document.querySelector('.pos-cash-receipt input') as HTMLInputElement;
+            if (cashReceiptInput) {
+              cashReceiptInput.focus();
+              cashReceiptInput.select();
+            }
+          }
+          return;
+        }
+
+        if (e.key === 'Tab') {
+          setOpen(false);
+          if (!record.itemId) {
+            e.preventDefault();
+            const cashReceiptInput = document.querySelector('.pos-cash-receipt input') as HTMLInputElement;
+            if (cashReceiptInput) {
+              cashReceiptInput.focus();
+              cashReceiptInput.select();
+            }
+          }
+          return;
+        }
+
+        handleCellKeyDown(rowIdx, 'itemId', e);
+      }}
+    />
+  );
+};
+
 export const NormalSaleForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
@@ -1130,38 +1224,15 @@ export const NormalSaleForm: React.FC = () => {
       dataIndex: 'itemId',
       key: 'itemId',
       render: (text: string, record: any, rowIdx: number) => (
-        <Select
-          ref={getCellRef(rowIdx, 'itemId')}
-          className={`grid-select-itemId grid-select-row-${rowIdx}`}
-          showSearch
-          style={{ width: '100%' }}
-          placeholder="Select Item"
-          optionFilterProp="children"
+        <ItemSelectCell
+          rowIdx={rowIdx}
+          record={record}
           value={text}
-          onSelect={(val) => {
-            updateLine(record.key, 'itemId', val);
-            focusCell(rowIdx, 'qty');
-          }}
-          onChange={(val) => updateLine(record.key, 'itemId', val)}
-          onBlur={() => {
-            closeOpenSelectDropdowns();
-          }}
-          filterOption={(input, option) =>
-            (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-          }
-          options={items.map(i => ({ value: i.id, label: `${i.title} (${i.id})` }))}
-          onKeyDown={(e) => {
-            handleCellKeyDown(rowIdx, 'itemId', e);
-            if (e.key === 'Tab' && !record.itemId) {
-              e.preventDefault();
-              closeOpenSelectDropdowns();
-              const cashReceiptInput = document.querySelector('.pos-cash-receipt input') as HTMLInputElement;
-              if (cashReceiptInput) {
-                cashReceiptInput.focus();
-                cashReceiptInput.select();
-              }
-            }
-          }}
+          items={items}
+          getCellRef={getCellRef}
+          handleCellKeyDown={handleCellKeyDown}
+          updateLine={updateLine}
+          focusCell={focusCell}
         />
       )
     },
@@ -1770,9 +1841,13 @@ export const NormalSaleForm: React.FC = () => {
                 onChange={handleCustomerChange}
                 onSelect={(val) => {
                   handleCustomerChange(val);
+                  closeOpenSelectDropdowns();
                   setTimeout(() => {
                     focusBarcodeInput();
                   }, 40);
+                }}
+                onBlur={() => {
+                  closeOpenSelectDropdowns();
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {

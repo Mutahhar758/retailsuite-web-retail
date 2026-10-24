@@ -108,13 +108,9 @@ function buildArrowColumns(
  * Closes any open Ant Design Select dropdown cleanly using native Escape dispatch.
  */
 export function closeOpenSelectDropdowns(): void {
-  document.querySelectorAll<HTMLElement>('.ant-select-open').forEach(el => {
-    const input = el.querySelector<HTMLInputElement>('input');
-    if (input) {
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true }));
-      input.blur();
-    }
-  });
+  try {
+    document.documentElement.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  } catch {}
 }
 
 /**
@@ -227,11 +223,6 @@ export function useGridKeyboard<TColKey extends string = string>({
         return;
       }
 
-      // If moving to a non-select input (like qty or rate), dismiss any open select dropdowns
-      if (colKey !== 'itemId' && colKey !== 'customerId' && colKey !== 'account') {
-        closeOpenSelectDropdowns();
-      }
-
       // 2. Ref-based focus
       const ref = refsMap.current.get(`${rowIdx}:${colKey}`);
       if (ref?.current) {
@@ -277,9 +268,8 @@ export function useGridKeyboard<TColKey extends string = string>({
       }
     };
 
+    doFocus();
     requestAnimationFrame(doFocus);
-    setTimeout(doFocus, 35);
-    setTimeout(doFocus, 80);
   }, []);
 
   // When pendingFocusRef is set (after addRow), fire the focus
@@ -308,25 +298,7 @@ export function useGridKeyboard<TColKey extends string = string>({
           return;
         }
 
-        // Special handling for Select columns (like itemId):
-        if (colKey === 'itemId' || colKey === 'customerId' || colKey === 'account') {
-          const inputElem = e.target as HTMLInputElement;
-          const hasSearchText = !!(inputElem?.value && inputElem.value.trim().length > 0);
-
-          // If user typed a search term and dropdown is open, let Select handle Enter natively to choose option
-          if (hasSearchText && isDropdownOpen(e)) {
-            return;
-          }
-
-          // If row is empty and user has NOT typed anything, Enter goes to cash receipt / save button!
-          if (rowIdx === rowCount - 1 && isRowValidRef.current && !isRowValidRef.current(rowIdx) && !hasSearchText) {
-            e.preventDefault();
-            e.stopPropagation();
-            closeOpenSelectDropdowns();
-            goToSave();
-            return;
-          }
-        }
+        
 
         e.preventDefault();
         e.stopPropagation();
