@@ -49,7 +49,8 @@ export const CustomerList: React.FC = () => {
     customer.account.toLowerCase().includes(searchText.toLowerCase()) ||
     (customer.phone1 && customer.phone1.toLowerCase().includes(searchText.toLowerCase())) ||
     (customer.email && customer.email.toLowerCase().includes(searchText.toLowerCase())) ||
-    (customer.cnic && customer.cnic.toLowerCase().includes(searchText.toLowerCase()))
+    (customer.cnic && customer.cnic.toLowerCase().includes(searchText.toLowerCase())) ||
+    (customer.parentCustomerTitle && customer.parentCustomerTitle.toLowerCase().includes(searchText.toLowerCase()))
   );
 
   const columns = [
@@ -116,6 +117,19 @@ export const CustomerList: React.FC = () => {
       key: 'address',
       ellipsis: true,
       render: (text?: string) => text ? <Text style={{ fontSize: '13px' }}>{text}</Text> : <Text type="secondary" style={{ fontSize: '13px', fontStyle: 'italic' }}>-</Text>,
+    },
+    {
+      title: 'Account Type',
+      key: 'accountType',
+      width: '160px',
+      render: (_: any, record: CustomerResponse) => record.parentCustomerAccountId ? (
+        <Tooltip title={`Main Account: ${record.parentCustomerTitle || record.parentCustomerAccountId}`}>
+          <Tag color="cyan">Sub-Account</Tag>
+          <div style={{ fontSize: '11px', color: '#64748b' }}>{record.parentCustomerTitle || record.parentCustomerAccountId}</div>
+        </Tooltip>
+      ) : (
+        <Tag color="default">Main Account</Tag>
+      ),
     },
     {
       title: 'Category',

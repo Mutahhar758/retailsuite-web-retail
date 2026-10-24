@@ -48,6 +48,8 @@ interface CustomerOption {
   title: string;
   phone?: string;
   address?: string;
+  parentCustomerAccountId?: string;
+  parentCustomerTitle?: string;
 }
 
 export const WandaCustomerBill: React.FC = () => {
@@ -635,9 +637,9 @@ export const WandaCustomerBill: React.FC = () => {
                 }}
                 style={{ width: '100%' }}
               >
-                {customers.map(c => (
+                {customers.map((c: any) => (
                   <Select.Option key={c.account} value={c.account}>
-                    {c.title} ({c.account})
+                    {c.parentCustomerTitle ? `${c.title} (Sub of: ${c.parentCustomerTitle})` : `${c.title} (${c.account})`}
                   </Select.Option>
                 ))}
               </Select>
@@ -836,6 +838,25 @@ export const WandaCustomerBill: React.FC = () => {
         {mode === 'single' && billData && billData.summary && (
           <div style={{ marginTop: 'auto', paddingTop: 16 }}>
             <Divider style={{ margin: '12px 0' }} />
+            {billData.linkedMainAccountId && (
+              <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 12, marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', marginBottom: 2 }}>
+                  Linked Main Account
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1e3a8a' }}>
+                  {billData.linkedMainAccountTitle || billData.linkedMainAccountId}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginTop: 6, paddingTop: 6, borderTop: '1px dashed #bfdbfe' }}>
+                  <span style={{ color: '#475569' }}>Main Account Balance:</span>
+                  <span style={{ fontWeight: 700, color: (billData.linkedMainAccountBalance || 0) > 0 ? '#dc2626' : '#16a34a' }}>
+                    Rs. {(billData.linkedMainAccountBalance || 0).toLocaleString()}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>
+                  Financial ledger is maintained on the Main Account.
+                </div>
+              </div>
+            )}
             <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: 12, marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
                 <span style={{ color: '#92400e' }}>Total Bags Delivered:</span>

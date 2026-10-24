@@ -13,6 +13,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { saleSupplyService, type SaleSupplyLine, type SaleSupplyCustomerLineUpdateRequest } from '../../services/saleSupplyService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
+import { customerService } from '../../services/customerService';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { round } from '../../utils/numberUtils';
 import { rangePresets } from '../../utils/datePresets';
@@ -50,7 +51,14 @@ export const WandaSupplyRegister: React.FC = () => {
   // Load lookups
   useEffect(() => {
     const loadLookups = async () => {
-      chartOfAccountService.getCustomerAccounts().then(setCustomers).catch(console.error);
+      customerService.getCustomers().then(custs => {
+        setCustomers(custs.map(c => ({
+          account: c.account,
+          title: c.parentCustomerTitle ? `${c.title} (Sub of: ${c.parentCustomerTitle})` : c.title,
+        } as any)));
+      }).catch(() => {
+        chartOfAccountService.getCustomerAccounts().then(setCustomers).catch(console.error);
+      });
       inventoryService.getItemsLookup().then(setItems).catch(console.error);
     };
     loadLookups();
@@ -391,6 +399,19 @@ export const WandaSupplyRegister: React.FC = () => {
         <Text strong style={{ fontSize: '14px', color: '#1e293b' }}>
           {dayjs(text).format('DD-MMM-YYYY')}
         </Text>
+      ),
+    },
+    {
+      title: 'Dispatched To',
+      key: 'customerTitle',
+      width: 170,
+      render: (_: any, record: EditableWandaLine) => (
+        <Space size={4}>
+          <Text strong style={{ fontSize: '13px' }}>{record.customerTitle || record.customerId}</Text>
+          {record.customerId !== selectedCustomerId && (
+            <Tag color="cyan" style={{ fontSize: '11px', margin: 0 }}>Sub</Tag>
+          )}
+        </Space>
       ),
     },
     {

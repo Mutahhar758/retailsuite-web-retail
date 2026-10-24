@@ -16,7 +16,6 @@ export interface CustomerSupplyItemDto {
   carriage?: number;
 }
 
-
 export interface CustomerResponse {
   account: string;
   title: string;
@@ -36,6 +35,9 @@ export interface CustomerResponse {
   mediaUrl?: string;
   customerCategoryId?: string;
   customerCategoryTitle?: string;
+  parentCustomerAccountId?: string;
+  parentCustomerTitle?: string;
+  isSubAccount?: boolean;
   createdBy?: string;
   createdOn?: string;
   lastModifiedBy?: string;
@@ -59,6 +61,7 @@ export interface CustomerCreateRequest {
   active: boolean;
   mediaId?: string;
   customerCategoryId?: string;
+  parentCustomerAccountId?: string | null;
   supplyItems?: CustomerSupplyItemDto[];
 }
 
@@ -78,6 +81,7 @@ export interface CustomerUpdateRequest {
   active: boolean;
   mediaId?: string;
   customerCategoryId?: string;
+  parentCustomerAccountId?: string | null;
   supplyItems?: CustomerSupplyItemDto[];
 }
 
@@ -150,4 +154,3 @@ export interface BulkOperationResult {
     errorMessage: string;
   }>;
 }
-

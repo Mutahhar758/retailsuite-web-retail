@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Card, Button, Space, Typography, Form, Input, Row, Col, Checkbox, 
   message, Divider, Avatar, Upload, Table, InputNumber, Select
@@ -51,6 +51,8 @@ export const CustomerForm: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [categories, setCategories] = useState<CustomerCategoryLookupResponse[]>([]);
   const [supplyLines, setSupplyLines] = useState<SupplyLineRow[]>([]);
+  const [isSubAccount, setIsSubAccount] = useState<boolean>(false);
+  const [allCustomers, setAllCustomers] = useState<any[]>([]);
 
   useEffect(() => {
     inventoryService.getItemsLookup()
@@ -60,6 +62,10 @@ export const CustomerForm: React.FC = () => {
     customerCategoryService.getLookup()
       .then(setCategories)
       .catch(err => console.error('Failed to load customer categories lookup:', err));
+
+    customerService.getCustomers()
+      .then(setAllCustomers)
+      .catch(console.error);
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -195,6 +201,7 @@ export const CustomerForm: React.FC = () => {
           active: values.active !== undefined ? values.active : true,
           mediaId: values.mediaId || null,
           customerCategoryId: values.customerCategoryId || null,
+          parentCustomerAccountId: isSubAccount ? (values.parentCustomerAccountId || null) : null,
           supplyItems: validSupplyItems
         };
 
@@ -217,6 +224,7 @@ export const CustomerForm: React.FC = () => {
           active: values.active !== undefined ? values.active : true,
           mediaId: values.mediaId || null,
           customerCategoryId: values.customerCategoryId || null,
+          parentCustomerAccountId: isSubAccount ? (values.parentCustomerAccountId || null) : null,
           supplyItems: validSupplyItems
         };
 
@@ -236,6 +244,15 @@ export const CustomerForm: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const mainCustomerOptions = useMemo(() => {
+    return allCustomers
+      .filter(c => c.account !== account && !c.parentCustomerAccountId)
+      .map(c => ({
+        value: c.account,
+        label: `${c.title} (${c.account})`
+      }));
+  }, [allCustomers, account]);
 
   const handleCustomUpload = async (options: any) => {
     const { file, onSuccess, onError } = options;
@@ -556,6 +573,34 @@ export const CustomerForm: React.FC = () => {
                   <Input placeholder="e.g. 42101-1234567-1" />
                 </Form.Item>
               </Col>
+            </Row>
+
+            <Row gutter={16} align="middle" style={{ backgroundColor: '#f8fafc', padding: '12px 8px', borderRadius: 8, marginBottom: 16, border: '1px solid #e2e8f0' }}>
+              <Col xs={24} sm={8}>
+                <Form.Item name="isSubAccount" valuePropName="checked" style={{ margin: 0 }}>
+                  <Checkbox onChange={(e) => setIsSubAccount(e.target.checked)}>
+                    <Text strong style={{ color: '#1e40af' }}>Is Sub-Account of another Customer</Text>
+                  </Checkbox>
+                </Form.Item>
+              </Col>
+              {isSubAccount && (
+                <Col xs={24} sm={16}>
+                  <Form.Item
+                    name="parentCustomerAccountId"
+                    label="Main Customer Account (Holds Liability & Ledger)"
+                    rules={[{ required: true, message: 'Please select the main customer account' }]}
+                    style={{ margin: 0 }}
+                  >
+                    <Select
+                      showSearch
+                      allowClear
+                      placeholder="Select Main Account"
+                      optionFilterProp="label"
+                      options={mainCustomerOptions}
+                    />
+                  </Form.Item>
+                </Col>
+              )}
             </Row>
 
             <Row gutter={16}>

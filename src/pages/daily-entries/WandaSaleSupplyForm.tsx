@@ -154,7 +154,17 @@ export const WandaSaleSupplyForm: React.FC = () => {
   }, [form]);
 
   useEffect(() => {
-    chartOfAccountService.getCustomerAccounts().then(setCustomers);
+    customerService.getCustomers().then(custs => {
+      setCustomers(custs.map(c => ({
+        account: c.account,
+        title: c.title,
+        customerCategoryId: c.customerCategoryId,
+        parentCustomerAccountId: c.parentCustomerAccountId,
+        parentCustomerTitle: c.parentCustomerTitle
+      } as any)));
+    }).catch(() => {
+      chartOfAccountService.getCustomerAccounts().then(setCustomers);
+    });
     narrationService.getActiveNarrationsLookup().then(setNarrations);
     inventoryService.getItemsLookup().then(setItems);
     inventoryService.getCustomerCategoryPrices().then(setCategoryPrices).catch(() => []);

@@ -153,6 +153,8 @@ export interface WandaCustomerBillLine {
   warrantyMonths?: number;
   conditionNote?: string;
   transactionType: string;
+  subAccountId?: string;
+  subAccountTitle?: string;
 }
 
 export interface WandaCustomerBillResponse {
@@ -166,6 +168,10 @@ export interface WandaCustomerBillResponse {
     enableCarriage?: boolean;
   };
   lines: WandaCustomerBillLine[];
+  linkedMainAccountId?: string;
+  linkedMainAccountTitle?: string;
+  linkedMainAccountBalance?: number;
+  isSubAccount?: boolean;
   summary: {
     previousBalance: number;
     payment: number;
