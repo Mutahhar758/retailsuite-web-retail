@@ -76,9 +76,9 @@ export const purchaseService = {
     return response.data.body as PurchaseLine[];
   },
 
-  async create(data: PurchaseCreateRequest) {
+  async create(data: PurchaseCreateRequest): Promise<string> {
     const response = await api.post('/api/purchases', data);
-    return response.data;
+    return (response.data?.body ?? response.data) as string;
   },
 
   async update(voucherNo: string, data: PurchaseCreateRequest) {
