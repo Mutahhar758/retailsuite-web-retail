@@ -105,20 +105,32 @@ function buildArrowColumns(
 }
 
 /**
+ * Closes any open Ant Design Select dropdown cleanly using native Escape dispatch.
+ */
+export function closeOpenSelectDropdowns(): void {
+  document.querySelectorAll<HTMLElement>('.ant-select-open').forEach(el => {
+    const input = el.querySelector<HTMLInputElement>('input');
+    if (input) {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true }));
+      input.blur();
+    }
+  });
+}
+
+/**
  * Returns true when the keyboard event originated from inside an open
  * Ant Design Select or DatePicker popup.
  */
 function isDropdownOpen(e: React.KeyboardEvent): boolean {
   const target = e.target as HTMLElement;
-  const selectWrapper = target.closest('.ant-select');
+  const selectWrapper = target?.closest?.('.ant-select');
   if (selectWrapper?.classList.contains('ant-select-open')) return true;
 
-  const pickerWrapper = target.closest('.ant-picker');
+  const pickerWrapper = target?.closest?.('.ant-picker');
   if (pickerWrapper?.classList.contains('ant-picker-focused')) {
-    if (document.querySelector('.ant-picker-dropdown:not(.ant-picker-dropdown-hidden)')) {
-      return true;
-    }
+    return true;
   }
+
   return false;
 }
 
@@ -140,8 +152,28 @@ export function useGridKeyboard<TColKey extends string = string>({
   const enterColsRef = useRef<string[]>([]);
   const arrowColsRef = useRef<string[]>([]);
 
+  const isRowValidRef = useRef(isRowValid);
+  isRowValidRef.current = isRowValid;
+
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+
+  const onAddRowRef = useRef(onAddRow);
+  onAddRowRef.current = onAddRow;
+
   const goToSave = useCallback(() => {
-    // 1. Look for explicit button marked with data-action="save" or form-save-btn
+    // 0. Close any open select dropdowns cleanly
+    closeOpenSelectDropdowns();
+
+    // 1. If cash receipt input exists (POS flow), focus it first
+    const cashReceiptInput = document.querySelector<HTMLInputElement>('.pos-cash-receipt input');
+    if (cashReceiptInput) {
+      cashReceiptInput.focus();
+      cashReceiptInput.select?.();
+      return;
+    }
+
+    // 2. Look for explicit button marked with data-action="save" or form-save-btn
     const saveBtn = document.querySelector<HTMLElement>('button[data-action="save"], .form-save-btn') ||
       Array.from(document.querySelectorAll<HTMLElement>('button')).find(b => {
         const t = b.textContent?.trim().toLowerCase() || '';
@@ -150,10 +182,10 @@ export function useGridKeyboard<TColKey extends string = string>({
 
     if (saveBtn) {
       saveBtn.focus();
-    } else if (onSave) {
-      onSave();
+    } else if (onSaveRef.current) {
+      onSaveRef.current();
     }
-  }, [onSave]);
+  }, []);
 
   // Recompute column lists when props change
   useEffect(() => {
@@ -184,16 +216,70 @@ export function useGridKeyboard<TColKey extends string = string>({
   }, []);
 
   const focusCell = useCallback((rowIdx: number, colKey: string) => {
-    requestAnimationFrame(() => {
+    const doFocus = () => {
+      // 1. Direct DOM check for Select search input (e.g. itemId, customerId, account)
+      const selectSearchInput = document.querySelector<HTMLInputElement>(
+        `.grid-select-row-${rowIdx} .ant-select-selection-search-input, .grid-select-row-${rowIdx} input`
+      );
+      if (selectSearchInput && (colKey === 'itemId' || colKey === 'customerId' || colKey === 'account')) {
+        selectSearchInput.focus();
+        selectSearchInput.select?.();
+        return;
+      }
+
+      // If moving to a non-select input (like qty or rate), dismiss any open select dropdowns
+      if (colKey !== 'itemId' && colKey !== 'customerId' && colKey !== 'account') {
+        closeOpenSelectDropdowns();
+      }
+
+      // 2. Ref-based focus
       const ref = refsMap.current.get(`${rowIdx}:${colKey}`);
       if (ref?.current) {
         if (typeof ref.current.focus === 'function') {
-          ref.current.focus();
+          try {
+            ref.current.focus({ cursor: 'all' });
+          } catch {
+            ref.current.focus();
+          }
         } else if (ref.current.input && typeof ref.current.input.focus === 'function') {
           ref.current.input.focus();
         }
+
+        // Auto-select text for fast replacement (so user doesn't need to backspace first)
+        if (typeof ref.current.select === 'function') {
+          ref.current.select();
+        } else if (ref.current.input && typeof ref.current.input.select === 'function') {
+          ref.current.input.select();
+        }
       }
-    });
+
+      // 3. Fallback table row search for input
+      const tableRows = document.querySelectorAll('.ant-table-tbody tr.ant-table-row, .ant-table-tbody tr');
+      if (tableRows[rowIdx]) {
+        if (colKey === 'itemId' || colKey === 'customerId' || colKey === 'account') {
+          const rowSearchInput = tableRows[rowIdx].querySelector<HTMLInputElement>(
+            '.ant-select-selection-search-input, input'
+          );
+          if (rowSearchInput && document.activeElement !== rowSearchInput) {
+            rowSearchInput.focus();
+            rowSearchInput.select?.();
+            return;
+          }
+        }
+
+        const colInput = tableRows[rowIdx].querySelector<HTMLInputElement>(
+          `.col-${colKey} input, [data-col="${colKey}"] input`
+        );
+        if (colInput && document.activeElement !== colInput) {
+          colInput.focus();
+          colInput.select?.();
+        }
+      }
+    };
+
+    requestAnimationFrame(doFocus);
+    setTimeout(doFocus, 35);
+    setTimeout(doFocus, 80);
   }, []);
 
   // When pendingFocusRef is set (after addRow), fire the focus
@@ -214,9 +300,6 @@ export function useGridKeyboard<TColKey extends string = string>({
 
       // Enter: smart forward navigation
       if (key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-
         const cols = enterColsRef.current;
         const colIdx = cols.indexOf(colKey);
 
@@ -225,9 +308,33 @@ export function useGridKeyboard<TColKey extends string = string>({
           return;
         }
 
+        // Special handling for Select columns (like itemId):
+        if (colKey === 'itemId' || colKey === 'customerId' || colKey === 'account') {
+          const inputElem = e.target as HTMLInputElement;
+          const hasSearchText = !!(inputElem?.value && inputElem.value.trim().length > 0);
+
+          // If user typed a search term and dropdown is open, let Select handle Enter natively to choose option
+          if (hasSearchText && isDropdownOpen(e)) {
+            return;
+          }
+
+          // If row is empty and user has NOT typed anything, Enter goes to cash receipt / save button!
+          if (rowIdx === rowCount - 1 && isRowValidRef.current && !isRowValidRef.current(rowIdx) && !hasSearchText) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeOpenSelectDropdowns();
+            goToSave();
+            return;
+          }
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+
         // If the user is on the last row and that row has no account or item selected:
-        // do not add new row or advance through empty row, go straight to the save button!
-        if (rowIdx === rowCount - 1 && isRowValid && !isRowValid(rowIdx)) {
+        // do not add new row or advance through empty row, go straight to the save button / cash receipt!
+        if (rowIdx === rowCount - 1 && isRowValidRef.current && !isRowValidRef.current(rowIdx)) {
+          closeOpenSelectDropdowns();
           goToSave();
           return;
         }
@@ -245,14 +352,14 @@ export function useGridKeyboard<TColKey extends string = string>({
             focusCell(nextRow, targetCol);
           } else {
             // On the last row:
-            if (isRowValid && !isRowValid(rowIdx)) {
+            if (isRowValidRef.current && !isRowValidRef.current(rowIdx)) {
               // Last row has no item or account selected: do not add row, go to save button!
               goToSave();
             } else {
               if (pendingFocusRef) {
                 pendingFocusRef.current = { rowIdx: nextRow, colKey: targetCol };
               }
-              onAddRow();
+              onAddRowRef.current();
             }
           }
         }
@@ -289,7 +396,7 @@ export function useGridKeyboard<TColKey extends string = string>({
         return;
       }
     },
-    [rowCount, focusCell, onAddRow, pendingFocusRef, firstColKey],
+    [rowCount, focusCell, pendingFocusRef, firstColKey, goToSave],
   );
 
   return {

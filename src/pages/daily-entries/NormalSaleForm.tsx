@@ -32,7 +32,7 @@ import { round } from '../../utils/numberUtils';
 import { getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
 import { BarcodeFastScanBar } from '../../components/common/BarcodeFastScanBar';
 import { CustomerPriceHistoryModal } from '../../components/sale/CustomerPriceHistoryModal';
-import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+import { useGridKeyboard, closeOpenSelectDropdowns } from '../../hooks/useGridKeyboard';
 import { SaleReceiptModal } from '../../components/SaleReceiptModal';
 import {
   printSaleReceiptDirect,
@@ -403,12 +403,11 @@ export const NormalSaleForm: React.FC = () => {
   };
 
   const focusCustomerSelect = () => {
-    if (customerSelectRef.current) {
-      customerSelectRef.current.focus();
-    }
-    setTimeout(() => {
+    const doFocus = () => {
       if (customerSelectRef.current) {
-        customerSelectRef.current.focus();
+        try {
+          customerSelectRef.current.focus();
+        } catch {}
       }
       const customerInput = document.querySelector<HTMLInputElement>(
         '.pos-customer-select .ant-select-selection-search-input, .pos-customer-select input, [name="account"] input'
@@ -417,8 +416,40 @@ export const NormalSaleForm: React.FC = () => {
         customerInput.focus();
         customerInput.select?.();
       }
-    }, 30);
+    };
+
+    doFocus();
+    requestAnimationFrame(doFocus);
+    setTimeout(doFocus, 50);
+    setTimeout(doFocus, 150);
+    setTimeout(doFocus, 300);
   };
+
+  const focusBarcodeInput = () => {
+    const doFocus = () => {
+      const barcodeInput = document.querySelector<HTMLInputElement>(
+        '.barcode-fast-scan-bar input, input[placeholder*="barcode" i], input[placeholder*="scan" i]'
+      );
+      if (barcodeInput) {
+        barcodeInput.focus();
+        barcodeInput.select?.();
+        return true;
+      }
+      return false;
+    };
+
+    if (!doFocus()) {
+      setTimeout(() => {
+        if (!doFocus()) {
+          focusCell(0, 'itemId');
+        }
+      }, 50);
+    }
+  };
+
+  useEffect(() => {
+    focusCustomerSelect();
+  }, [activeTabId]);
 
   useEffect(() => {
     loadReferenceData();
@@ -543,6 +574,9 @@ export const NormalSaleForm: React.FC = () => {
         amount
       };
     }));
+    setTimeout(() => {
+      focusBarcodeInput();
+    }, 40);
   };
 
   const fetchDetail = async () => {
@@ -677,7 +711,7 @@ export const NormalSaleForm: React.FC = () => {
   const enterCols = [
     'itemId',
     'qty',
-    ...(hasSecondaryQty ? ['secQty', 'secRate'] : [])
+    ...(hasSecondaryQty ? ['secQty'] : [])
   ];
 
   const arrowCols = [
@@ -1098,12 +1132,20 @@ export const NormalSaleForm: React.FC = () => {
       render: (text: string, record: any, rowIdx: number) => (
         <Select
           ref={getCellRef(rowIdx, 'itemId')}
+          className={`grid-select-itemId grid-select-row-${rowIdx}`}
           showSearch
           style={{ width: '100%' }}
           placeholder="Select Item"
           optionFilterProp="children"
           value={text}
+          onSelect={(val) => {
+            updateLine(record.key, 'itemId', val);
+            focusCell(rowIdx, 'qty');
+          }}
           onChange={(val) => updateLine(record.key, 'itemId', val)}
+          onBlur={() => {
+            closeOpenSelectDropdowns();
+          }}
           filterOption={(input, option) =>
             (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
           }
@@ -1112,6 +1154,7 @@ export const NormalSaleForm: React.FC = () => {
             handleCellKeyDown(rowIdx, 'itemId', e);
             if (e.key === 'Tab' && !record.itemId) {
               e.preventDefault();
+              closeOpenSelectDropdowns();
               const cashReceiptInput = document.querySelector('.pos-cash-receipt input') as HTMLInputElement;
               if (cashReceiptInput) {
                 cashReceiptInput.focus();
@@ -1119,11 +1162,7 @@ export const NormalSaleForm: React.FC = () => {
               }
             }
           }}
-        >
-          {items.map(i => (
-            <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
-          ))}
-        </Select>
+        />
       )
     },
     ...(hasMobileShopFeature ? [
@@ -1250,6 +1289,11 @@ export const NormalSaleForm: React.FC = () => {
             controls={false}
             keyboard={false}
             precision={resolved.factor > 1 ? 0 : 2}
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+              setTimeout(() => input?.select?.(), 20);
+            }}
             onChange={(v) => updateLine(record.key, 'qty', v)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'qty', e)}
             addonAfter={
@@ -1294,6 +1338,11 @@ export const NormalSaleForm: React.FC = () => {
             step={0.01}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             parser={value => value?.replace(/[^0-9.]/g, '') as any}
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+              setTimeout(() => input?.select?.(), 20);
+            }}
             onChange={(v) => updateLine(record.key, 'rate', v)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'rate', e)}
             tabIndex={-1}
@@ -1321,14 +1370,21 @@ export const NormalSaleForm: React.FC = () => {
         dataIndex: 'secQty',
         key: 'secQty',
         width: 90,
-        render: (val: number, record: any) => (
+        render: (val: number, record: any, rowIdx: number) => (
           <InputNumber
+            ref={getCellRef(rowIdx, 'secQty')}
             style={{ width: '100%' }}
             value={val}
             min={0}
             controls={false}
             keyboard={false}
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+              setTimeout(() => input?.select?.(), 20);
+            }}
             onChange={(v) => updateLine(record.key, 'secQty', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secQty', e)}
           />
         )
       },
@@ -1337,8 +1393,9 @@ export const NormalSaleForm: React.FC = () => {
         dataIndex: 'secRate',
         key: 'secRate',
         width: 100,
-        render: (val: number, record: any) => (
+        render: (val: number, record: any, rowIdx: number) => (
           <InputNumber
+            ref={getCellRef(rowIdx, 'secRate')}
             style={{ width: '100%' }}
             value={val}
             min={0}
@@ -1348,7 +1405,13 @@ export const NormalSaleForm: React.FC = () => {
             step={0.01}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             parser={value => value?.replace(/[^0-9.]/g, '') as any}
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+              setTimeout(() => input?.select?.(), 20);
+            }}
             onChange={(v) => updateLine(record.key, 'secRate', v)}
+            onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secRate', e)}
             tabIndex={-1}
           />
         )
@@ -1367,6 +1430,11 @@ export const NormalSaleForm: React.FC = () => {
           min={0}
           controls={false}
           keyboard={false}
+          onFocus={(e) => {
+            const input = e.target as HTMLInputElement;
+            input?.select?.();
+            setTimeout(() => input?.select?.(), 20);
+          }}
           onChange={(v) => updateLine(record.key, 'discount', v)}
           onKeyDown={(e) => handleCellKeyDown(rowIdx, 'discount', e)}
           tabIndex={-1}
@@ -1388,6 +1456,11 @@ export const NormalSaleForm: React.FC = () => {
             step={1}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             parser={value => value?.replace(/[^0-9.]/g, '') as any}
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+              setTimeout(() => input?.select?.(), 20);
+            }}
             onChange={(v) => updateLine(record.key, 'carriage', v)}
             tabIndex={-1}
           />
@@ -1695,10 +1768,16 @@ export const NormalSaleForm: React.FC = () => {
                 className="pos-customer-select"
                 prefix={<UserOutlined />}
                 onChange={handleCustomerChange}
+                onSelect={(val) => {
+                  handleCustomerChange(val);
+                  setTimeout(() => {
+                    focusBarcodeInput();
+                  }, 40);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    narrationSelectRef.current?.focus();
+                    focusBarcodeInput();
                   }
                 }}
                 filterOption={(input, option) =>
@@ -1748,6 +1827,11 @@ export const NormalSaleForm: React.FC = () => {
         <BarcodeFastScanBar
           items={items}
           onScanItem={handleBarcodeScanned}
+          onEmptyEnter={() => {
+            const emptyIdx = saleLines.findIndex(l => !l.itemId);
+            const targetRow = emptyIdx >= 0 ? emptyIdx : Math.max(0, saleLines.length - 1);
+            focusCell(targetRow, 'itemId');
+          }}
         />
 
         <Table
@@ -1783,6 +1867,11 @@ export const NormalSaleForm: React.FC = () => {
                       precision={2}
                       formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                       parser={value => value?.replace(/\$\s?|(,*)/g, '') as any}
+                      onFocus={(e) => {
+                        const input = e.target as HTMLInputElement;
+                        input?.select?.();
+                        setTimeout(() => input?.select?.(), 20);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();

@@ -27,6 +27,7 @@ export interface BarcodeFastScanBarProps {
     customAmount?: number,
     isVariableWeight?: boolean
   ) => void;
+  onEmptyEnter?: () => void;
   placeholder?: string;
   autoFocus?: boolean;
   className?: string;
@@ -48,6 +49,7 @@ export interface LastScannedState {
 export const BarcodeFastScanBar: React.FC<BarcodeFastScanBarProps> = ({
   items,
   onScanItem,
+  onEmptyEnter,
   placeholder,
   autoFocus = true,
   className,
@@ -103,7 +105,12 @@ export const BarcodeFastScanBar: React.FC<BarcodeFastScanBarProps> = ({
   const handleScan = useCallback(
     (codeToProcess?: string) => {
       const raw = (codeToProcess !== undefined ? codeToProcess : inputValue).trim();
-      if (!raw) return;
+      if (!raw) {
+        if (onEmptyEnter) {
+          onEmptyEnter();
+        }
+        return;
+      }
 
       // Reset transient status
       setErrorNotice(null);
@@ -198,6 +205,15 @@ export const BarcodeFastScanBar: React.FC<BarcodeFastScanBarProps> = ({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onPressEnter={() => handleScan()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !inputValue.trim()) {
+                e.preventDefault();
+                onEmptyEnter?.();
+              } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                onEmptyEnter?.();
+              }
+            }}
             placeholder={
               placeholder || 'Scan barcode / item code and press Enter (or press F3 to focus)...'
             }
