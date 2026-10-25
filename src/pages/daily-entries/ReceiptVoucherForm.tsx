@@ -3,14 +3,14 @@ import KeyboardShortcutsBar from '../../components/common/KeyboardShortcutsBar';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
-  Table, Space, message, InputNumber, Popconfirm
+  Table, Space, message, InputNumber, Popconfirm, Alert
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
   FileTextOutlined, BankOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { receiptService, type ReceiptLineRequest } from '../../services/receiptService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
@@ -21,6 +21,8 @@ const { Title, Text } = Typography;
 export const ReceiptVoucherForm: React.FC = () => {
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const draftData = (location.state as any)?.draftData;
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [detailAccounts, setDetailAccounts] = useState<ChartOfAccountHeadDto[]>([]);
@@ -134,18 +136,22 @@ export const ReceiptVoucherForm: React.FC = () => {
       };
       loadVoucher();
     } else {
-      form.setFieldsValue({ date: dayjs() });
+      form.setFieldsValue({
+        date: dayjs(),
+        cashBankAccount: draftData?.cashBankAccountId || undefined,
+        narration: draftData?.remarks || undefined
+      });
       setVoucherLines([{
         key: Date.now(),
         seq: 1,
-        account: undefined,
-        amount: 0,
+        account: draftData?.customerId || draftData?.accountId || undefined,
+        amount: Number(draftData?.amount) || 0,
         checkNum: '',
         checkDate: null,
-        remarks: ''
+        remarks: draftData?.remarks || ''
       }]);
     }
-  }, [isEdit, voucherNo, form, navigate]);
+  }, [isEdit, voucherNo, form, navigate, draftData]);
 
   const handleAccountChange = async (accountId: string) => {
     if (!accountId) return;
@@ -356,6 +362,16 @@ export const ReceiptVoucherForm: React.FC = () => {
 
   return (
     <div tabIndex={-1} style={{ outline: 'none' }}>
+      {draftData && (
+        <Alert
+          message="AI Assistant Draft"
+          description={`Pre-filled receipt voucher details for ${draftData.customerName || draftData.accountName || 'account'} (Amount: ${draftData.amount || 0}). Please review and save.`}
+          type="info"
+          showIcon
+          closable
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <Card className="shadow-sm border-gray-100 rounded-xl">
         <div className="flex justify-between items-center mb-6">
           <Space align="center">

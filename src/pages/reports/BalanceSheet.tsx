@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Card, Typography, Form, DatePicker, Button,
   Space, message, Spin, Empty, Tooltip
@@ -19,6 +20,7 @@ export const BalanceSheet: React.FC = () => {
   const [sheetData, setSheetData] = useState<BalanceSheetLine[] | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     return () => {
@@ -27,6 +29,16 @@ export const BalanceSheet: React.FC = () => {
       }
     };
   }, []);
+
+  // Handle URL query parameters and auto-load
+  useEffect(() => {
+    const toDateParam = searchParams.get('toDate');
+    if (toDateParam) {
+      const toDate = dayjs(toDateParam);
+      form.setFieldsValue({ toDate });
+      handleSearch({ toDate });
+    }
+  }, [searchParams]);
 
   const handleSearch = async (values: any) => {
     setLoading(true);
@@ -198,7 +210,7 @@ export const BalanceSheet: React.FC = () => {
       </head>
       <body>
         <div class="header-title">BALANCE SHEET (STATEMENT OF FINANCIAL POSITION)</div>
-        <div class="sub-title">As of Date: <b>${asOnStr}</b> &nbsp;|&nbsp; Status: <b>${isBalanced ? '✓ BALANCED' : '⚠ OUT OF BALANCE'}</b></div>
+        <div class="sub-title">As of Date: <b>${asOnStr}</b> &nbsp;|&nbsp; Status: <b>${isBalanced ? 'âœ“ BALANCED' : 'âš  OUT OF BALANCE'}</b></div>
         
         <div class="section-header">1. ASSETS</div>
         <table>

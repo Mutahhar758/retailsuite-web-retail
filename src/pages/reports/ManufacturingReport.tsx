@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Card, Table, Row, Col, Space, Typography, DatePicker, 
   Select, Button, Tabs, Tag, Statistic, message 
@@ -20,6 +21,7 @@ const { RangePicker } = DatePicker;
 const { Option } = Select;
 
 export const ManufacturingReport: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ProductionResponse[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -32,6 +34,19 @@ export const ManufacturingReport: React.FC = () => {
   useEffect(() => {
     inventoryService.getItemsLookup().then(setItems).catch(() => {});
   }, []);
+
+  // Handle URL search params
+  useEffect(() => {
+    const fromDateParam = searchParams.get('fromDate');
+    const toDateParam = searchParams.get('toDate');
+    const itemParam = searchParams.get('item') || searchParams.get('finishedItemId');
+    if (fromDateParam && toDateParam) {
+      setDates([dayjs(fromDateParam), dayjs(toDateParam)]);
+    }
+    if (itemParam) {
+      setSelectedProduct(itemParam);
+    }
+  }, [searchParams]);
 
   const fetchData = useCallback(async () => {
     try {

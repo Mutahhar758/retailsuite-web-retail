@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Card, Typography, Form, DatePicker, Select, Button,
   Space, message, Spin, Empty, Tooltip, Checkbox
@@ -25,6 +26,7 @@ export const StockBalance: React.FC = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedCategoryTitle, setSelectedCategoryTitle] = useState('');
   const [showStockValue, setShowStockValue] = useState(true);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     api.get('/api/itemcategories').then(res => {
@@ -37,6 +39,27 @@ export const StockBalance: React.FC = () => {
       }
     };
   }, []);
+
+  // Handle URL query parameters and auto-load
+  useEffect(() => {
+    const fromDateParam = searchParams.get('fromDate');
+    const toDateParam = searchParams.get('toDate');
+    const catParam = searchParams.get('category');
+    const filterParam = searchParams.get('stockFilter');
+
+    if (fromDateParam && toDateParam) {
+      const dateRange: [dayjs.Dayjs, dayjs.Dayjs] = [dayjs(fromDateParam), dayjs(toDateParam)];
+      const updates: any = { dateRange };
+      if (catParam) updates.category = catParam;
+      if (filterParam) updates.stockFilter = filterParam;
+      form.setFieldsValue(updates);
+      handleSearch({
+        dateRange,
+        category: catParam || form.getFieldValue('category'),
+        stockFilter: filterParam || form.getFieldValue('stockFilter') || 'All'
+      });
+    }
+  }, [searchParams]);
 
   const handleSearch = async (values: any) => {
     setLoading(true);

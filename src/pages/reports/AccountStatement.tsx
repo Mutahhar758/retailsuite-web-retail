@@ -32,15 +32,6 @@ export const AccountStatement: React.FC = () => {
       const detailAccounts = res.filter(a => a.accType === 'Detail');
       const mapped = detailAccounts.map(a => ({ account: a.account, title: a.title }));
       setAccounts(mapped);
-
-      const targetAcc = searchParams.get('account');
-      if (targetAcc) {
-        form.setFieldsValue({ account: targetAcc });
-        const matched = mapped.find(a => a.account === targetAcc);
-        if (matched) {
-          setSelectedAccountTitle(matched.title);
-        }
-      }
     });
 
     return () => {
@@ -49,6 +40,36 @@ export const AccountStatement: React.FC = () => {
       }
     };
   }, []);
+
+  // Handle URL query parameters and auto-load if account is supplied
+  useEffect(() => {
+    const targetAcc = searchParams.get('account');
+    const fromDateParam = searchParams.get('fromDate');
+    const toDateParam = searchParams.get('toDate');
+    const dateBasisParam = searchParams.get('dateBasis');
+
+    let dateRange = form.getFieldValue('dateRange') || [dayjs().startOf('month'), dayjs()];
+    if (fromDateParam && toDateParam) {
+      dateRange = [dayjs(fromDateParam), dayjs(toDateParam)];
+    }
+
+    const updates: any = { dateRange };
+    if (targetAcc) updates.account = targetAcc;
+    if (dateBasisParam) updates.dateBasis = dateBasisParam;
+    form.setFieldsValue(updates);
+
+    if (targetAcc && accounts.length > 0) {
+      const matched = accounts.find(a => a.account === targetAcc);
+      if (matched) {
+        setSelectedAccountTitle(matched.title);
+      }
+      handleSearch({
+        dateRange,
+        account: targetAcc,
+        dateBasis: dateBasisParam || form.getFieldValue('dateBasis') || 'VoucherDate'
+      });
+    }
+  }, [searchParams, accounts]);
 
   const handleSearch = async (values: any) => {
     setLoading(true);

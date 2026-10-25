@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Card, Typography, Form, DatePicker, Button,
   Space, message, Spin, Empty, Tooltip
@@ -21,6 +22,7 @@ export const IncomeSummary: React.FC = () => {
   const [incomeData, setIncomeData] = useState<IncomeSummaryLine[] | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     return () => {
@@ -29,6 +31,18 @@ export const IncomeSummary: React.FC = () => {
       }
     };
   }, []);
+
+  // Handle URL query parameters and auto-load
+  useEffect(() => {
+    const fromDateParam = searchParams.get('fromDate');
+    const toDateParam = searchParams.get('toDate');
+
+    if (fromDateParam && toDateParam) {
+      const dateRange: [dayjs.Dayjs, dayjs.Dayjs] = [dayjs(fromDateParam), dayjs(toDateParam)];
+      form.setFieldsValue({ dateRange });
+      handleSearch({ dateRange });
+    }
+  }, [searchParams]);
 
   const handleSearch = async (values: any) => {
     setLoading(true);

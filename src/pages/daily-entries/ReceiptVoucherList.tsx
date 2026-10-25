@@ -50,15 +50,15 @@ export const ReceiptVoucherList: React.FC = () => {
 
   // Parsed, validated filter state derived purely from the URL.
   const query = useMemo(() => {
-    const from = searchParams.get('from');
-    const to = searchParams.get('to');
+    const from = searchParams.get('from') || searchParams.get('fromDate');
+    const to = searchParams.get('to') || searchParams.get('toDate');
     const page = parseInt(searchParams.get('page') || '1', 10);
     const size = parseInt(searchParams.get('size') || String(DEFAULT_PAGE_SIZE), 10);
     return {
       from: from && dayjs(from, DATE_FORMAT, true).isValid() ? from : undefined,
       to: to && dayjs(to, DATE_FORMAT, true).isValid() ? to : undefined,
-      cashBank: searchParams.get('cashBank') || undefined,
-      voucher: searchParams.get('voucher') || undefined,
+      cashBank: searchParams.get('cashBank') || searchParams.get('cashBankAccount') || undefined,
+      voucher: searchParams.get('voucher') || searchParams.get('voucherNo') || undefined,
       page: Number.isFinite(page) && page > 0 ? page : 1,
       size: Number.isFinite(size) && size > 0 ? Math.min(size, 200) : DEFAULT_PAGE_SIZE,
     };

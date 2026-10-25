@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Card, Typography, Form, DatePicker, Select, Button,
   Space, message, Spin, Empty, Tooltip
@@ -35,6 +36,7 @@ const { RangePicker } = DatePicker;
 
 export const CustomerBalanceRecoveryReport: React.FC = () => {
   const [form] = Form.useForm();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
@@ -55,22 +57,30 @@ export const CustomerBalanceRecoveryReport: React.FC = () => {
     }).catch(console.error);
   }, []);
 
-  // Set default values
+  // Set default values and handle URL query parameters
   useEffect(() => {
-    const startOfMonth = dayjs().startOf('month');
-    const today = dayjs();
-    form.setFieldsValue({
-      dateRange: [startOfMonth, today],
-      dateBasis: 'ClearingDate',
-      balanceFilter: 'All'
-    });
-    // Auto-generate on initial load
-    fetchReportDataAndPdf({
-      dateRange: [startOfMonth, today],
-      dateBasis: 'ClearingDate',
-      balanceFilter: 'All'
-    });
-  }, [form]);
+    const fromDateParam = searchParams.get('fromDate');
+    const toDateParam = searchParams.get('toDate');
+    const accParam = searchParams.get('customerAccountId') || searchParams.get('account');
+    const dateBasisParam = searchParams.get('dateBasis') || 'ClearingDate';
+    const balanceFilterParam = searchParams.get('balanceFilter') || 'All';
+
+    const start = fromDateParam ? dayjs(fromDateParam) : dayjs().startOf('month');
+    const today = toDateParam ? dayjs(toDateParam) : dayjs();
+
+    const initialValues: any = {
+      dateRange: [start, today],
+      dateBasis: dateBasisParam,
+      balanceFilter: balanceFilterParam
+    };
+    if (accParam) {
+      initialValues.customerAccountId = accParam;
+    }
+    form.setFieldsValue(initialValues);
+
+    // Auto-generate on initial load / param change
+    fetchReportDataAndPdf(initialValues);
+  }, [form, searchParams]);
 
   // Clean up blob url on unmount
   useEffect(() => {

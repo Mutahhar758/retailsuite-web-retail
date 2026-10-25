@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Card, Typography, Form, DatePicker, Select, Button,
   Space, message, Spin, Empty, Tooltip
@@ -23,6 +24,7 @@ export const AccountBalanceReport: React.FC = () => {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [parentTitle, setParentTitle] = useState('');
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     chartOfAccountService.getActiveAccounts().then(res => {
@@ -37,6 +39,32 @@ export const AccountBalanceReport: React.FC = () => {
       }
     };
   }, []);
+
+  // Handle URL query parameters and auto-load if account is supplied
+  useEffect(() => {
+    const targetAcc = searchParams.get('account');
+    const toDateParam = searchParams.get('toDate');
+
+    let toDate = form.getFieldValue('toDate') || dayjs();
+    if (toDateParam) {
+      toDate = dayjs(toDateParam);
+    }
+
+    const updates: any = { toDate };
+    if (targetAcc) updates.account = targetAcc;
+    form.setFieldsValue(updates);
+
+    if (targetAcc && accounts.length > 0) {
+      const selectedAcc = accounts.find(a => a.account === targetAcc);
+      if (selectedAcc) {
+        setParentTitle(selectedAcc.title);
+      }
+      handleSearch({
+        toDate,
+        account: targetAcc
+      });
+    }
+  }, [searchParams, accounts]);
 
   const handleSearch = async (values: any) => {
     setLoading(true);

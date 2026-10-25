@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Card, Typography, Form, DatePicker, Button,
   Space, message, Spin, Empty, Tooltip
@@ -21,6 +22,7 @@ export const TrialBalanceReport: React.FC = () => {
   const [trialData, setTrialData] = useState<TrialBalanceLine[] | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     return () => {
@@ -29,6 +31,18 @@ export const TrialBalanceReport: React.FC = () => {
       }
     };
   }, []);
+
+  // Handle URL query parameters and auto-load
+  useEffect(() => {
+    const fromDateParam = searchParams.get('fromDate');
+    const toDateParam = searchParams.get('toDate');
+
+    if (fromDateParam && toDateParam) {
+      const dateRange: [dayjs.Dayjs, dayjs.Dayjs] = [dayjs(fromDateParam), dayjs(toDateParam)];
+      form.setFieldsValue({ dateRange });
+      handleSearch({ dateRange });
+    }
+  }, [searchParams]);
 
   const handleSearch = async (values: any) => {
     setLoading(true);
@@ -197,7 +211,7 @@ export const TrialBalanceReport: React.FC = () => {
     });
 
     const isBalanced = Math.abs(totalDr - totalCr) < 0.01;
-    const balanceStatus = isBalanced ? '✓ BALANCED' : `⚠ OUT OF BALANCE: ${Math.abs(totalDr - totalCr).toFixed(2)}`;
+    const balanceStatus = isBalanced ? 'âœ“ BALANCED' : `âš  OUT OF BALANCE: ${Math.abs(totalDr - totalCr).toFixed(2)}`;
 
     const excelHtml = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">

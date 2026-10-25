@@ -31,7 +31,7 @@ import {
   UserOutlined,
   ClearOutlined,
 } from '@ant-design/icons';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import api from '../../services/api';
 import { reportService, type CustomerBillResponse } from '../../services/reportService';
@@ -52,6 +52,7 @@ interface CustomerOption {
 
 export const NormalCustomerBill: React.FC = () => {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [form] = Form.useForm();
   const [mode, setMode] = useState<'single' | 'batch'>('single');
 
@@ -111,27 +112,32 @@ export const NormalCustomerBill: React.FC = () => {
       setCustomers(cusList);
 
       const state = location.state as { customerId?: string; fromDate?: string; toDate?: string } | null;
-      if (state && state.customerId) {
-        const fromD = state.fromDate ? dayjs(state.fromDate) : dayjs().startOf('month');
-        const toD = state.toDate ? dayjs(state.toDate) : dayjs();
+      const searchAccount = searchParams.get('account') || searchParams.get('customerId');
+      const searchFrom = searchParams.get('fromDate');
+      const searchTo = searchParams.get('toDate');
+
+      const targetCustomerId = state?.customerId || searchAccount;
+      if (targetCustomerId) {
+        const fromD = (state?.fromDate || searchFrom) ? dayjs(state?.fromDate || searchFrom) : dayjs().startOf('month');
+        const toD = (state?.toDate || searchTo) ? dayjs(state?.toDate || searchTo) : dayjs();
 
         form.setFieldsValue({
-          account: state.customerId,
+          account: targetCustomerId,
           dateRange: [fromD, toD],
           dateBasis: 'ClearingDate'
         });
 
-        const matchedCus = cusList.find((c: any) => c.account === state.customerId);
+        const matchedCus = cusList.find((c: any) => c.account === targetCustomerId);
         if (matchedCus) setSelectedCustomer(matchedCus);
 
         fetchBillDataAndPdf({
-          account: state.customerId,
+          account: targetCustomerId,
           dateRange: [fromD, toD],
           dateBasis: 'ClearingDate'
         });
       }
     }).catch(console.error);
-  }, [location.state]);
+  }, [location.state, searchParams]);
 
   // Default dates
   useEffect(() => {
@@ -811,7 +817,7 @@ export const NormalCustomerBill: React.FC = () => {
               disabled={selectedBulkAccounts.length === 0}
               onClick={handleBulkPrintBridgeDirect}
             >
-              🖨 Bulk Print via Bridge ({selectedBulkAccounts.length})
+              ðŸ–¨ Bulk Print via Bridge ({selectedBulkAccounts.length})
             </Button>
           )}
         </Form>
@@ -900,7 +906,7 @@ export const NormalCustomerBill: React.FC = () => {
                   {mode === 'single'
                     ? (selectedCustomer ? selectedCustomer.title : 'Select a customer to generate bill')
                     : (batchCompiledCount !== null
-                        ? `Batch Compiled: ${batchCompiledCount} Customer(s) selected • ${onlyWithActivity ? 'Active accounts with transactions or balances included' : 'All accounts included'}`
+                        ? `Batch Compiled: ${batchCompiledCount} Customer(s) selected â€¢ ${onlyWithActivity ? 'Active accounts with transactions or balances included' : 'All accounts included'}`
                         : 'Select customers on the left and click Compile Batch Bills')
                   }
                 </Text>
@@ -929,7 +935,7 @@ export const NormalCustomerBill: React.FC = () => {
                     disabled={!pdfBlobUrl || pdfLoading}
                     onClick={handlePrintBridgeDirect}
                   >
-                    🖨 Direct Thermal
+                    ðŸ–¨ Direct Thermal
                   </Button>
                 </Tooltip>
               ) : (
@@ -1066,7 +1072,7 @@ export const NormalCustomerBill: React.FC = () => {
 
       {/* Bulk Print Progress Modal */}
       <Modal
-        title="🖨 Printing Bulk Bills via PrinterBridge"
+        title="ðŸ–¨ Printing Bulk Bills via PrinterBridge"
         open={bulkProgress !== null}
         footer={null}
         closable={false}

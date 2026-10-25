@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Card, Typography, Form, DatePicker, Button,
   Space, message, Spin, Empty, Tooltip
@@ -24,6 +25,7 @@ export const ProfitByCustomer: React.FC = () => {
   const [reportData, setReportData] = useState<ProfitByCustomerResponse | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     return () => {
@@ -33,15 +35,18 @@ export const ProfitByCustomer: React.FC = () => {
     };
   }, [pdfUrl]);
 
-  // Initial load
+  // Initial load / handle URL params
   useEffect(() => {
-    const startOfMonth = dayjs().startOf('month');
-    const today = dayjs();
+    const fromDateParam = searchParams.get('fromDate');
+    const toDateParam = searchParams.get('toDate');
+
+    const start = fromDateParam ? dayjs(fromDateParam) : dayjs().startOf('month');
+    const today = toDateParam ? dayjs(toDateParam) : dayjs();
     form.setFieldsValue({
-      dateRange: [startOfMonth, today]
+      dateRange: [start, today]
     });
-    handleSearch({ dateRange: [startOfMonth, today] });
-  }, [form]);
+    handleSearch({ dateRange: [start, today] });
+  }, [form, searchParams]);
 
   const handleSearch = async (values: any) => {
     setLoading(true);

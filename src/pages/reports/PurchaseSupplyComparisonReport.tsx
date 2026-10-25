@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Card, Typography, Form, DatePicker, Select, Button,
   Space, message, Spin, Empty, Tooltip
@@ -36,6 +37,7 @@ const { RangePicker } = DatePicker;
 
 export const PurchaseSupplyComparisonReport: React.FC = () => {
   const [form] = Form.useForm();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
@@ -49,31 +51,35 @@ export const PurchaseSupplyComparisonReport: React.FC = () => {
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const currentOrgName = currentOrg?.name || 'Retail Suite';
 
-  // Load items lookup
+  // Load items lookup and handle URL params
   useEffect(() => {
     inventoryService.getItemsLookup().then(res => {
       setItems(res || []);
-      const chosenItem = res && res.length > 0 ? res[0].id : undefined;
+      const itemParam = searchParams.get('itemId') || searchParams.get('item');
+      const chosenItem = itemParam || (res && res.length > 0 ? res[0].id : undefined);
       if (chosenItem) {
         form.setFieldValue('itemId', chosenItem);
       }
 
-      const startOfMonth = dayjs().startOf('month');
-      const today = dayjs();
+      const fromDateParam = searchParams.get('fromDate');
+      const toDateParam = searchParams.get('toDate');
+      const start = fromDateParam ? dayjs(fromDateParam) : dayjs().startOf('month');
+      const today = toDateParam ? dayjs(toDateParam) : dayjs();
+
       form.setFieldsValue({
-        dateRange: [startOfMonth, today],
+        dateRange: [start, today],
         itemId: chosenItem
       });
 
       // Auto fetch if item is selected
       if (chosenItem) {
         fetchReportDataAndPdf({
-          dateRange: [startOfMonth, today],
+          dateRange: [start, today],
           itemId: chosenItem
         });
       }
     }).catch(console.error);
-  }, [form]);
+  }, [form, searchParams]);
 
   // Cleanup blob URL
   useEffect(() => {

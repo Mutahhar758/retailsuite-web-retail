@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Card, Typography, Form, DatePicker, Select, Button,
   Space, message, Spin, Empty, Tooltip, Checkbox
@@ -25,6 +26,7 @@ export const ItemLedger: React.FC = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedItemTitle, setSelectedItemTitle] = useState('');
   const [showCostPrice, setShowCostPrice] = useState(false);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     api.get('/api/inventory/items').then(res => {
@@ -39,6 +41,36 @@ export const ItemLedger: React.FC = () => {
       }
     };
   }, []);
+
+  // Handle URL query parameters and auto-load if item is supplied
+  useEffect(() => {
+    const itemParam = searchParams.get('item') || searchParams.get('fkItem');
+    const fromDateParam = searchParams.get('fromDate');
+    const toDateParam = searchParams.get('toDate');
+    const showCostParam = searchParams.get('showCostPrice');
+
+    let dateRange = form.getFieldValue('dateRange') || [dayjs().startOf('month'), dayjs()];
+    if (fromDateParam && toDateParam) {
+      dateRange = [dayjs(fromDateParam), dayjs(toDateParam)];
+    }
+
+    const updates: any = { dateRange };
+    if (itemParam) updates.item = itemParam;
+    if (showCostParam !== null && showCostParam !== undefined) updates.showCostPrice = showCostParam === 'true';
+    form.setFieldsValue(updates);
+
+    if (itemParam && items.length > 0) {
+      const selectedItem = items.find(i => i.id === itemParam);
+      if (selectedItem) {
+        setSelectedItemTitle(selectedItem.title);
+      }
+      handleSearch({
+        dateRange,
+        item: itemParam,
+        showCostPrice: showCostParam === 'true'
+      });
+    }
+  }, [searchParams, items]);
 
   const handleSearch = async (values: any) => {
     setLoading(true);

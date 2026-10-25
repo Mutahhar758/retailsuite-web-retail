@@ -8,7 +8,7 @@ import {
   PlusOutlined, EditOutlined, FileTextOutlined, 
   SearchOutlined, ReloadOutlined 
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { paymentService, type PaymentDto } from '../../services/paymentService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
@@ -18,6 +18,7 @@ const { RangePicker } = DatePicker;
 
 export const PaymentVoucherList: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   useFormShortcuts({
     onNew: () => navigate('/daily-entries/payment-voucher/new'),
   });
@@ -56,10 +57,26 @@ export const PaymentVoucherList: React.FC = () => {
 
   useEffect(() => {
     fetchLookups();
-    fetchData({
-      dateRange: [dayjs().startOf('month'), dayjs()]
+    const fromDateParam = searchParams.get('fromDate');
+    const toDateParam = searchParams.get('toDate');
+    const cashBankParam = searchParams.get('cashBankAccount');
+    const voucherNoParam = searchParams.get('voucherNo');
+
+    const initialFromDate = fromDateParam ? dayjs(fromDateParam) : dayjs().startOf('month');
+    const initialToDate = toDateParam ? dayjs(toDateParam) : dayjs();
+
+    form.setFieldsValue({
+      dateRange: [initialFromDate, initialToDate],
+      cashBankAccount: cashBankParam || undefined,
+      voucherNo: voucherNoParam || undefined,
     });
-  }, [fetchData]);
+
+    fetchData({
+      dateRange: [initialFromDate, initialToDate],
+      cashBankAccount: cashBankParam || undefined,
+      voucherNo: voucherNoParam || undefined,
+    });
+  }, [fetchData, searchParams, form]);
 
   const columns = [
     {
@@ -144,7 +161,7 @@ export const PaymentVoucherList: React.FC = () => {
         className="mb-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
         onFinish={fetchData}
         initialValues={{
-          dateRange: [dayjs().startOf('month'), dayjs()]
+          dateRange: [dayjs().startOf('month'), dayjs()],
         }}
       >
         <Form.Item name="dateRange" label="Date Range">

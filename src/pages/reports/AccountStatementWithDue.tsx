@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Typography, Form, DatePicker, Select, Button,
   Space, message, Radio, Empty, Spin, Tooltip
@@ -24,6 +25,7 @@ export const AccountStatementWithDue: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedAccountTitle, setSelectedAccountTitle] = useState<string>('');
   const [statementData, setStatementData] = useState<(AccountStatementWithDueLine & { balance: number })[]>([]);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     chartOfAccountService.getActiveAccounts().then(res => {
@@ -37,6 +39,36 @@ export const AccountStatementWithDue: React.FC = () => {
       }
     };
   }, []);
+
+  // Handle URL query parameters and auto-load if account is supplied
+  useEffect(() => {
+    const targetAcc = searchParams.get('account');
+    const fromDateParam = searchParams.get('fromDate');
+    const toDateParam = searchParams.get('toDate');
+    const dateBasisParam = searchParams.get('dateBasis');
+
+    let dateRange = form.getFieldValue('dateRange') || [dayjs().startOf('month'), dayjs()];
+    if (fromDateParam && toDateParam) {
+      dateRange = [dayjs(fromDateParam), dayjs(toDateParam)];
+    }
+
+    const updates: any = { dateRange };
+    if (targetAcc) updates.account = targetAcc;
+    if (dateBasisParam) updates.dateBasis = dateBasisParam;
+    form.setFieldsValue(updates);
+
+    if (targetAcc && accounts.length > 0) {
+      const matched = accounts.find(a => a.account === targetAcc);
+      if (matched) {
+        setSelectedAccountTitle(matched.title);
+      }
+      handleSearch({
+        dateRange,
+        account: targetAcc,
+        dateBasis: dateBasisParam || form.getFieldValue('dateBasis') || 'VoucherDate'
+      });
+    }
+  }, [searchParams, accounts]);
 
   const handleSearch = async (values: any) => {
     setLoading(true);

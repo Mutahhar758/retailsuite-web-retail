@@ -381,8 +381,8 @@ export const ScanSupplySheetModal: React.FC<ScanSupplySheetModalProps> = ({
         spinning={loading}
         tip={
           selectedPages.length > 1
-            ? `Analyzing ${selectedPages.length} pages via Gemini Vision AI (Matrix/Multi-page merge enabled)...`
-            : 'Analyzing handwritten paper sheet via Gemini Vision AI...'
+            ? `Analyzing ${selectedPages.length} pages via Vision AI (Matrix/Multi-page merge enabled)...`
+            : 'Analyzing handwritten paper sheet via Vision AI...'
         }
       >
         {/* Top Control Bar: Target Date & Pivot Matrix Support */}

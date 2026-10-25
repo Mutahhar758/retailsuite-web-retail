@@ -29,6 +29,7 @@ import { useOfflineStore } from '../stores/useOfflineStore';
 import { profileService, logoutService } from '../services/profileService';
 import api from '../services/api';
 import { CURRENT_APP_VERSION } from '../utils/autoVersionRefresh';
+import { GeminiAssistantWidget } from '../components/ai/GeminiAssistantWidget';
 
 const { Header, Sider, Content } = Layout;
 
@@ -645,7 +646,8 @@ export const MainLayout: React.FC = () => {
         >
           <Outlet />
         </Content>
-      </Layout>
+    </Layout>
+      <GeminiAssistantWidget />
     </Layout>
   );
 };
