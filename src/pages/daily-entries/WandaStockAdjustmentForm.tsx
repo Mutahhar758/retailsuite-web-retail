@@ -132,30 +132,29 @@ export const WandaStockAdjustmentForm: React.FC = () => {
           const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
           const numVal = (cleanVal !== null && cleanVal !== undefined && cleanVal !== '' && !isNaN(Number(cleanVal))) ? Number(cleanVal) : 0;
 
-          let kgQty = (field === 'qtyIn' ? numVal : (updated.qtyIn || 0)) - (field === 'qtyOut' ? numVal : (updated.qtyOut || 0));
-          let bagQty = (field === 'secQtyIn' ? numVal : (updated.secQtyIn || 0)) - (field === 'secQtyOut' ? numVal : (updated.secQtyOut || 0));
           let packQty = updated.packQty || 0;
           let packing = updated.packing || 0;
           let kgRate = updated.rate || 0;
           let bagRate = updated.secRate || 0;
 
-          if (field === 'qtyIn' || field === 'qtyOut') {
-            kgQty = Math.max(0, kgQty);
-            if (bagQty > 0) {
-              packQty = round((kgQty / bagQty), 2);
-            } else if (packQty > 0) {
-              if (field === 'qtyIn') updated.secQtyIn = round((numVal / packQty), 3);
-            }
-          } else if (field === 'secQtyIn' || field === 'secQtyOut') {
-            bagQty = Math.max(0, bagQty);
-            if (packQty > 0) {
-              if (field === 'secQtyIn') updated.qtyIn = round((numVal * packQty), 3);
-            }
+          if (field === 'qtyIn') {
+            const effectivePack = packQty > 0 ? packQty : (packing > 0 ? packing : 0);
+            updated.secQtyIn = effectivePack > 0 ? round(numVal / effectivePack, 2) : 0;
+          } else if (field === 'qtyOut') {
+            const effectivePack = packQty > 0 ? packQty : (packing > 0 ? packing : 0);
+            updated.secQtyOut = effectivePack > 0 ? round(numVal / effectivePack, 2) : 0;
+          } else if (field === 'secQtyIn') {
+            const effectivePack = packQty > 0 ? packQty : (packing > 0 ? packing : 0);
+            updated.qtyIn = round(numVal * effectivePack, 2);
+          } else if (field === 'secQtyOut') {
+            const effectivePack = packQty > 0 ? packQty : (packing > 0 ? packing : 0);
+            updated.qtyOut = round(numVal * effectivePack, 2);
           } else if (field === 'packQty') {
             packQty = numVal;
-            if (updated.secQtyIn > 0) {
-              updated.qtyIn = round((updated.secQtyIn * packQty), 3);
-            }
+            const qIn = Number(updated.qtyIn) || 0;
+            const qOut = Number(updated.qtyOut) || 0;
+            updated.secQtyIn = packQty > 0 ? round(qIn / packQty, 2) : 0;
+            updated.secQtyOut = packQty > 0 ? round(qOut / packQty, 2) : 0;
           } else if (field === 'packing') {
             packing = numVal;
             if (packing > 0) {

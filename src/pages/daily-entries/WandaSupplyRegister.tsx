@@ -131,30 +131,17 @@ export const WandaSupplyRegister: React.FC = () => {
         let bagRate = updated.secRate || 0;
 
         if (field === 'qty') {
-          if (line.qty && round(numVal, 2) === round(line.qty, 2)) {
-            kgQty = line.qty;
-          } else {
-            kgQty = numVal;
-            if (bagQty > 0) packQty = round(kgQty / bagQty, 2);
-            else if (packQty > 0) bagQty = round(kgQty / packQty, 2);
-          }
+          kgQty = numVal;
+          const effectivePack = packQty > 0 ? packQty : (packing > 0 ? packing : 0);
+          bagQty = effectivePack > 0 ? round(kgQty / effectivePack, 2) : 0;
         } else if (field === 'secQty') {
-          if (line.secQty && round(numVal, 2) === round(line.secQty, 2)) {
-            bagQty = line.secQty;
-          } else {
-            bagQty = numVal;
-            if (packQty > 0) kgQty = round(bagQty * packQty, 2);
-            else if (kgQty > 0) packQty = round(kgQty / bagQty, 2);
-          }
+          bagQty = numVal;
+          const effectivePack = packQty > 0 ? packQty : (packing > 0 ? packing : 0);
+          kgQty = round(bagQty * effectivePack, 2);
         } else if (field === 'packQty') {
-          if (line.packQty && round(numVal, 2) === round(line.packQty, 2)) {
-            packQty = line.packQty;
-            packing = line.packing || 0;
-          } else {
-            packQty = numVal;
-            packing = numVal;
-            if (bagQty > 0) kgQty = round(bagQty * packQty, 2);
-          }
+          packQty = numVal;
+          packing = numVal;
+          bagQty = packQty > 0 ? round(kgQty / packQty, 2) : 0;
         } else if (field === 'rate') {
           if (line.rate && round(numVal, 2) === round(line.rate, 2)) {
             kgRate = line.rate;

@@ -333,22 +333,26 @@ export const WandaPurchaseForm: React.FC = () => {
           }
         }
 
+        if (field === 'qty') {
+          const kg = numVal;
+          const pQty = Number(updated.packQty) || 0;
+          const pck = Number(updated.packing) || 0;
+          const effectivePack = pQty > 0 ? pQty : (pck > 0 ? pck : 0);
+          updated.secQty = effectivePack > 0 ? round(kg / effectivePack, 2) : 0;
+        }
+
         if (field === 'secQty') {
           const sQty = numVal;
           const pQty = Number(updated.packQty) || 0;
           const pck = Number(updated.packing) || 0;
-          if (pQty > 0 || pck > 0) {
-            updated.qty = round(sQty * (pQty + pck), 2);
-          }
+          const effectivePack = pQty > 0 ? pQty : (pck > 0 ? pck : 0);
+          updated.qty = round(sQty * effectivePack, 2);
         }
 
-        if (field === 'packQty' || field === 'packing') {
-          const sQty = Number(updated.secQty) || 0;
-          const pQty = field === 'packQty' ? numVal : (Number(updated.packQty) || 0);
-          const pck = field === 'packing' ? numVal : (Number(updated.packing) || 0);
-          if (sQty > 0) {
-            updated.qty = round(sQty * (pQty + pck), 2);
-          }
+        if (field === 'packQty') {
+          const pQty = numVal;
+          const kg = Number(updated.qty) || 0;
+          updated.secQty = pQty > 0 ? round(kg / pQty, 2) : 0;
         }
 
         if (field === 'rate') {
