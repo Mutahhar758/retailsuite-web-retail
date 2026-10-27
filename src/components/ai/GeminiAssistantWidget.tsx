@@ -5,7 +5,8 @@ import {
   SendOutlined, 
   SoundOutlined, 
   MutedOutlined,
-  ThunderboltFilled
+  ThunderboltFilled,
+  PlusOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useVoiceAssistant } from '../../hooks/useVoiceAssistant';
@@ -14,8 +15,16 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 
 const { Text } = Typography;
 
+const generateChatId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'chat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+};
+
 export const GeminiAssistantWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [chatId, setChatId] = useState<string>(generateChatId);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [voiceMuted, setVoiceMuted] = useState(false);
@@ -29,6 +38,24 @@ export const GeminiAssistantWidget: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const chatBottomRef = useRef<HTMLDivElement>(null);
+
+  const handleNewChat = () => {
+    stopListening(false);
+    stopSpeaking();
+    setIsPushToTalk(false);
+    hasDispatchedThisHoldRef.current = false;
+    isHoldingRef.current = false;
+    isKeyHoldingRef.current = false;
+    setInputText('');
+    setChatId(generateChatId());
+    setMessages([
+      {
+        role: 'assistant',
+        content: 'Hello! I am your RetailSuite Voice & Navigation AI. You can speak or type commands like "Get me to payment listing from first of this month" or "Create a payment voucher of $500 for ABC".'
+      }
+    ]);
+    message.success('Started a fresh new chat session.');
+  };
 
   const handleSendPrompt = async (promptText: string) => {
     const trimmed = promptText.trim();
@@ -48,9 +75,14 @@ export const GeminiAssistantWidget: React.FC = () => {
     try {
       const response = await aiAssistantService.chat({
         prompt: trimmed,
+        chatId: chatId,
         currentRoute: location.pathname,
         history: messages
       });
+
+      if (response.chatId && response.chatId !== chatId) {
+        setChatId(response.chatId);
+      }
 
       const assistantMsg: AiChatMessage = {
         role: 'assistant',
@@ -305,6 +337,17 @@ export const GeminiAssistantWidget: React.FC = () => {
               <Tag color="blue">Assistant</Tag>
             </Space>
             <Space>
+              <Tooltip title="Start New Chat (Clear History)">
+                <Button 
+                  type="text" 
+                  size="small"
+                  icon={<PlusOutlined />} 
+                  onClick={handleNewChat}
+                  style={{ color: '#1A73E8', fontWeight: 500 }}
+                >
+                  New Chat
+                </Button>
+              </Tooltip>
               <Tooltip title={voiceMuted ? 'Unmute AI Voice' : 'Mute AI Voice'}>
                 <Button 
                   type="text" 
