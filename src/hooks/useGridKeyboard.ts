@@ -16,7 +16,7 @@ export type GridColKey =
   | 'packing'
   | 'secRate';
 
-export type ArrowColKey = GridColKey | 'unit' | 'rate' | 'discount' | 'addLess' | 'carriage';
+export type ArrowColKey = GridColKey | 'unit' | 'rate' | 'discount' | 'addLess' | 'carriage' | 'amount';
 
 export interface UseGridKeyboardOptions<TColKey extends string = string> {
   rowCount: number;
@@ -100,7 +100,7 @@ function buildArrowColumns(
     cols.push('secRate');
   }
 
-  cols.push('discount', 'addLess', 'carriage');
+  cols.push('discount', 'addLess', 'carriage', 'amount');
   return cols;
 }
 
@@ -294,7 +294,26 @@ export function useGridKeyboard<TColKey extends string = string>({
         const colIdx = cols.indexOf(colKey);
 
         if (colIdx === -1) {
-          // If column is not in Enter flow, do nothing
+          // If column is not in Enter flow:
+          if (colKey === 'amount') {
+            e.preventDefault();
+            e.stopPropagation();
+            const targetCol = firstColKey || (cols.length > 0 ? cols[0] : 'itemId');
+            const nextRow = rowIdx + 1;
+            if (nextRow < rowCount) {
+              focusCell(nextRow, targetCol);
+            } else {
+              if (isRowValidRef.current && !isRowValidRef.current(rowIdx)) {
+                goToSave();
+              } else {
+                if (pendingFocusRef) {
+                  pendingFocusRef.current = { rowIdx: nextRow, colKey: targetCol };
+                }
+                onAddRowRef.current();
+              }
+            }
+            return;
+          }
           return;
         }
 

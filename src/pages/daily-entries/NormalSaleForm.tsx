@@ -814,7 +814,8 @@ export const NormalSaleForm: React.FC = () => {
     'rate',
     ...(hasSecondaryQty ? ['secQty', 'secRate'] : []),
     'discount',
-    ...(enableCarriage ? ['carriage'] : [])
+    ...(enableCarriage ? ['carriage'] : []),
+    'amount'
   ];
 
   const handleAddRow = () => {
@@ -919,7 +920,25 @@ export const NormalSaleForm: React.FC = () => {
           const carriage = updated.carriage || 0;
           const secQty = updated.secQty || 0;
           const secRate = updated.secRate || 0;
-          updated.amount = round(((qty * rate) + (secQty * secRate)) - disc + carriage, 2);
+          if (field === 'amount') {
+            updated.amount = numVal;
+            updated.secQty = 0;
+            const primaryGross = numVal - carriage + disc;
+            if (rate > 0) {
+              const baseQty = Math.max(0, primaryGross / rate);
+              const factor = updated.selectedUnitFactor || (
+                updated.selectedUnitId
+                  ? (getSelectablePrimaryUnits(item, units as any).find(u => u.unitId === updated.selectedUnitId)?.factor || 1)
+                  : (resolveDisplayQtyAndUnit(updated.qty || 0, item, units as any).factor || 1)
+              );
+              const displayQty = round(baseQty * factor, 4);
+              updated.selectedUnitFactor = factor;
+              updated.displayQty = displayQty;
+              updated.qty = toBasePrimaryQty(displayQty, factor);
+            }
+          } else {
+            updated.amount = round(((qty * rate) + (secQty * secRate)) - disc + carriage, 2);
+          }
           return updated;
         }
         return l;
@@ -1544,7 +1563,48 @@ export const NormalSaleForm: React.FC = () => {
       key: 'amount',
       width: 120,
       align: 'right' as const,
-      render: (val: number) => <Text strong>{(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+      render: (val: number, record: any, rowIdx: number) => (
+        <InputNumber
+          ref={getCellRef(rowIdx, 'amount')}
+          className={`grid-input-amount grid-input-row-${rowIdx}`}
+          style={{ width: '100%', fontWeight: 'bold' }}
+          value={val}
+          min={0}
+          controls={false}
+          keyboard={false}
+          precision={2}
+          step={1}
+          formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+          parser={value => value?.replace(/[^0-9.]/g, '') as any}
+          onFocus={(e) => {
+            const input = e.target as HTMLInputElement;
+            input?.select?.();
+            setTimeout(() => input?.select?.(), 20);
+          }}
+          onChange={(v) => updateLine(record.key, 'amount', v)}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && !e.shiftKey) {
+              e.preventDefault();
+              if (rowIdx < saleLines.length - 1) {
+                focusCell(rowIdx + 1, 'itemId');
+              } else if (record.itemId) {
+                handleAddRow();
+                if (pendingFocusRef) {
+                  pendingFocusRef.current = { rowIdx: rowIdx + 1, colKey: 'itemId' };
+                }
+              } else {
+                const cashReceiptInput = document.querySelector('.pos-cash-receipt input') as HTMLInputElement;
+                if (cashReceiptInput) {
+                  cashReceiptInput.focus();
+                  cashReceiptInput.select();
+                }
+              }
+              return;
+            }
+            handleCellKeyDown(rowIdx, 'amount', e);
+          }}
+        />
+      )
     },
     {
       title: '',
