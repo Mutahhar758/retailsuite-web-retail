@@ -57,16 +57,34 @@ export interface PaymentUpdateRequest {
   lines: PaymentLineRequest[];
 }
 
+export interface PaymentListParams {
+  fromDate?: string;
+  toDate?: string;
+  cashBankAccount?: string;
+  account?: string;
+  narration?: string;
+  voucherNo?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedPayments {
+  data: PaymentDto[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
+}
+
 export const paymentService = {
-  async getList(params?: {
-    fromDate?: string;
-    toDate?: string;
-    cashBankAccount?: string;
-    account?: string;
-    narration?: string;
-  }) {
-    const response = await api.get('/api/payments', { params });
-    return response.data.body as PaymentDto[];
+  async getList(params?: PaymentListParams) {
+    const response = await api.get('/api/payments/paged', { params });
+    const body = response.data.body;
+    return {
+      data: (body?.data ?? []) as PaymentDto[],
+      totalCount: (body?.metadata?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? params?.pageSize ?? 20) as number,
+    } as PaginatedPayments;
   },
 
   async getDetail(voucherNo: string, cashBankAccount?: string) {

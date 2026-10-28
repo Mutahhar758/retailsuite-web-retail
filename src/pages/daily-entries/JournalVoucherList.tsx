@@ -1,5 +1,5 @@
 import useFormShortcuts from '../../hooks/useFormShortcuts';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
   Form, DatePicker, Input 
@@ -8,46 +8,126 @@ import {
   PlusOutlined, EditOutlined, FileTextOutlined, 
   SearchOutlined, ReloadOutlined 
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { journalVoucherService, type JournalVoucherDto } from '../../services/journalVoucherService';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
+const DEFAULT_PAGE_SIZE = 20;
+const DATE_FORMAT = 'YYYY-MM-DD';
+
+/**
+ * Filters + paging live in the URL query string (Jira-style), e.g.
+ *   /daily-entries/journal-vouchers?from=2026-10-01&to=2026-10-22&voucher=15&page=2&size=20
+ * so hard refresh, back/forward and shared links restore the exact same view.
+ */
 export const JournalVoucherList: React.FC = () => {
   const navigate = useNavigate();
   useFormShortcuts({
     onNew: () => navigate('/daily-entries/journal-voucher/new'),
   });
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<JournalVoucherDto[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [form] = Form.useForm();
 
-  const fetchData = useCallback(async (values: any = {}) => {
-    try {
-      setLoading(true);
-      const params = {
-        fromDate: values.dateRange?.[0]?.format('YYYY-MM-DD'),
-        toDate: values.dateRange?.[1]?.format('YYYY-MM-DD'),
-        narration: values.narration,
-        voucherNo: values.voucherNo
-      };
-      const result = await journalVoucherService.getList(params);
-      setData(result);
-    } catch (error) {
-      message.error('Failed to fetch journal vouchers');
-    } finally {
-      setLoading(false);
+  // First visit without any query string: seed the URL with the default (current month) range.
+  useEffect(() => {
+    if (searchParams.toString() === '') {
+      const next = new URLSearchParams();
+      next.set('from', dayjs().startOf('month').format(DATE_FORMAT));
+      next.set('to', dayjs().format(DATE_FORMAT));
+      setSearchParams(next, { replace: true });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Parsed, validated filter state derived purely from the URL.
+  const query = useMemo(() => {
+    const from = searchParams.get('from') || searchParams.get('fromDate');
+    const to = searchParams.get('to') || searchParams.get('toDate');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const size = parseInt(searchParams.get('size') || String(DEFAULT_PAGE_SIZE), 10);
+    return {
+      from: from && dayjs(from, DATE_FORMAT, true).isValid() ? from : undefined,
+      to: to && dayjs(to, DATE_FORMAT, true).isValid() ? to : undefined,
+      voucher: searchParams.get('voucher') || searchParams.get('voucherNo') || undefined,
+      page: Number.isFinite(page) && page > 0 ? page : 1,
+      size: Number.isFinite(size) && size > 0 ? Math.min(size, 200) : DEFAULT_PAGE_SIZE,
+    };
+  }, [searchParams]);
+
+  // Keep the filter form in sync with the URL (refresh / back / forward).
   useEffect(() => {
-    fetchData({
-      dateRange: [dayjs().startOf('month'), dayjs()]
+    form.setFieldsValue({
+      dateRange: query.from && query.to ? [dayjs(query.from), dayjs(query.to)] : undefined,
+      voucherNo: query.voucher,
     });
-  }, [fetchData]);
+  }, [query.from, query.to, query.voucher, form]);
+
+  // Fetch whenever the URL-derived query changes.
+  useEffect(() => {
+    if (searchParams.toString() === '') return; // wait for default seeding
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const result = await journalVoucherService.getList({
+          fromDate: query.from,
+          toDate: query.to,
+          voucherNo: query.voucher,
+          pageNumber: query.page,
+          pageSize: query.size,
+        });
+        if (cancelled) return;
+        setData(result.data);
+        setTotalCount(result.totalCount);
+      } catch (error) {
+        if (!cancelled) message.error('Failed to fetch journal vouchers');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [query, searchParams]);
+
+  const buildParams = (values: any, page: number, size: number) => {
+    const next = new URLSearchParams();
+    const range = values?.dateRange;
+    if (range?.[0]) next.set('from', range[0].format(DATE_FORMAT));
+    if (range?.[1]) next.set('to', range[1].format(DATE_FORMAT));
+    if (values?.voucherNo) next.set('voucher', String(values.voucherNo).trim());
+    if (page > 1) next.set('page', String(page));
+    if (size !== DEFAULT_PAGE_SIZE) next.set('size', String(size));
+    return next;
+  };
+
+  // Search: new filters, back to page 1. Pushed to history so Back restores the previous filters.
+  const handleSearch = (values: any) => {
+    const next = buildParams(values, 1, query.size);
+    if (next.toString() === '') next.set('range', 'all');
+    setSearchParams(next);
+  };
+
+  const handleReset = () => {
+    const next = new URLSearchParams();
+    next.set('from', dayjs().startOf('month').format(DATE_FORMAT));
+    next.set('to', dayjs().format(DATE_FORMAT));
+    setSearchParams(next);
+  };
+
+  const handleTableChange = (page: number, size: number) => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('range');
+    if (size !== query.size) page = 1;
+    if (page > 1) next.set('page', String(page)); else next.delete('page');
+    if (size !== DEFAULT_PAGE_SIZE) next.set('size', String(size)); else next.delete('size');
+    setSearchParams(next);
+  };
 
   const columns = [
     {
@@ -132,10 +212,7 @@ export const JournalVoucherList: React.FC = () => {
         form={form}
         layout="inline"
         className="mb-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
-        onFinish={fetchData}
-        initialValues={{
-          dateRange: [dayjs().startOf('month'), dayjs()]
-        }}
+        onFinish={handleSearch}
       >
         <Form.Item name="dateRange" label="Date Range">
           <RangePicker format="DD-MMM-YYYY" />
@@ -146,7 +223,7 @@ export const JournalVoucherList: React.FC = () => {
         <Form.Item>
           <Space>
             <Button type="primary" htmlType="submit" icon={<SearchOutlined />} style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}>Search</Button>
-            <Button icon={<ReloadOutlined />} onClick={() => { form.resetFields(); fetchData(); }}>Reset</Button>
+            <Button icon={<ReloadOutlined />} onClick={handleReset}>Reset</Button>
           </Space>
         </Form.Item>
       </Form>
@@ -156,7 +233,15 @@ export const JournalVoucherList: React.FC = () => {
         dataSource={data} 
         loading={loading}
         rowKey="voucherNo"
-        pagination={{ pageSize: 10 }}
+        pagination={{
+          current: query.page,
+          pageSize: query.size,
+          total: totalCount,
+          showSizeChanger: true,
+          pageSizeOptions: [10, 20, 50, 100],
+          showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
+          onChange: handleTableChange,
+        }}
         onRow={(record) => ({
           onDoubleClick: () => navigate(`/daily-entries/journal-voucher/${record.voucherNo}`)
         })}

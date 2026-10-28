@@ -48,15 +48,33 @@ export interface JournalVoucherUpdateRequest {
   lines: JournalVoucherLineRequest[];
 }
 
+export interface JournalVoucherListParams {
+  fromDate?: string;
+  toDate?: string;
+  account?: string;
+  narration?: string;
+  voucherNo?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedJournalVouchers {
+  data: JournalVoucherDto[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
+}
+
 export const journalVoucherService = {
-  async getList(params?: {
-    fromDate?: string;
-    toDate?: string;
-    account?: string;
-    narration?: string;
-  }) {
-    const response = await api.get('/api/journalvouchers', { params });
-    return response.data.body as JournalVoucherDto[];
+  async getList(params?: JournalVoucherListParams) {
+    const response = await api.get('/api/journalvouchers/paged', { params });
+    const body = response.data.body;
+    return {
+      data: (body?.data ?? []) as JournalVoucherDto[],
+      totalCount: (body?.metadata?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? params?.pageSize ?? 20) as number,
+    } as PaginatedJournalVouchers;
   },
 
   async getDetail(voucherNo: string, account?: string) {
