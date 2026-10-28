@@ -117,16 +117,33 @@ export interface SaleUpdateRequest {
   lines: SaleLineRequest[];
 }
 
+export interface SaleListParams {
+  fromDate?: string;
+  toDate?: string;
+  account?: string;
+  voucherNo?: string;
+  searchTerm?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedSales {
+  data: Sale[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
+}
+
 export const saleService = {
-  async getList(params?: {
-    fromDate?: string;
-    toDate?: string;
-    account?: string;
-    voucherNo?: string;
-    searchTerm?: string;
-  }) {
-    const response = await api.get('/api/sales', { params });
-    return response.data.body as Sale[];
+  async getList(params?: SaleListParams) {
+    const response = await api.get('/api/sales/paged', { params });
+    const body = response.data.body;
+    return {
+      data: (body?.data ?? []) as Sale[],
+      totalCount: (body?.metadata?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? params?.pageSize ?? 20) as number,
+    } as PaginatedSales;
   },
 
   async getDetail(voucherNo: string) {

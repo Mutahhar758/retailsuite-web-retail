@@ -65,10 +65,33 @@ export interface PurchaseCreateRequest {
   }[];
 }
 
+export interface PurchaseListParams {
+  fromDate?: string;
+  toDate?: string;
+  account?: string;
+  voucherNo?: string;
+  searchTerm?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedPurchases {
+  data: Purchase[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
+}
+
 export const purchaseService = {
-  async getList(params: { fromDate?: string; toDate?: string; searchTerm?: string }) {
-    const response = await api.get('/api/purchases', { params });
-    return response.data.body as Purchase[];
+  async getList(params?: PurchaseListParams) {
+    const response = await api.get('/api/purchases/paged', { params });
+    const body = response.data.body;
+    return {
+      data: (body?.data ?? []) as Purchase[],
+      totalCount: (body?.metadata?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? params?.pageSize ?? 20) as number,
+    } as PaginatedPurchases;
   },
 
   async getDetail(voucherNo: string) {

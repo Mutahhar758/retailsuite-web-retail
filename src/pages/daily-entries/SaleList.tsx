@@ -1,5 +1,5 @@
 import useFormShortcuts from '../../hooks/useFormShortcuts';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Table, Card, Button, Space, Typography, Tag, message,
   Form, DatePicker, Select, Input, Alert, Badge, Tooltip
@@ -9,7 +9,7 @@ import {
   SearchOutlined, ReloadOutlined, CloudSyncOutlined,
   CloudServerOutlined, WarningOutlined, CopyOutlined, PrinterOutlined
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { saleService, type Sale, type OfflineSaleEntry } from '../../services/saleService';
 import { offlineCacheService } from '../../services/offlineCacheService';
@@ -25,6 +25,9 @@ import { type SaleReceiptData, type SaleReceiptLineItem } from '../../utils/sale
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
+const DEFAULT_PAGE_SIZE = 20;
+const DATE_FORMAT = 'YYYY-MM-DD';
+
 // Unified row type merges server rows + offline queue rows
 interface DisplayRow {
   isOffline: boolean;
@@ -38,15 +41,22 @@ interface DisplayRow {
   offlineEntry?: OfflineSaleEntry;
 }
 
+/**
+ * Filters + paging live in the URL query string (Jira-style), e.g.
+ *   /daily-entries/sales?from=2026-10-01&to=2026-10-28&account=CUST-01&voucher=12&page=2&size=20
+ * so hard refresh, back/forward and shared links restore the exact same view.
+ */
 export const SaleList: React.FC = () => {
   const navigate = useNavigate();
   useFormShortcuts({
     onNew: () => navigate('/daily-entries/sale/new'),
   });
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [data, setData] = useState<Sale[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [offlineQueue, setOfflineQueue] = useState<OfflineSaleEntry[]>([]);
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
@@ -57,6 +67,98 @@ export const SaleList: React.FC = () => {
   const [form] = Form.useForm();
   const { isOnline } = useNetworkStatus();
   const { pendingCount, isSyncing } = useOfflineStore();
+
+  // First visit without any query string: seed the URL with default (current month) range.
+  useEffect(() => {
+    if (searchParams.toString() === '') {
+      const next = new URLSearchParams();
+      next.set('from', dayjs().startOf('month').format(DATE_FORMAT));
+      next.set('to', dayjs().format(DATE_FORMAT));
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Parsed, validated filter state derived purely from the URL.
+  const query = useMemo(() => {
+    const from = searchParams.get('from');
+    const to = searchParams.get('to');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const size = parseInt(searchParams.get('size') || String(DEFAULT_PAGE_SIZE), 10);
+    return {
+      from: from && dayjs(from, DATE_FORMAT, true).isValid() ? from : undefined,
+      to: to && dayjs(to, DATE_FORMAT, true).isValid() ? to : undefined,
+      account: searchParams.get('account') || undefined,
+      voucher: searchParams.get('voucher') || undefined,
+      page: Number.isFinite(page) && page > 0 ? page : 1,
+      size: Number.isFinite(size) && size > 0 ? Math.min(size, 200) : DEFAULT_PAGE_SIZE,
+    };
+  }, [searchParams]);
+
+  // Keep the filter form in sync with the URL (refresh / back / forward).
+  useEffect(() => {
+    form.setFieldsValue({
+      dateRange: query.from && query.to ? [dayjs(query.from), dayjs(query.to)] : undefined,
+      account: query.account,
+      voucherNo: query.voucher,
+    });
+  }, [query.from, query.to, query.account, query.voucher, form]);
+
+  const loadOfflineQueue = useCallback(async () => {
+    const { currentTenantIdentifier } = useAppStore.getState();
+    const queue = await saleService.getOfflineQueue(currentTenantIdentifier);
+    setOfflineQueue(queue);
+  }, []);
+
+  const fetchLookups = async () => {
+    try {
+      const custs = await offlineCacheService.getCustomers();
+      setCustomers(custs);
+    } catch {
+      // Non-critical — list still works without customer filter
+    }
+  };
+
+  useEffect(() => {
+    fetchLookups();
+  }, []);
+
+  // Fetch whenever the URL-derived query changes or online status changes.
+  useEffect(() => {
+    if (!isOnline) {
+      loadOfflineQueue();
+      return;
+    }
+    if (searchParams.toString() === '') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const result = await saleService.getList({
+          fromDate: query.from,
+          toDate: query.to,
+          account: query.account,
+          voucherNo: query.voucher,
+          pageNumber: query.page,
+          pageSize: query.size,
+        });
+        if (cancelled) return;
+        setData(result.data);
+        setTotalCount(result.totalCount);
+        await loadOfflineQueue();
+      } catch {
+        if (!cancelled) message.error('Failed to fetch sale vouchers');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [query, isOnline, searchParams, loadOfflineQueue]);
+
+  // Reload queue when pendingCount changes (after sync)
+  useEffect(() => {
+    loadOfflineQueue();
+  }, [pendingCount, loadOfflineQueue]);
 
   const handlePrintReceipt = async (voucherNo: string) => {
     try {
@@ -134,54 +236,31 @@ export const SaleList: React.FC = () => {
     }
   };
 
-  const loadOfflineQueue = async () => {
-    const { currentTenantIdentifier } = useAppStore.getState();
-    const queue = await saleService.getOfflineQueue(currentTenantIdentifier);
-    setOfflineQueue(queue);
+  const buildParams = (values: any, page: number, size: number) => {
+    const next = new URLSearchParams();
+    const range = values?.dateRange;
+    if (range?.[0]) next.set('from', range[0].format(DATE_FORMAT));
+    if (range?.[1]) next.set('to', range[1].format(DATE_FORMAT));
+    if (values?.account) next.set('account', values.account);
+    if (values?.voucherNo) next.set('voucher', String(values.voucherNo).trim());
+    if (page > 1) next.set('page', String(page));
+    if (size !== DEFAULT_PAGE_SIZE) next.set('size', String(size));
+    return next;
   };
 
-  const fetchLookups = async () => {
-    try {
-      const custs = await offlineCacheService.getCustomers();
-      setCustomers(custs);
-    } catch {
-      // Non-critical — list still works without customer filter
-    }
+  const handleSearch = (values: any) => {
+    const next = buildParams(values, 1, query.size);
+    if (next.toString() === '') next.set('range', 'all');
+    setSearchParams(next);
   };
 
-  const fetchData = useCallback(async (values: any = {}) => {
-    if (!isOnline) {
-      // Offline: only show offline queue
-      await loadOfflineQueue();
-      return;
-    }
-    try {
-      setLoading(true);
-      const params = {
-        fromDate: values.dateRange?.[0]?.format('YYYY-MM-DD'),
-        toDate: values.dateRange?.[1]?.format('YYYY-MM-DD'),
-        account: values.account,
-        voucherNo: values.voucherNo
-      };
-      const result = await saleService.getList(params);
-      setData(result);
-      await loadOfflineQueue();
-    } catch {
-      message.error('Failed to fetch sale vouchers');
-    } finally {
-      setLoading(false);
-    }
-  }, [isOnline]);
-
-  useEffect(() => {
-    fetchLookups();
-    fetchData({ dateRange: [dayjs().startOf('month'), dayjs()] });
-  }, [fetchData]);
-
-  // Reload queue when pendingCount changes (after sync)
-  useEffect(() => {
-    loadOfflineQueue();
-  }, [pendingCount]);
+  const handleReset = () => {
+    form.resetFields();
+    const next = new URLSearchParams();
+    next.set('from', dayjs().startOf('month').format(DATE_FORMAT));
+    next.set('to', dayjs().format(DATE_FORMAT));
+    setSearchParams(next);
+  };
 
   const handleSyncNow = async () => {
     setSyncing(true);
@@ -189,7 +268,9 @@ export const SaleList: React.FC = () => {
       const result = await offlineSyncService.syncAll();
       if (result.synced > 0) {
         message.success(`${result.synced} voucher(s) synced successfully`);
-        fetchData({ dateRange: [dayjs().startOf('month'), dayjs()] });
+        // Refresh current page view
+        const next = new URLSearchParams(searchParams);
+        setSearchParams(next);
       }
       if (result.failed > 0) {
         message.error(`${result.failed} voucher(s) failed to sync`);
@@ -427,8 +508,7 @@ export const SaleList: React.FC = () => {
           form={form}
           layout="inline"
           className="mb-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
-          onFinish={fetchData}
-          initialValues={{ dateRange: [dayjs().startOf('month'), dayjs()] }}
+          onFinish={handleSearch}
         >
           <Form.Item name="dateRange" label="Date Range">
             <RangePicker format="DD-MMM-YYYY" />
@@ -452,7 +532,7 @@ export const SaleList: React.FC = () => {
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit" icon={<SearchOutlined />} style={{ backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' }}>Search</Button>
-              <Button icon={<ReloadOutlined />} onClick={() => { form.resetFields(); fetchData(); }}>Reset</Button>
+              <Button icon={<ReloadOutlined />} onClick={handleReset}>Reset</Button>
             </Space>
           </Form.Item>
         </Form>
@@ -464,7 +544,18 @@ export const SaleList: React.FC = () => {
         loading={loading}
         rowKey={(row) => row.isOffline ? `offline-${row.offlineEntry!.localId}` : `server-${row.voucherNo}`}
         rowClassName={(row) => row.isOffline ? 'bg-amber-50 dark:bg-amber-900/10' : ''}
-        pagination={{ pageSize: 10 }}
+        pagination={{
+          current: query.page,
+          pageSize: query.size,
+          total: totalCount + (isOnline ? 0 : offlineQueue.length),
+          showSizeChanger: true,
+          pageSizeOptions: ['10', '20', '50', '100'],
+          showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} vouchers`,
+          onChange: (page, size) => {
+            const next = buildParams(form.getFieldsValue(), page, size);
+            setSearchParams(next);
+          },
+        }}
         onRow={(record) => ({
           onDoubleClick: () => {
             if (!record.isOffline) {
