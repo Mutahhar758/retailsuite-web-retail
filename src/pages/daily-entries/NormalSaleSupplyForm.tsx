@@ -458,7 +458,32 @@ export const NormalSaleSupplyForm: React.FC = () => {
           updated.qty = toBasePrimaryQty(numVal, resolved.factor);
         }
 
-        const lineGross = ((updated.qty || 0) * (updated.rate || 0)) + ((updated.secQty || 0) * (updated.secRate || 0));
+        if (field === 'amount') {
+          updated.amount = numVal;
+          updated.secQty = 0;
+          const rate = updated.rate || 0;
+          const addLess = updated.addLess || 0;
+          const carriage = updated.carriage || 0;
+          const disc = updated.discount || 0;
+
+          const lineGross = numVal - carriage - addLess + disc;
+          if (rate > 0) {
+            const baseQty = Math.max(0, lineGross / rate);
+            const factor = updated.selectedUnitFactor || (
+              updated.selectedUnitId
+                ? (getSelectablePrimaryUnits(item).find(u => u.unitId === updated.selectedUnitId)?.factor || 1)
+                : (resolveDisplayQtyAndUnit(updated.qty || 0, item).factor || 1)
+            );
+            const displayQty = round(baseQty * factor, 4);
+            updated.selectedUnitFactor = factor;
+            updated.displayQty = displayQty;
+            updated.qty = toBasePrimaryQty(displayQty, factor);
+          }
+          if (lineGross > 0) {
+            updated.discPercent = round((disc / lineGross) * 100, 2);
+          }
+        } else {
+          const lineGross = ((updated.qty || 0) * (updated.rate || 0)) + ((updated.secQty || 0) * (updated.secRate || 0));
         if (field === 'discPercent') {
           updated.discount = lineGross > 0 ? round(lineGross * (numVal / 100), 2) : 0;
           updated.discPercent = numVal;
@@ -479,7 +504,8 @@ export const NormalSaleSupplyForm: React.FC = () => {
         const addLess = updated.addLess || 0;
         const carriage = updated.carriage || 0;
         const disc = updated.discount || 0;
-        updated.amount = round((lineGross - disc) + carriage + addLess, 2);
+          updated.amount = round((lineGross - disc) + carriage + addLess, 2);
+        }
         return updated;
       }
       return l;
@@ -886,7 +912,42 @@ export const NormalSaleSupplyForm: React.FC = () => {
       key: 'amount',
       width: 150,
       align: 'right' as const,
-      render: (val: number) => <Text strong>{(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+      render: (val: number, record: any, rowIdx: number) => (
+        <InputNumber
+          ref={getCellRef(rowIdx, 'amount')}
+          className={`grid-input-amount grid-input-row-${rowIdx}`}
+          style={{ width: '100%', fontWeight: 'bold' }}
+          value={val}
+          min={0}
+          controls={false}
+          keyboard={false}
+          precision={2}
+          step={1}
+          formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+          parser={value => value?.replace(/[^0-9.]/g, '') as any}
+          onFocus={(e) => {
+            const input = e.target as HTMLInputElement;
+            input?.select?.();
+            setTimeout(() => input?.select?.(), 20);
+          }}
+          onChange={(v) => updateLine(record.key, 'amount', v)}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && !e.shiftKey) {
+              e.preventDefault();
+              if (rowIdx < supplyLines.length - 1) {
+                focusCell(rowIdx + 1, 'customerId');
+              } else if (record.customerId) {
+                handleAddRow();
+                if (pendingFocusRef) {
+                  pendingFocusRef.current = { rowIdx: rowIdx + 1, colKey: 'customerId' };
+                }
+              }
+              return;
+            }
+            handleCellKeyDown(rowIdx, 'amount', e);
+          }}
+        />
+      )
     },
     {
       title: '',
