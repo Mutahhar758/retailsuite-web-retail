@@ -120,18 +120,33 @@ export interface SaleSupplyAttachment {
   createdBy?: string;
 }
 
-export const saleSupplyService = {
-  async getList(params?: {
-    fromDate?: string;
-    toDate?: string;
-    itemId?: string;
-    voucherNo?: string;
-    searchTerm?: string;
-  }) {
-    const response = await api.get('/api/SaleSupplies', { params });
-    return response.data.body as SaleSupply[];
-  },
+export interface SaleSupplyListParams {
+  fromDate?: string;
+  toDate?: string;
+  itemId?: string;
+  voucherNo?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
 
+export interface PaginatedSaleSupplies {
+  data: SaleSupply[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
+}
+
+export const saleSupplyService = {
+  async getList(params?: SaleSupplyListParams) {
+    const response = await api.get('/api/SaleSupplies/paged', { params });
+    const body = response.data.body;
+    return {
+      data: (body?.data ?? []) as SaleSupply[],
+      totalCount: (body?.metadata?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? params?.pageSize ?? 20) as number,
+    } as PaginatedSaleSupplies;
+  },
   async getDetail(voucherNo: string) {
     const response = await api.get(`/api/SaleSupplies/${voucherNo}`);
     return response.data.body as SaleSupplyLine[];
