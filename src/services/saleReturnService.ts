@@ -55,16 +55,32 @@ export interface SaleReturnCreateRequest {
   lines: SaleReturnLineRequest[];
 }
 
+export interface SaleReturnListParams {
+  fromDate?: string;
+  toDate?: string;
+  account?: string;
+  voucherNo?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedSaleReturns {
+  data: SaleReturn[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
+}
+
 export const saleReturnService = {
-  async getList(params?: {
-    fromDate?: string;
-    toDate?: string;
-    account?: string;
-    voucherNo?: string;
-    searchTerm?: string;
-  }) {
-    const response = await api.get('/api/SaleReturns', { params });
-    return response.data.body as SaleReturn[];
+  async getList(params?: SaleReturnListParams) {
+    const response = await api.get('/api/SaleReturns/paged', { params });
+    const body = response.data.body;
+    return {
+      data: (body?.data ?? []) as SaleReturn[],
+      totalCount: (body?.metadata?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? params?.pageSize ?? 20) as number,
+    } as PaginatedSaleReturns;
   },
 
   async getDetail(voucherNo: string) {

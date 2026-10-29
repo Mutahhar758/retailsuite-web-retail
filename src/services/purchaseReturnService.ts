@@ -51,10 +51,33 @@ export interface PurchaseReturnCreateRequest {
   }[];
 }
 
+export interface PurchaseReturnListParams {
+  fromDate?: string;
+  toDate?: string;
+  account?: string;
+  voucherNo?: string;
+  searchTerm?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedPurchaseReturns {
+  data: PurchaseReturn[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
+}
+
 export const purchaseReturnService = {
-  async getList(params: { fromDate?: string; toDate?: string; searchTerm?: string }) {
-    const response = await api.get('/api/PurchaseReturns', { params });
-    return response.data.body as PurchaseReturn[];
+  async getList(params?: PurchaseReturnListParams) {
+    const response = await api.get('/api/PurchaseReturns/paged', { params });
+    const body = response.data.body;
+    return {
+      data: (body?.data ?? []) as PurchaseReturn[],
+      totalCount: (body?.metadata?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? params?.pageSize ?? 20) as number,
+    } as PaginatedPurchaseReturns;
   },
 
   async getDetail(voucherNo: string) {
