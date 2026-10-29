@@ -158,12 +158,27 @@ export interface ProductionListFilter {
   voucherNo?: string;
   status?: ProductionStatus;
   vType?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedProduction {
+  data: ProductionResponse[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
 }
 
 export const manufacturingService = {
   async getList(filter?: ProductionListFilter) {
-    const response = await api.get('/api/manufacturing', { params: filter });
-    return (response.data.body || response.data) as ProductionResponse[];
+    const response = await api.get('/api/manufacturing/paged', { params: filter });
+    const body = response.data.body;
+    return {
+      data: (body?.data ?? []) as ProductionResponse[],
+      totalCount: (body?.metadata?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? filter?.pageSize ?? 20) as number,
+    } as PaginatedProduction;
   },
 
   async getDetail(voucherNo: string) {

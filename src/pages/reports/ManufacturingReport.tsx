@@ -54,10 +54,11 @@ export const ManufacturingReport: React.FC = () => {
       const filter = {
         fromDate: dates ? dates[0].format('YYYY-MM-DD') : undefined,
         toDate: dates ? dates[1].format('YYYY-MM-DD') : undefined,
-        finishedItemId: selectedProduct
+        finishedItemId: selectedProduct,
+        pageSize: 1000
       };
       const result = await manufacturingService.getList(filter);
-      setData(result);
+      setData(result.data);
     } catch (err) {
       message.error('Failed to load manufacturing report data');
     } finally {

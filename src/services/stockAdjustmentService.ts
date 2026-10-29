@@ -55,12 +55,52 @@ export interface StockAdjustmentRequest {
   lines: StockAdjustmentLineRequest[];
 }
 
+export interface StockAdjustmentListParams {
+  fromDate?: string;
+  toDate?: string;
+  startDate?: string;
+  endDate?: string;
+  voucherNo?: string;
+  itemCategoryCode?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedStockAdjustments {
+  data: StockAdjustmentMaster[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
+}
+
 export const stockAdjustmentService = {
-  async getList(startDate?: string, endDate?: string, voucherNo?: string) {
-    const response = await api.get('/api/StockAdjustments', {
-      params: { startDate, endDate, voucherNo }
-    });
-    return response.data.body as StockAdjustmentMaster[];
+  async getList(params?: StockAdjustmentListParams | string, endDate?: string, voucherNo?: string) {
+    let queryParams: any = {};
+    if (typeof params === 'object' && params !== null) {
+      queryParams = {
+        fromDate: params.fromDate || params.startDate,
+        toDate: params.toDate || params.endDate,
+        voucherNo: params.voucherNo,
+        itemCategoryCode: params.itemCategoryCode,
+        pageNumber: params.pageNumber,
+        pageSize: params.pageSize,
+      };
+    } else {
+      queryParams = {
+        fromDate: params,
+        toDate: endDate,
+        voucherNo,
+      };
+    }
+
+    const response = await api.get('/api/StockAdjustments/paged', { params: queryParams });
+    const body = response.data.body;
+    return {
+      data: (body?.data ?? []) as StockAdjustmentMaster[],
+      totalCount: (body?.metadata?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? 20) as number,
+    } as PaginatedStockAdjustments;
   },
 
   async getDetail(voucherNo: string) {

@@ -1,48 +1,130 @@
 import useFormShortcuts from '../../hooks/useFormShortcuts';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Table, Card, Typography, Space, Button, Form, DatePicker, Input, message, Tag } from 'antd';
 import { 
   PlusOutlined, 
   SearchOutlined, 
-  EditOutlined
+  EditOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { stockAdjustmentService, type StockAdjustmentMaster } from '../../services/stockAdjustmentService';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
+const DEFAULT_PAGE_SIZE = 20;
+const DATE_FORMAT = 'YYYY-MM-DD';
+
+/**
+ * Filters + paging live in the URL query string (Jira-style), e.g.
+ *   /daily-entries/stock-adjustment?from=2026-10-01&to=2026-10-22&voucher=15&page=2&size=20
+ * so hard refresh, back/forward and shared links restore the exact same view.
+ */
 export const StockAdjustmentList: React.FC = () => {
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<StockAdjustmentMaster[]>([]);
   const navigate = useNavigate();
   useFormShortcuts({
     onNew: () => navigate('/daily-entries/stock-adjustment/new'),
   });
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<StockAdjustmentMaster[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [form] = Form.useForm();
 
-  const fetchData = async (values?: any) => {
-    setLoading(true);
-    try {
-      let startDate, endDate;
-      if (values?.dateRange) {
-        startDate = values.dateRange[0].format('YYYY-MM-DD');
-        endDate = values.dateRange[1].format('YYYY-MM-DD');
-      }
-      const results = await stockAdjustmentService.getList(startDate, endDate, values?.voucherNo);
-      setData(results);
-    } catch (error) {
-      message.error('Failed to load stock adjustments');
-    } finally {
-      setLoading(false);
+  // First visit without query string: seed default range
+  useEffect(() => {
+    if (searchParams.toString() === '') {
+      const next = new URLSearchParams();
+      next.set('from', dayjs().startOf('month').format(DATE_FORMAT));
+      next.set('to', dayjs().endOf('month').format(DATE_FORMAT));
+      setSearchParams(next, { replace: true });
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const query = useMemo(() => {
+    const from = searchParams.get('from') || searchParams.get('fromDate');
+    const to = searchParams.get('to') || searchParams.get('toDate');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const size = parseInt(searchParams.get('size') || String(DEFAULT_PAGE_SIZE), 10);
+    const voucher = searchParams.get('voucher') || searchParams.get('voucherNo') || undefined;
+    return {
+      from: from && dayjs(from, DATE_FORMAT, true).isValid() ? from : undefined,
+      to: to && dayjs(to, DATE_FORMAT, true).isValid() ? to : undefined,
+      voucher,
+      page: Number.isFinite(page) && page > 0 ? page : 1,
+      size: Number.isFinite(size) && size > 0 ? Math.min(size, 200) : DEFAULT_PAGE_SIZE,
+    };
+  }, [searchParams]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    form.setFieldsValue({
+      dateRange: query.from && query.to ? [dayjs(query.from), dayjs(query.to)] : undefined,
+      voucherNo: query.voucher,
+    });
+  }, [query.from, query.to, query.voucher, form]);
+
+  useEffect(() => {
+    if (searchParams.toString() === '') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const result = await stockAdjustmentService.getList({
+          fromDate: query.from,
+          toDate: query.to,
+          voucherNo: query.voucher,
+          pageNumber: query.page,
+          pageSize: query.size,
+        });
+        if (cancelled) return;
+        setData(result.data);
+        setTotalCount(result.totalCount);
+      } catch (error) {
+        if (!cancelled) message.error('Failed to load stock adjustments');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [query, searchParams]);
+
+  const buildParams = (values: any, page: number, size: number) => {
+    const next = new URLSearchParams();
+    const range = values?.dateRange;
+    if (range?.[0]) next.set('from', range[0].format(DATE_FORMAT));
+    if (range?.[1]) next.set('to', range[1].format(DATE_FORMAT));
+    if (values?.voucherNo) next.set('voucher', String(values.voucherNo).trim());
+    if (page > 1) next.set('page', String(page));
+    if (size !== DEFAULT_PAGE_SIZE) next.set('size', String(size));
+    return next;
+  };
+
+  const handleSearch = (values: any) => {
+    const next = buildParams(values, 1, query.size);
+    if (next.toString() === '') next.set('range', 'all');
+    setSearchParams(next);
+  };
+
+  const handleReset = () => {
+    form.resetFields();
+    const next = new URLSearchParams();
+    next.set('from', dayjs().startOf('month').format(DATE_FORMAT));
+    next.set('to', dayjs().endOf('month').format(DATE_FORMAT));
+    setSearchParams(next);
+  };
+
+  const handleTableChange = (page: number, size: number) => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('range');
+    if (size !== query.size) page = 1;
+    if (page > 1) next.set('page', String(page)); else next.delete('page');
+    if (size !== DEFAULT_PAGE_SIZE) next.set('size', String(size)); else next.delete('size');
+    setSearchParams(next);
+  };
 
   const columns = [
     {
@@ -118,8 +200,7 @@ export const StockAdjustmentList: React.FC = () => {
         <Form 
           form={form} 
           layout="inline" 
-          onFinish={fetchData}
-          initialValues={{ dateRange: [dayjs().startOf('month'), dayjs().endOf('month')] }}
+          onFinish={handleSearch}
         >
           <Form.Item name="dateRange" label="Date Range">
             <RangePicker format="DD-MMM-YYYY" />
@@ -128,9 +209,14 @@ export const StockAdjustmentList: React.FC = () => {
             <Input placeholder="Search VNo" allowClear />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} style={{ backgroundColor: '#7c3aed', borderColor: '#7c3aed' }}>
-              Search
-            </Button>
+            <Space>
+              <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} style={{ backgroundColor: '#7c3aed', borderColor: '#7c3aed' }}>
+                Search
+              </Button>
+              <Button icon={<ReloadOutlined />} onClick={handleReset}>
+                Reset
+              </Button>
+            </Space>
           </Form.Item>
         </Form>
       </Card>
@@ -141,7 +227,15 @@ export const StockAdjustmentList: React.FC = () => {
           dataSource={data} 
           loading={loading}
           rowKey="voucherNo"
-          pagination={{ pageSize: 10 }}
+          pagination={{
+            current: query.page,
+            pageSize: query.size,
+            total: totalCount,
+            showSizeChanger: true,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} adjustments`,
+            onChange: handleTableChange,
+          }}
           size="middle"
           scroll={{ x: 800 }}
         />

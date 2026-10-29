@@ -1,5 +1,5 @@
 import useFormShortcuts from '../../hooks/useFormShortcuts';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
   Input, DatePicker, Select, Popconfirm, Tooltip, Row, Col 
@@ -9,7 +9,7 @@ import {
   ReloadOutlined, SearchOutlined, CheckCircleOutlined, 
   ClockCircleOutlined, SettingOutlined 
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { 
   manufacturingService, 
@@ -23,42 +23,125 @@ const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
+const DEFAULT_PAGE_SIZE = 20;
+const DATE_FORMAT = 'YYYY-MM-DD';
+
+/**
+ * Filters + paging live in the URL query string (Jira-style), e.g.
+ *   /daily-entries/manufacturing?from=2026-10-01&to=2026-10-22&status=InProgress&voucher=15&page=2&size=20
+ * so hard refresh, back/forward and shared links restore the exact same view.
+ */
 export const ManufacturingList: React.FC = () => {
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<ProductionResponse[]>([]);
-  const [dates, setDates] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>([
-    dayjs().subtract(30, 'day'),
-    dayjs()
-  ]);
-  const [statusFilter, setStatusFilter] = useState<ProductionStatus | undefined>(undefined);
-  const [voucherNoFilter, setVoucherNoFilter] = useState('');
   const navigate = useNavigate();
   useFormShortcuts({
     onNew: () => navigate('/daily-entries/manufacturing/new'),
   });
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<ProductionResponse[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
 
-  const fetchData = useCallback(async () => {
+  // Local draft for voucher input before enter/blur
+  const [voucherDraft, setVoucherDraft] = useState('');
+
+  // First visit without query string: seed default range
+  useEffect(() => {
+    if (searchParams.toString() === '') {
+      const next = new URLSearchParams();
+      next.set('from', dayjs().subtract(30, 'day').format(DATE_FORMAT));
+      next.set('to', dayjs().format(DATE_FORMAT));
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const query = useMemo(() => {
+    const from = searchParams.get('from') || searchParams.get('fromDate');
+    const to = searchParams.get('to') || searchParams.get('toDate');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const size = parseInt(searchParams.get('size') || String(DEFAULT_PAGE_SIZE), 10);
+    const status = searchParams.get('status') || undefined;
+    const voucher = searchParams.get('voucher') || searchParams.get('voucherNo') || undefined;
+    return {
+      from: from && dayjs(from, DATE_FORMAT, true).isValid() ? from : undefined,
+      to: to && dayjs(to, DATE_FORMAT, true).isValid() ? to : undefined,
+      status: status as ProductionStatus | undefined,
+      voucher,
+      page: Number.isFinite(page) && page > 0 ? page : 1,
+      size: Number.isFinite(size) && size > 0 ? Math.min(size, 200) : DEFAULT_PAGE_SIZE,
+    };
+  }, [searchParams]);
+
+  useEffect(() => {
+    setVoucherDraft(query.voucher || '');
+  }, [query.voucher]);
+
+  const fetchData = async () => {
+    if (searchParams.toString() === '') return;
     try {
       setLoading(true);
       const filter = {
-        fromDate: dates ? dates[0].format('YYYY-MM-DD') : undefined,
-        toDate: dates ? dates[1].format('YYYY-MM-DD') : undefined,
-        status: statusFilter,
-        voucherNo: voucherNoFilter.trim() || undefined
+        fromDate: query.from,
+        toDate: query.to,
+        status: query.status,
+        voucherNo: query.voucher,
+        pageNumber: query.page,
+        pageSize: query.size
       };
       const result = await manufacturingService.getList(filter);
-      setData(result);
+      setData(result.data);
+      setTotalCount(result.totalCount);
     } catch (error) {
       message.error('Failed to fetch manufacturing vouchers');
     } finally {
       setLoading(false);
     }
-  }, [dates, statusFilter, voucherNoFilter]);
+  };
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, searchParams]);
+
+  const updateParam = (key: string, value: string | undefined) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) {
+      next.set(key, value);
+    } else {
+      next.delete(key);
+    }
+    next.delete('page'); // return to page 1 on filter changes
+    setSearchParams(next);
+  };
+
+  const handleDateChange = (vals: any) => {
+    const next = new URLSearchParams(searchParams);
+    if (vals?.[0] && vals?.[1]) {
+      next.set('from', vals[0].format(DATE_FORMAT));
+      next.set('to', vals[1].format(DATE_FORMAT));
+    } else {
+      next.delete('from');
+      next.delete('to');
+    }
+    next.delete('page');
+    setSearchParams(next);
+  };
+
+  const handleReset = () => {
+    const next = new URLSearchParams();
+    next.set('from', dayjs().subtract(30, 'day').format(DATE_FORMAT));
+    next.set('to', dayjs().format(DATE_FORMAT));
+    setSearchParams(next);
+  };
+
+  const handleTableChange = (page: number, size: number) => {
+    const next = new URLSearchParams(searchParams);
+    if (size !== query.size) page = 1;
+    if (page > 1) next.set('page', String(page)); else next.delete('page');
+    if (size !== DEFAULT_PAGE_SIZE) next.set('size', String(size)); else next.delete('size');
+    setSearchParams(next);
+  };
 
   const handleStatusChange = async (voucherNo: string, newStatus: ProductionStatus) => {
     try {
@@ -206,30 +289,30 @@ export const ManufacturingList: React.FC = () => {
               </Tooltip>
             )}
 
-          <Tooltip title="View / Edit Voucher">
-            <Button
-              type="text"
-              icon={<EditOutlined style={{ color: '#1677ff' }} />}
-              onClick={() => navigate(`/daily-entries/manufacturing/${record.voucherNo}`)}
-            />
-          </Tooltip>
+            <Tooltip title="View / Edit Voucher">
+              <Button
+                type="text"
+                icon={<EditOutlined style={{ color: '#1677ff' }} />}
+                onClick={() => navigate(`/daily-entries/manufacturing/${record.voucherNo}`)}
+              />
+            </Tooltip>
 
-          <Tooltip title="Delete Voucher">
-            <Popconfirm
-              title="Delete Manufacturing Voucher"
-              description="Are you sure you want to delete this voucher? Inventory and accounting transactions will be reverted."
-              onConfirm={() => handleDelete(record.voucherNo)}
-              okText="Yes"
-              cancelText="No"
-            >
-              <Button type="text" danger icon={<DeleteOutlined />} />
-            </Popconfirm>
-          </Tooltip>
-        </Space>
-      );
+            <Tooltip title="Delete Voucher">
+              <Popconfirm
+                title="Delete Manufacturing Voucher"
+                description="Are you sure you want to delete this voucher? Inventory and accounting transactions will be reverted."
+                onConfirm={() => handleDelete(record.voucherNo)}
+                okText="Yes"
+                cancelText="No"
+              >
+                <Button type="text" danger icon={<DeleteOutlined />} />
+              </Popconfirm>
+            </Tooltip>
+          </Space>
+        );
+      }
     }
-  }
-];
+  ];
 
   return (
     <div style={{ padding: '24px' }}>
@@ -247,14 +330,14 @@ export const ManufacturingList: React.FC = () => {
           <Col>
             <Space wrap>
               <RangePicker
-                value={dates}
-                onChange={(vals) => setDates(vals as any)}
+                value={query.from && query.to ? [dayjs(query.from), dayjs(query.to)] : null}
+                onChange={handleDateChange}
                 format="DD/MM/YYYY"
               />
               <Select
                 placeholder="All Statuses"
-                value={statusFilter}
-                onChange={setStatusFilter}
+                value={query.status}
+                onChange={(val) => updateParam('status', val != null ? String(val) : undefined)}
                 allowClear
                 style={{ width: 150 }}
               >
@@ -266,13 +349,14 @@ export const ManufacturingList: React.FC = () => {
               <Input
                 placeholder="Voucher #"
                 prefix={<SearchOutlined />}
-                value={voucherNoFilter}
-                onChange={(e) => setVoucherNoFilter(e.target.value)}
-                onPressEnter={fetchData}
+                value={voucherDraft}
+                onChange={(e) => setVoucherDraft(e.target.value)}
+                onPressEnter={() => updateParam('voucher', voucherDraft.trim() || undefined)}
+                onBlur={() => updateParam('voucher', voucherDraft.trim() || undefined)}
                 style={{ width: 130 }}
                 allowClear
               />
-              <Button icon={<ReloadOutlined />} onClick={fetchData}>Refresh</Button>
+              <Button icon={<ReloadOutlined />} onClick={handleReset}>Reset</Button>
               <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/daily-entries/manufacturing/new')}>
                 New Production Run (F1)
               </Button>
@@ -285,7 +369,15 @@ export const ManufacturingList: React.FC = () => {
           columns={columns}
           rowKey="id"
           loading={loading}
-          pagination={{ pageSize: 15, showTotal: (total) => `Total ${total} production runs` }}
+          pagination={{
+            current: query.page,
+            pageSize: query.size,
+            total: totalCount,
+            showSizeChanger: true,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} production runs`,
+            onChange: handleTableChange,
+          }}
           bordered
           size="middle"
         />
