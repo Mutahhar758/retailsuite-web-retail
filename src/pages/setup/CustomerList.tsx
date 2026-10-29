@@ -1,36 +1,71 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
   Input, Tooltip, Avatar, Divider
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, ReloadOutlined, 
-  UserOutlined, SearchOutlined, PhoneOutlined, MailOutlined, FileExcelOutlined
+  UserOutlined, PhoneOutlined, MailOutlined, FileExcelOutlined
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { customerService, type CustomerResponse } from '../../services/customerService';
 import { BulkOperationModal } from '../../components/bulk/BulkOperationModal';
 
 const { Title, Text } = Typography;
 
+const DEFAULT_PAGE_SIZE = 20;
+
 export const CustomerList: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<CustomerResponse[]>([]);
-  const [searchText, setSearchText] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
   const [bulkModalVisible, setBulkModalVisible] = useState(false);
   const navigate = useNavigate();
+
+  const query = useMemo(() => {
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const size = parseInt(searchParams.get('size') || String(DEFAULT_PAGE_SIZE), 10);
+    const search = searchParams.get('search') || '';
+    return {
+      page: Number.isNaN(page) || page < 1 ? 1 : page,
+      size: Number.isNaN(size) || size < 1 ? DEFAULT_PAGE_SIZE : size,
+      search,
+    };
+  }, [searchParams]);
+
+  const [searchDraft, setSearchDraft] = useState(query.search);
+  useEffect(() => {
+    setSearchDraft(query.search);
+  }, [query.search]);
+
+  const updateQuery = useCallback((patch: Partial<{ page: number; size: number; search: string }>) => {
+    const next = new URLSearchParams(searchParams);
+    if (patch.page !== undefined) next.set('page', String(patch.page));
+    if (patch.size !== undefined) next.set('size', String(patch.size));
+    if (patch.search !== undefined) {
+      if (patch.search) next.set('search', patch.search);
+      else next.delete('search');
+    }
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await customerService.getCustomers();
-      setData(result);
+      const result = await customerService.getPagedCustomers({
+        pageNumber: query.page,
+        pageSize: query.size,
+        search: query.search || undefined,
+      });
+      setData(result.data);
+      setTotalCount(result.totalCount);
     } catch (error) {
       message.error('Failed to fetch customers');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [query.page, query.size, query.search]);
 
   useEffect(() => {
     fetchData();
@@ -43,15 +78,6 @@ export const CustomerList: React.FC = () => {
   const handleEdit = (record: CustomerResponse) => {
     navigate(`/setup/customers/${record.account}`);
   };
-
-  const filteredData = data.filter(customer => 
-    customer.title.toLowerCase().includes(searchText.toLowerCase()) ||
-    customer.account.toLowerCase().includes(searchText.toLowerCase()) ||
-    (customer.phone1 && customer.phone1.toLowerCase().includes(searchText.toLowerCase())) ||
-    (customer.email && customer.email.toLowerCase().includes(searchText.toLowerCase())) ||
-    (customer.cnic && customer.cnic.toLowerCase().includes(searchText.toLowerCase())) ||
-    (customer.parentCustomerTitle && customer.parentCustomerTitle.toLowerCase().includes(searchText.toLowerCase()))
-  );
 
   const columns = [
     {
@@ -183,11 +209,11 @@ export const CustomerList: React.FC = () => {
           </div>
         </Space>
         <Space>
-          <Input
+          <Input.Search
             placeholder="Search customers..."
-            prefix={<SearchOutlined className="text-gray-400" />}
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
+            value={searchDraft}
+            onChange={e => setSearchDraft(e.target.value)}
+            onSearch={val => updateQuery({ search: val.trim(), page: 1 })}
             style={{ width: 250 }}
             allowClear
           />
@@ -218,13 +244,17 @@ export const CustomerList: React.FC = () => {
 
       <Table 
         columns={columns} 
-        dataSource={filteredData} 
+        dataSource={data} 
         loading={loading}
         rowKey="account"
         pagination={{ 
-          pageSize: 10,
+          current: query.page,
+          pageSize: query.size,
+          total: totalCount,
           showSizeChanger: true,
-          showTotal: (total) => `Total ${total} customers`
+          pageSizeOptions: ['10', '20', '50', '100'],
+          showTotal: (total) => `Total ${total} customers`,
+          onChange: (page, size) => updateQuery({ page, size }),
         }}
         className="border border-gray-100 rounded-lg overflow-hidden"
         scroll={{ x: 900 }}

@@ -61,10 +61,33 @@ export interface VendorUpdateRequest {
   mediaId?: string;
 }
 
+export interface PaginatedVendors {
+  data: VendorResponse[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+}
+
+export interface VendorListParams {
+  pageNumber?: number;
+  pageSize?: number;
+  search?: string;
+  active?: boolean;
+  showInSales?: boolean;
+}
+
 export const vendorService = {
   async getVendors() {
     const response = await api.get('/api/vendors');
     return response.data.body as VendorResponse[];
+  },
+
+  async getPagedVendors(params?: VendorListParams) {
+    const response = await api.get('/api/vendors/paged', { params });
+    return response.data.body as PaginatedVendors;
   },
 
   async create(data: VendorCreateRequest) {

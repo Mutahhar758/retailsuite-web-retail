@@ -79,7 +79,31 @@ export interface Unit {
   conversionRatio?: number | null;
 }
 
+export interface PaginatedItems {
+  data: Item[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+}
+
+export interface ItemListParams {
+  pageNumber?: number;
+  pageSize?: number;
+  search?: string;
+  itemCategoryCode?: string;
+  brandId?: string;
+  itemType?: string;
+}
+
 export const inventoryService = {
+  async getPagedItems(params?: ItemListParams) {
+    const response = await api.get('/api/inventory/items/paged', { params });
+    return response.data.body as PaginatedItems;
+  },
+
   async getItems(categoryCode?: string) {
     const response = await api.get('/api/inventory/items', { params: { itemCategoryCode: categoryCode } });
     return response.data.body as Item[];

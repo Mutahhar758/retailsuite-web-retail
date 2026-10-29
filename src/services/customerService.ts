@@ -85,10 +85,33 @@ export interface CustomerUpdateRequest {
   supplyItems?: CustomerSupplyItemDto[];
 }
 
+export interface PaginatedCustomers {
+  data: CustomerResponse[];
+  totalCount: number;
+  currentPage: number;
+  pageSize: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+}
+
+export interface CustomerListParams {
+  pageNumber?: number;
+  pageSize?: number;
+  search?: string;
+  customerCategoryId?: string;
+  active?: boolean;
+}
+
 export const customerService = {
   async getCustomers() {
     const response = await api.get('/api/customers');
     return response.data.body as CustomerResponse[];
+  },
+
+  async getPagedCustomers(params?: CustomerListParams) {
+    const response = await api.get('/api/customers/paged', { params });
+    return response.data.body as PaginatedCustomers;
   },
 
   async create(data: CustomerCreateRequest) {

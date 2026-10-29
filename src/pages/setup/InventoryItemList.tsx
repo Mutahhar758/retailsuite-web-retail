@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Table, Card, Button, Space, Typography, Tag, message, 
   Input, Popconfirm, Tooltip, Dropdown
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, 
-  ReloadOutlined, ShoppingOutlined, SearchOutlined, BarcodeOutlined, FileExcelOutlined,
+  ReloadOutlined, ShoppingOutlined, BarcodeOutlined, FileExcelOutlined,
   DownOutlined, DatabaseOutlined, CheckSquareOutlined
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCategoryService';
 import { unitService, type UnitDto } from '../../services/unitService';
@@ -16,12 +16,15 @@ import { BulkOperationModal, mapProductToBulkRow } from '../../components/bulk/B
 
 const { Title, Text } = Typography;
 
+const DEFAULT_PAGE_SIZE = 20;
+
 export const InventoryItemList: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<Item[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [categories, setCategories] = useState<ItemCategoryDto[]>([]);
   const [units, setUnits] = useState<UnitDto[]>([]);
-  const [searchText, setSearchText] = useState('');
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [bulkModalState, setBulkModalState] = useState<{
     visible: boolean;
@@ -30,15 +33,47 @@ export const InventoryItemList: React.FC = () => {
   }>({ visible: false });
   const navigate = useNavigate();
 
+  const query = useMemo(() => {
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const size = parseInt(searchParams.get('size') || String(DEFAULT_PAGE_SIZE), 10);
+    const search = searchParams.get('search') || '';
+    return {
+      page: Number.isNaN(page) || page < 1 ? 1 : page,
+      size: Number.isNaN(size) || size < 1 ? DEFAULT_PAGE_SIZE : size,
+      search,
+    };
+  }, [searchParams]);
+
+  const [searchDraft, setSearchDraft] = useState(query.search);
+  useEffect(() => {
+    setSearchDraft(query.search);
+  }, [query.search]);
+
+  const updateQuery = useCallback((patch: Partial<{ page: number; size: number; search: string }>) => {
+    const next = new URLSearchParams(searchParams);
+    if (patch.page !== undefined) next.set('page', String(patch.page));
+    if (patch.size !== undefined) next.set('size', String(patch.size));
+    if (patch.search !== undefined) {
+      if (patch.search) next.set('search', patch.search);
+      else next.delete('search');
+    }
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [itemsResult, categoriesResult, unitsResult] = await Promise.all([
-        inventoryService.getItems(),
+        inventoryService.getPagedItems({
+          pageNumber: query.page,
+          pageSize: query.size,
+          search: query.search || undefined,
+        }),
         itemCategoryService.getActiveItemCategories(),
         unitService.getActiveUnits(),
       ]);
-      setData(itemsResult);
+      setData(itemsResult.data);
+      setTotalCount(itemsResult.totalCount);
       setCategories(categoriesResult);
       setUnits(unitsResult);
     } catch (error) {
@@ -46,7 +81,7 @@ export const InventoryItemList: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [query.page, query.size, query.search]);
 
   useEffect(() => {
     fetchData();
@@ -76,14 +111,6 @@ export const InventoryItemList: React.FC = () => {
     if (unit) return unit.title;
     return isNaN(Number(code)) ? code : '-';
   };
-
-  const filteredData = data.filter(item => 
-    item.title.toLowerCase().includes(searchText.toLowerCase()) ||
-    item.id.toLowerCase().includes(searchText.toLowerCase()) ||
-    item.barcode?.toLowerCase().includes(searchText.toLowerCase()) ||
-    item.brandTitle?.toLowerCase().includes(searchText.toLowerCase()) ||
-    item.modelName?.toLowerCase().includes(searchText.toLowerCase())
-  );
 
   const columns = [
     {
@@ -238,7 +265,7 @@ export const InventoryItemList: React.FC = () => {
     } else if (mode === 'filtered') {
       setBulkModalState({
         visible: true,
-        initialRows: filteredData.map(mapProductToBulkRow),
+        initialRows: data.map(mapProductToBulkRow),
       });
     } else if (mode === 'populateAll') {
       setBulkModalState({
@@ -263,11 +290,11 @@ export const InventoryItemList: React.FC = () => {
           </div>
         </Space>
         <Space>
-          <Input
+          <Input.Search
             placeholder="Search products/services..."
-            prefix={<SearchOutlined className="text-gray-400" />}
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
+            value={searchDraft}
+            onChange={e => setSearchDraft(e.target.value)}
+            onSearch={val => updateQuery({ search: val.trim(), page: 1 })}
             style={{ width: 250 }}
             allowClear
           />
@@ -294,20 +321,10 @@ export const InventoryItemList: React.FC = () => {
               items: [
                 {
                   key: 'populateAll',
-                  label: `Bulk Update All Products (${data.length})`,
+                  label: `Bulk Update All Products (${totalCount})`,
                   icon: <DatabaseOutlined />,
                   onClick: () => handleOpenBulkModal('populateAll'),
                 },
-                ...(searchText && filteredData.length !== data.length
-                  ? [
-                      {
-                        key: 'filtered',
-                        label: `Bulk Update Filtered (${filteredData.length})`,
-                        icon: <SearchOutlined />,
-                        onClick: () => handleOpenBulkModal('filtered'),
-                      },
-                    ]
-                  : []),
                 ...(selectedRowKeys.length > 0
                   ? [
                       {
@@ -347,14 +364,22 @@ export const InventoryItemList: React.FC = () => {
 
       <Table 
         columns={columns} 
-        dataSource={filteredData} 
+        dataSource={data} 
         loading={loading}
         rowKey="id"
         rowSelection={{
           selectedRowKeys,
           onChange: (keys) => setSelectedRowKeys(keys),
         }}
-        pagination={{ pageSize: 10 }}
+        pagination={{ 
+          current: query.page,
+          pageSize: query.size,
+          total: totalCount,
+          showSizeChanger: true,
+          pageSizeOptions: ['10', '20', '50', '100'],
+          showTotal: (total) => `Total ${total} products`,
+          onChange: (page, size) => updateQuery({ page, size }),
+        }}
         className="border border-gray-100 rounded-lg overflow-hidden"
       />
 
