@@ -87,7 +87,16 @@ export const vendorService = {
 
   async getPagedVendors(params?: VendorListParams) {
     const response = await api.get('/api/vendors/paged', { params });
-    return response.data.body as PaginatedVendors;
+    const body = response.data?.body;
+    return {
+      data: (body?.data ?? []) as VendorResponse[],
+      totalCount: (body?.metadata?.totalCount ?? body?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? body?.currentPage ?? params?.pageNumber ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? body?.pageSize ?? params?.pageSize ?? 20) as number,
+      totalPages: (body?.metadata?.totalPages ?? body?.totalPages ?? 1) as number,
+      hasPreviousPage: (body?.metadata?.hasPreviousPage ?? false) as boolean,
+      hasNextPage: (body?.metadata?.hasNextPage ?? false) as boolean,
+    } as PaginatedVendors;
   },
 
   async create(data: VendorCreateRequest) {

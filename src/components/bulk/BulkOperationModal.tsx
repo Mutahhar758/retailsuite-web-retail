@@ -18,6 +18,8 @@ import { hrInfoService, type HRInfoBulkItemDto } from '../../services/hrInfoServ
 import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCategoryService';
 import { unitService, type UnitDto } from '../../services/unitService';
 import { brandService, type BrandLookupDto } from '../../services/brandService';
+import { customerCategoryService, type CustomerCategoryLookupResponse } from '../../services/customerCategoryService';
+import type { ItemCustomerCategoryPriceDto } from '../../services/inventoryService';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -71,8 +73,18 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
   const [categories, setCategories] = useState<ItemCategoryDto[]>([]);
   const [units, setUnits] = useState<UnitDto[]>([]);
   const [brands, setBrands] = useState<BrandLookupDto[]>([]);
+  const [customerCategories, setCustomerCategories] = useState<CustomerCategoryLookupResponse[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevVisibleRef = useRef(false);
+  const rowsRef = useRef<any[]>([]);
+  rowsRef.current = rows;
+  const categoriesRef = useRef<ItemCategoryDto[]>([]);
+  categoriesRef.current = categories;
+  const unitsRef = useRef<UnitDto[]>([]);
+  unitsRef.current = units;
+  const customerCategoriesRef = useRef<CustomerCategoryLookupResponse[]>([]);
+  customerCategoriesRef.current = customerCategories;
 
   // Load lookups when modal opens if products
   useEffect(() => {
@@ -80,11 +92,13 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       Promise.all([
         itemCategoryService.getActiveItemCategories().catch(() => []),
         unitService.getActiveUnits().catch(() => []),
-        brandService.getActiveBrands().catch(() => [])
-      ]).then(([cat, un, br]) => {
+        brandService.getActiveBrands().catch(() => []),
+        customerCategoryService.getLookup().catch(() => [])
+      ]).then(([cat, un, br, cc]) => {
         setCategories(cat);
         setUnits(un);
         setBrands(br);
+        setCustomerCategories(cc);
       });
     }
   }, [visible, entityType]);
@@ -122,13 +136,15 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           sampleHeaders: [
             'Id', 'Type', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId',
             'PrimaryUnit', 'SecondaryUnit', 'QtyInPack', 'PriRate',
-            'SecRate', 'OpnStock', 'OpnRate'
+            'SecRate',
+            ...customerCategories.map(c => `Rate_${c.code}`),
+            'OpnStock', 'OpnRate'
           ],
           sampleData: [
-            ['', 'Product', '', '01', 'Cooking Oil 1L', '', 'PCS', '', '1', '450', '450', '50', '380'],
-            ['', 'Product', '', '01', 'Basmati Rice 5kg', '', 'KG', '', '1', '1200', '1200', '100', '1050'],
-            ['', 'Service', '', '02', 'General Service / Labor', '', '', '', '1', '500', '0', '0', '0'],
-            ['000001', 'Product', '1000001', '01', 'Sugar 1kg Pack', '', 'KG', '', '1', '150', '150', '0', '0']
+            ['', 'Product', '', '01', 'Cooking Oil 1L', '', 'PCS', '', '1', '450', '450', ...customerCategories.map(() => '420'), '50', '380'],
+            ['', 'Product', '', '01', 'Basmati Rice 5kg', '', 'KG', '', '1', '1200', '1200', ...customerCategories.map(() => '1150'), '100', '1050'],
+            ['', 'Service', '', '02', 'General Service / Labor', '', '', '', '1', '500', '0', ...customerCategories.map(() => '0'), '0', '0'],
+            ['000001', 'Product', '1000001', '01', 'Sugar 1kg Pack', '', 'KG', '', '1', '150', '150', ...customerCategories.map(() => '140'), '0', '0']
           ]
         };
       case 'employees':
@@ -143,7 +159,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           ]
         };
     }
-  }, [entityType]);
+  }, [entityType, customerCategories]);
 
   // Populate existing data handler
   const handlePopulateExisting = useCallback(async (categoryCode?: string) => {
@@ -151,8 +167,21 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       setPopulating(true);
       let newRows: any[] = [];
       if (entityType === 'products') {
-        const list = await inventoryService.getItems(categoryCode);
-        newRows = list.map(mapProductToBulkRow);
+        const [list, catPrices] = await Promise.all([
+          inventoryService.getItems(categoryCode),
+          inventoryService.getCustomerCategoryPrices().catch(() => [])
+        ]);
+        const priceMap = new Map<string, number>();
+        catPrices.forEach((cp: ItemCustomerCategoryPriceDto) => {
+          priceMap.set(`${cp.itemId}_${cp.customerCategoryId}`, cp.priRate);
+        });
+        newRows = list.map(p => {
+          const row: any = mapProductToBulkRow(p);
+          customerCategories.forEach(cc => {
+            row[`catRate_${cc.code}`] = priceMap.get(`${p.id}_${cc.code}`) ?? 0;
+          });
+          return row;
+        });
       } else if (entityType === 'customers') {
         const list = await customerService.getCustomers();
         newRows = list.map(c => ({
@@ -212,10 +241,10 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
         message.success(`Populated ${newRows.length} ${entityMeta.title} for bulk update`);
       };
 
-      if (rows.length > 0) {
+      if (rowsRef.current.length > 0) {
         Modal.confirm({
           title: 'Existing Data in Grid',
-          content: `There are currently ${rows.length} row(s) in the table. Would you like to Replace them or Append the loaded data?`,
+          content: `There are currently ${rowsRef.current.length} row(s) in the table. Would you like to Replace them or Append the loaded data?`,
           okText: 'Replace All',
           cancelText: 'Append New',
           onOk: () => applyRows('replace'),
@@ -232,11 +261,11 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
     } finally {
       setPopulating(false);
     }
-  }, [entityType, entityMeta.idField, entityMeta.title, rows.length]);
+  }, [entityType, entityMeta.idField, entityMeta.title, customerCategories]);
 
   // Reset or initialize state when entityType changes or modal opens
   useEffect(() => {
-    if (visible) {
+    if (visible && !prevVisibleRef.current) {
       if (initialRows && initialRows.length > 0) {
         setRows(initialRows);
       } else if (autoPopulate) {
@@ -248,7 +277,8 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       setSearchQuery('');
       setPasteText('');
     }
-  }, [visible, entityType, initialRows, autoPopulate, handlePopulateExisting]);
+    prevVisibleRef.current = visible;
+  }, [visible, entityType, initialRows, autoPopulate]);
 
   // Row validation logic
   const validateRow = useCallback((row: any) => {
@@ -344,6 +374,9 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       newRow.secRate = 0;
       newRow.opnStock = 0;
       newRow.opnRate = 0;
+      customerCategories.forEach(cc => {
+        newRow[`catRate_${cc.code}`] = 0;
+      });
     } else if (entityType === 'employees') {
       newRow.name = '';
       newRow.gender = 'Male';
@@ -387,11 +420,25 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           v.cnic || '', v.address || '', v.showInSales ? 'true' : 'false', v.active ? 'true' : 'false'
         ]);
       } else if (entityType === 'products') {
-        const list = await inventoryService.getItems();
-        headers = ['Id', 'Type', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId', 'PrimaryUnit', 'SecondaryUnit', 'QtyInPack', 'PriRate', 'SecRate', 'OpnStock', 'OpnRate'];
+        const [list, catPrices] = await Promise.all([
+          inventoryService.getItems(),
+          inventoryService.getCustomerCategoryPrices().catch(() => [])
+        ]);
+        const priceMap = new Map<string, number>();
+        catPrices.forEach((cp: ItemCustomerCategoryPriceDto) => {
+          priceMap.set(`${cp.itemId}_${cp.customerCategoryId}`, cp.priRate);
+        });
+        const catHeaders = customerCategories.map(c => `Rate_${c.code}`);
+        headers = [
+          'Id', 'Type', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId',
+          'PrimaryUnit', 'SecondaryUnit', 'QtyInPack', 'PriRate', 'SecRate',
+          ...catHeaders,
+          'OpnStock', 'OpnRate'
+        ];
         dataRows = list.map(p => [
           p.id, p.itemType || 'Product', p.barcode || '', p.itemCategoryCode || '', p.title, p.brandId || '',
           p.primaryUnit || '', p.secondaryUnit || '', p.qtyInPack ?? 1, p.priRate, p.secRate,
+          ...customerCategories.map(c => priceMap.get(`${p.id}_${c.code}`) ?? 0),
           p.itemType === 'Service' ? 0 : (p.opnStock ?? 0), p.itemType === 'Service' ? 0 : (p.opnRate ?? 0)
         ]);
       } else if (entityType === 'employees') {
@@ -451,21 +498,68 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           rowObj.qualification = val;
         } else if (h === 'barcode') {
           rowObj.barcode = val;
-        } else if (h === 'itemcategorycode' || h === 'categorycode' || h === 'category') {
-          rowObj.itemCategoryCode = val;
-        } else if (h === 'primaryunit' || h === 'unit' || h === 'punit') {
-          rowObj.primaryUnit = val;
+        } else if (
+          h === 'itemcategorycode' ||
+          h === 'categorycode' ||
+          h === 'category' ||
+          h === 'standardcategory' ||
+          h === 'itemcategory' ||
+          h === 'productcategory' ||
+          h === 'categoryname' ||
+          h === 'itemcategorytitle'
+        ) {
+          const valTrim = val.trim();
+          const matchedCat = categoriesRef.current.find(
+            c => c.code.trim().toLowerCase() === valTrim.toLowerCase() ||
+                 c.title.trim().toLowerCase() === valTrim.toLowerCase()
+          );
+          rowObj.itemCategoryCode = matchedCat ? matchedCat.code : valTrim;
+        } else if (
+          h === 'primaryunit' ||
+          h === 'unit' ||
+          h === 'punit' ||
+          h === 'unitname' ||
+          h === 'unittitle' ||
+          h === 'uom'
+        ) {
+          const valTrim = val.trim();
+          const matchedUnit = unitsRef.current.find(
+            u => u.code.trim().toLowerCase() === valTrim.toLowerCase() ||
+                 u.title.trim().toLowerCase() === valTrim.toLowerCase() ||
+                 (u.shortTitle && u.shortTitle.trim().toLowerCase() === valTrim.toLowerCase())
+          );
+          rowObj.primaryUnit = matchedUnit ? matchedUnit.code : valTrim;
         } else if (h === 'secondaryunit' || h === 'sunit') {
           rowObj.secondaryUnit = val;
         } else if (h === 'qtyinpack' || h === 'packqty' || h === 'pack') {
           rowObj.qtyInPack = parseFloat(val) || 1;
-        } else if (h === 'prirate' || h === 'rate' || h === 'price' || h === 'saleprice') {
+        } else if (
+          h === 'prirate' ||
+          h === 'rate' ||
+          h === 'price' ||
+          h === 'saleprice' ||
+          h === 'retail' ||
+          h === 'retailprice' ||
+          h === 'retailrate'
+        ) {
           rowObj.priRate = parseFloat(val) || 0;
+          if (rowObj.secRate === undefined || rowObj.secRate === 0) {
+            rowObj.secRate = rowObj.priRate;
+          }
         } else if (h === 'secrate' || h === 'unitrate') {
           rowObj.secRate = parseFloat(val) || 0;
         } else if (h === 'opnstock' || h === 'openingstock' || h === 'stock' || h === 'qty') {
           rowObj.opnStock = parseFloat(val) || 0;
-        } else if (h === 'opnrate' || h === 'openingrate' || h === 'cost' || h === 'costrate') {
+        } else if (
+          h === 'opnrate' ||
+          h === 'openingrate' ||
+          h === 'cost' ||
+          h === 'costrate' ||
+          h === 'costprice' ||
+          h === 'purchaserate' ||
+          h === 'purchaseprice' ||
+          h === 'purrate'
+        ) {
           rowObj.opnRate = parseFloat(val) || 0;
         } else if (h === 'fathername') {
           rowObj.fatherName = val;
@@ -485,8 +579,43 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           rowObj.active = val.toLowerCase() !== 'false' && val !== '0';
         } else if (h === 'showinsales') {
           rowObj.showInSales = val.toLowerCase() === 'true' || val === '1';
+        } else {
+          for (const cc of customerCategoriesRef.current) {
+            const codeNorm = cc.code.toLowerCase().replace(/[\s_-]/g, '');
+            const titleNorm = cc.title.toLowerCase().replace(/[\s_-]/g, '');
+            const isMatch =
+              h === codeNorm ||
+              h === titleNorm ||
+              h === `rate${codeNorm}` ||
+              h === `rate(${codeNorm})` ||
+              h === `rate${titleNorm}` ||
+              h === `rate(${titleNorm})` ||
+              h === `${titleNorm}rate` ||
+              h === `${titleNorm}price` ||
+              h === `${codeNorm}rate` ||
+              h === `${codeNorm}price` ||
+              h.includes(`(${titleNorm})`) ||
+              h.includes(`(${codeNorm})`) ||
+              (titleNorm.length >= 4 && (h.includes(titleNorm) || titleNorm.includes(h))) ||
+              (titleNorm.startsWith('distribut') && h.startsWith('distribut')) ||
+              (titleNorm.startsWith('whole') && h.startsWith('whole'));
+
+            if (isMatch) {
+              rowObj[`catRate_${cc.code}`] = parseFloat(val) || 0;
+              break;
+            }
+          }
         }
       });
+
+      if (!rowObj.itemType) rowObj.itemType = 'Product';
+      if (!rowObj.qtyInPack) rowObj.qtyInPack = 1;
+      if (rowObj.priRate !== undefined && (!rowObj.secRate || rowObj.secRate === 0)) {
+        rowObj.secRate = rowObj.priRate;
+      }
+      if (rowObj.opnStock === undefined) rowObj.opnStock = 0;
+      if (rowObj.opnRate === undefined) rowObj.opnRate = 0;
+
       return rowObj;
     });
 
@@ -584,6 +713,14 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       } else if (entityType === 'products') {
         const payload: InventoryItemBulkItemDto[] = validRows.map(r => {
           const isService = r.itemType === 'Service';
+          const customerCategoryPrices = customerCategories
+            .filter(cc => r[`catRate_${cc.code}`] !== undefined)
+            .map(cc => ({
+              customerCategoryId: cc.code,
+              priRate: Number(r[`catRate_${cc.code}`]) || 0,
+              secRate: 0
+            }));
+
           return {
             id: r.id?.trim() || undefined,
             itemType: isService ? 'Service' : 'Product',
@@ -597,7 +734,8 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
             priRate: r.priRate ? Number(r.priRate) : 0,
             secRate: isService ? 0 : (r.secRate ? Number(r.secRate) : 0),
             opnStock: isService ? 0 : (r.opnStock ? Number(r.opnStock) : 0),
-            opnRate: isService ? 0 : (r.opnRate ? Number(r.opnRate) : 0)
+            opnRate: isService ? 0 : (r.opnRate ? Number(r.opnRate) : 0),
+            customerCategoryPrices: customerCategoryPrices.length > 0 ? customerCategoryPrices : undefined
           };
         });
         result = await inventoryService.bulkUpsert({ items: payload });
@@ -1074,6 +1212,26 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
             );
           }
         },
+        ...customerCategories.map(cc => ({
+          title: (
+            <span>
+              Rate <Tag color="cyan" style={{ margin: 0, fontSize: 11 }}>{cc.title}</Tag>
+            </span>
+          ),
+          dataIndex: `catRate_${cc.code}`,
+          key: `catRate_${cc.code}`,
+          width: 125,
+          render: (val: number, record: any) => (
+            <InputNumber
+              value={val}
+              size="small"
+              min={0}
+              placeholder="0"
+              style={{ width: '100%' }}
+              onChange={v => handleCellChange(record._key, `catRate_${cc.code}`, v ?? 0)}
+            />
+          )
+        })),
         {
           title: 'Opn Stock',
           dataIndex: 'opnStock',
@@ -1292,7 +1450,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
     });
 
     return baseCols;
-  }, [entityType, categories, units, brands]);
+  }, [entityType, categories, units, brands, customerCategories]);
 
   return (
     <>

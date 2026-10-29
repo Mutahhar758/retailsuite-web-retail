@@ -111,7 +111,16 @@ export const customerService = {
 
   async getPagedCustomers(params?: CustomerListParams) {
     const response = await api.get('/api/customers/paged', { params });
-    return response.data.body as PaginatedCustomers;
+    const body = response.data?.body;
+    return {
+      data: (body?.data ?? []) as CustomerResponse[],
+      totalCount: (body?.metadata?.totalCount ?? body?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? body?.currentPage ?? params?.pageNumber ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? body?.pageSize ?? params?.pageSize ?? 20) as number,
+      totalPages: (body?.metadata?.totalPages ?? body?.totalPages ?? 1) as number,
+      hasPreviousPage: (body?.metadata?.hasPreviousPage ?? false) as boolean,
+      hasNextPage: (body?.metadata?.hasNextPage ?? false) as boolean,
+    } as PaginatedCustomers;
   },
 
   async create(data: CustomerCreateRequest) {

@@ -38,6 +38,7 @@ export interface Item {
   storage?: string;
   ram?: string;
   color?: string;
+  customerCategoryPrices?: ItemCustomerCategoryPriceUpsertRequest[];
 }
 
 export interface InventoryItemUpsertRequest {
@@ -68,6 +69,7 @@ export interface InventoryItemUpsertRequest {
   storage?: string;
   ram?: string;
   color?: string;
+  customerCategoryPrices?: ItemCustomerCategoryPriceUpsertRequest[];
 }
 
 export interface Unit {
@@ -101,7 +103,16 @@ export interface ItemListParams {
 export const inventoryService = {
   async getPagedItems(params?: ItemListParams) {
     const response = await api.get('/api/inventory/items/paged', { params });
-    return response.data.body as PaginatedItems;
+    const body = response.data?.body;
+    return {
+      data: (body?.data ?? []) as Item[],
+      totalCount: (body?.metadata?.totalCount ?? body?.totalCount ?? 0) as number,
+      currentPage: (body?.metadata?.currentPage ?? body?.currentPage ?? params?.pageNumber ?? 1) as number,
+      pageSize: (body?.metadata?.pageSize ?? body?.pageSize ?? params?.pageSize ?? 20) as number,
+      totalPages: (body?.metadata?.totalPages ?? body?.totalPages ?? 1) as number,
+      hasPreviousPage: (body?.metadata?.hasPreviousPage ?? false) as boolean,
+      hasNextPage: (body?.metadata?.hasNextPage ?? false) as boolean,
+    } as PaginatedItems;
   },
 
   async getItems(categoryCode?: string) {
@@ -217,6 +228,7 @@ export interface InventoryItemBulkItemDto {
   storage?: string;
   ram?: string;
   color?: string;
+  customerCategoryPrices?: ItemCustomerCategoryPriceUpsertRequest[];
 }
 
 export interface InventoryItemBulkUpsertRequest {
