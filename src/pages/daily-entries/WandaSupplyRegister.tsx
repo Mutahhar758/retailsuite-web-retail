@@ -191,7 +191,7 @@ export const WandaSupplyRegister: React.FC = () => {
       await saleSupplyService.updateLine(record.voucherNo, record.seq, {
         seq: record.seq,
         customerId: record.customerId,
-        unit: record.unit || 'Kg',
+        unit: record.unit || null,
         qty: record.qty,
         rate: record.rate,
         discount: record.discount,
@@ -199,7 +199,7 @@ export const WandaSupplyRegister: React.FC = () => {
         carriage: record.carriage || 0,
         secQty: record.secQty,
         secRate: record.secRate,
-        secUnit: record.secUnit || 'Bags',
+        secUnit: record.secUnit || null,
         qtyInPack: record.packQty || record.packing,
         packing: record.packing || record.packQty
       });
@@ -232,7 +232,7 @@ export const WandaSupplyRegister: React.FC = () => {
         line: {
           seq: l.seq,
           customerId: l.customerId,
-          unit: l.unit || 'Kg',
+          unit: l.unit || null,
           qty: l.qty,
           rate: l.rate,
           discount: l.discount,
@@ -240,7 +240,7 @@ export const WandaSupplyRegister: React.FC = () => {
           carriage: l.carriage || 0,
           secQty: l.secQty,
           secRate: l.secRate,
-          secUnit: l.secUnit || 'Bags',
+          secUnit: l.secUnit || null,
           qtyInPack: l.packQty || l.packing,
           packing: l.packing || l.packQty
         }
@@ -297,7 +297,7 @@ export const WandaSupplyRegister: React.FC = () => {
         const updatedLines = details.map(d => ({
           seq: d.seq,
           customerId: d.customerId,
-          unit: 'Kg',
+          unit: d.unit || null,
           qty: d.qty,
           rate: d.rate,
           discount: d.discount,
@@ -305,13 +305,15 @@ export const WandaSupplyRegister: React.FC = () => {
           carriage: d.carriage || 0,
           secQty: d.secQty,
           secRate: d.secRate,
-          secUnit: 'Bags'
+          secUnit: d.secUnit || null,
+          qtyInPack: d.qtyInPack,
+          packing: d.packing
         }));
 
         updatedLines.push({
           seq: nextSeq,
           customerId: selectedCustomerId,
-          unit: 'Kg',
+          unit: null,
           qty: values.qty || 0,
           rate: values.rate || 0,
           discount: values.discount || 0,
@@ -319,7 +321,9 @@ export const WandaSupplyRegister: React.FC = () => {
           carriage: values.carriage || 0,
           secQty: values.secQty || 0,
           secRate: values.secRate || 0,
-          secUnit: 'Bags'
+          secUnit: null,
+          qtyInPack: values.packQty || 50,
+          packing: values.packQty || 50
         });
 
         await saleSupplyService.update(targetVoucher.voucherNo, {
@@ -336,7 +340,7 @@ export const WandaSupplyRegister: React.FC = () => {
           lines: [{
             seq: 1,
             customerId: selectedCustomerId,
-            unit: 'Kg',
+            unit: null,
             qty: values.qty || 0,
             rate: values.rate || 0,
             discount: values.discount || 0,
@@ -344,7 +348,9 @@ export const WandaSupplyRegister: React.FC = () => {
             carriage: values.carriage || 0,
             secQty: values.secQty || 0,
             secRate: values.secRate || 0,
-            secUnit: 'Bags'
+            secUnit: null,
+            qtyInPack: values.packQty || 50,
+            packing: values.packQty || 50
           }]
         });
 
