@@ -128,7 +128,8 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
             ['201001', 'Prime Distributors', '03211122334', '', 'info@prime.com', '', 'Railway Road', 'false', 'true']
           ]
         };
-      case 'products':
+      case 'products': {
+        const activeCcList = customerCategories.length > 0 ? customerCategories : customerCategoriesRef.current;
         return {
           title: 'Products (Inventory Items)',
           idField: 'id',
@@ -137,16 +138,17 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
             'Id', 'Type', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId',
             'PrimaryUnit', 'SecondaryUnit', 'QtyInPack', 'PriRate',
             'SecRate',
-            ...customerCategories.map(c => `Rate_${c.code}`),
+            ...activeCcList.map(c => `Rate_${c.code}`),
             'OpnStock', 'OpnRate'
           ],
           sampleData: [
-            ['', 'Product', '', '01', 'Cooking Oil 1L', '', 'PCS', '', '1', '450', '450', ...customerCategories.map(() => '420'), '50', '380'],
-            ['', 'Product', '', '01', 'Basmati Rice 5kg', '', 'KG', '', '1', '1200', '1200', ...customerCategories.map(() => '1150'), '100', '1050'],
-            ['', 'Service', '', '02', 'General Service / Labor', '', '', '', '1', '500', '0', ...customerCategories.map(() => '0'), '0', '0'],
-            ['000001', 'Product', '1000001', '01', 'Sugar 1kg Pack', '', 'KG', '', '1', '150', '150', ...customerCategories.map(() => '140'), '0', '0']
+            ['', 'Product', '', '01', 'Cooking Oil 1L', '', 'PCS', '', '1', '450', '450', ...activeCcList.map(() => '420'), '50', '380'],
+            ['', 'Product', '', '01', 'Basmati Rice 5kg', '', 'KG', '', '1', '1200', '1200', ...activeCcList.map(() => '1150'), '100', '1050'],
+            ['', 'Service', '', '02', 'General Service / Labor', '', '', '', '1', '500', '0', ...activeCcList.map(() => '0'), '0', '0'],
+            ['000001', 'Product', '1000001', '01', 'Sugar 1kg Pack', '', 'KG', '', '1', '150', '150', ...activeCcList.map(() => '140'), '0', '0']
           ]
         };
+      }
       case 'employees':
         return {
           title: 'Employees (HR Info)',
@@ -161,24 +163,71 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
     }
   }, [entityType, customerCategories]);
 
+  // Helper to build normalized price lookup map
+  const buildPriceMap = (catPrices: ItemCustomerCategoryPriceDto[]) => {
+    const priceMap = new Map<string, number>();
+    catPrices.forEach((cp: ItemCustomerCategoryPriceDto) => {
+      if (!cp.itemId) return;
+      const itemIdNorm = String(cp.itemId).trim().toLowerCase();
+      const catIdNorm = String(cp.customerCategoryId || '').trim().toLowerCase();
+      const catTitleNorm = String(cp.customerCategoryTitle || '').trim().toLowerCase();
+      const rate = Number(cp.priRate) || 0;
+
+      if (catIdNorm) priceMap.set(`${itemIdNorm}:::${catIdNorm}`, rate);
+      if (catTitleNorm) priceMap.set(`${itemIdNorm}:::${catTitleNorm}`, rate);
+
+      const parsedInt = parseInt(itemIdNorm, 10);
+      if (!isNaN(parsedInt)) {
+        if (catIdNorm) priceMap.set(`${parsedInt}:::${catIdNorm}`, rate);
+        if (catTitleNorm) priceMap.set(`${parsedInt}:::${catTitleNorm}`, rate);
+      }
+    });
+    return priceMap;
+  };
+
+  const getPriceForProductCategory = (
+    priceMap: Map<string, number>,
+    itemId: string,
+    catCode: string,
+    catTitle?: string
+  ) => {
+    const itemIdNorm = String(itemId || '').trim().toLowerCase();
+    const catCodeNorm = String(catCode || '').trim().toLowerCase();
+    const catTitleNorm = String(catTitle || '').trim().toLowerCase();
+    const parsedInt = parseInt(itemIdNorm, 10);
+
+    return (
+      priceMap.get(`${itemIdNorm}:::${catCodeNorm}`) ??
+      (catTitleNorm ? priceMap.get(`${itemIdNorm}:::${catTitleNorm}`) : undefined) ??
+      (!isNaN(parsedInt) ? priceMap.get(`${parsedInt}:::${catCodeNorm}`) : undefined) ??
+      (!isNaN(parsedInt) && catTitleNorm ? priceMap.get(`${parsedInt}:::${catTitleNorm}`) : undefined) ??
+      0
+    );
+  };
+
   // Populate existing data handler
   const handlePopulateExisting = useCallback(async (categoryCode?: string) => {
     try {
       setPopulating(true);
       let newRows: any[] = [];
       if (entityType === 'products') {
-        const [list, catPrices] = await Promise.all([
+        const [list, catPrices, ccList] = await Promise.all([
           inventoryService.getItems(categoryCode),
-          inventoryService.getCustomerCategoryPrices().catch(() => [])
+          inventoryService.getCustomerCategoryPrices().catch(() => []),
+          customerCategoryService.getLookup().catch(() => [])
         ]);
-        const priceMap = new Map<string, number>();
-        catPrices.forEach((cp: ItemCustomerCategoryPriceDto) => {
-          priceMap.set(`${cp.itemId}_${cp.customerCategoryId}`, cp.priRate);
-        });
+
+        if (ccList && ccList.length > 0) {
+          setCustomerCategories(ccList);
+          customerCategoriesRef.current = ccList;
+        }
+        const activeCcList = (ccList && ccList.length > 0) ? ccList : customerCategoriesRef.current;
+        const priceMap = buildPriceMap(catPrices);
+
         newRows = list.map(p => {
           const row: any = mapProductToBulkRow(p);
-          customerCategories.forEach(cc => {
-            row[`catRate_${cc.code}`] = priceMap.get(`${p.id}_${cc.code}`) ?? 0;
+          activeCcList.forEach(cc => {
+            row[`catRate_${cc.code}`] = getPriceForProductCategory(priceMap, p.id, cc.code, cc.title);
           });
           return row;
         });
@@ -261,13 +310,39 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
     } finally {
       setPopulating(false);
     }
-  }, [entityType, entityMeta.idField, entityMeta.title, customerCategories]);
+  }, [entityType, entityMeta.idField, entityMeta.title]);
 
   // Reset or initialize state when entityType changes or modal opens
   useEffect(() => {
     if (visible && !prevVisibleRef.current) {
       if (initialRows && initialRows.length > 0) {
-        setRows(initialRows);
+        if (entityType === 'products') {
+          setLoading(true);
+          Promise.all([
+            inventoryService.getCustomerCategoryPrices().catch(() => []),
+            customerCategoryService.getLookup().catch(() => [])
+          ]).then(([catPrices, ccList]) => {
+            if (ccList && ccList.length > 0) {
+              setCustomerCategories(ccList);
+              customerCategoriesRef.current = ccList;
+            }
+            const activeCcList = (ccList && ccList.length > 0) ? ccList : customerCategoriesRef.current;
+            const priceMap = buildPriceMap(catPrices);
+
+            const hydrated = initialRows.map(p => {
+              const row: any = { ...p };
+              activeCcList.forEach(cc => {
+                row[`catRate_${cc.code}`] = getPriceForProductCategory(priceMap, p.id, cc.code, cc.title);
+              });
+              return row;
+            });
+            setRows(hydrated);
+          }).finally(() => {
+            setLoading(false);
+          });
+        } else {
+          setRows(initialRows);
+        }
       } else if (autoPopulate) {
         handlePopulateExisting();
       } else {
@@ -278,7 +353,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       setPasteText('');
     }
     prevVisibleRef.current = visible;
-  }, [visible, entityType, initialRows, autoPopulate]);
+  }, [visible, entityType, initialRows, autoPopulate, handlePopulateExisting]);
 
   // Row validation logic
   const validateRow = useCallback((row: any) => {
@@ -374,7 +449,8 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       newRow.secRate = 0;
       newRow.opnStock = 0;
       newRow.opnRate = 0;
-      customerCategories.forEach(cc => {
+      const activeCcList = customerCategories.length > 0 ? customerCategories : customerCategoriesRef.current;
+      activeCcList.forEach(cc => {
         newRow[`catRate_${cc.code}`] = 0;
       });
     } else if (entityType === 'employees') {
@@ -420,15 +496,19 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           v.cnic || '', v.address || '', v.showInSales ? 'true' : 'false', v.active ? 'true' : 'false'
         ]);
       } else if (entityType === 'products') {
-        const [list, catPrices] = await Promise.all([
+        const [list, catPrices, ccList] = await Promise.all([
           inventoryService.getItems(),
-          inventoryService.getCustomerCategoryPrices().catch(() => [])
+          inventoryService.getCustomerCategoryPrices().catch(() => []),
+          customerCategoryService.getLookup().catch(() => [])
         ]);
-        const priceMap = new Map<string, number>();
-        catPrices.forEach((cp: ItemCustomerCategoryPriceDto) => {
-          priceMap.set(`${cp.itemId}_${cp.customerCategoryId}`, cp.priRate);
-        });
-        const catHeaders = customerCategories.map(c => `Rate_${c.code}`);
+        if (ccList && ccList.length > 0) {
+          setCustomerCategories(ccList);
+          customerCategoriesRef.current = ccList;
+        }
+        const activeCcList = (ccList && ccList.length > 0) ? ccList : customerCategoriesRef.current;
+        const priceMap = buildPriceMap(catPrices);
+
+        const catHeaders = activeCcList.map(c => `Rate_${c.code}`);
         headers = [
           'Id', 'Type', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId',
           'PrimaryUnit', 'SecondaryUnit', 'QtyInPack', 'PriRate', 'SecRate',
@@ -438,7 +518,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
         dataRows = list.map(p => [
           p.id, p.itemType || 'Product', p.barcode || '', p.itemCategoryCode || '', p.title, p.brandId || '',
           p.primaryUnit || '', p.secondaryUnit || '', p.qtyInPack ?? 1, p.priRate, p.secRate,
-          ...customerCategories.map(c => priceMap.get(`${p.id}_${c.code}`) ?? 0),
+          ...activeCcList.map(c => getPriceForProductCategory(priceMap, p.id, c.code, c.title)),
           p.itemType === 'Service' ? 0 : (p.opnStock ?? 0), p.itemType === 'Service' ? 0 : (p.opnRate ?? 0)
         ]);
       } else if (entityType === 'employees') {
@@ -713,7 +793,8 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       } else if (entityType === 'products') {
         const payload: InventoryItemBulkItemDto[] = validRows.map(r => {
           const isService = r.itemType === 'Service';
-          const customerCategoryPrices = customerCategories
+          const activeCcList = customerCategories.length > 0 ? customerCategories : customerCategoriesRef.current;
+          const customerCategoryPrices = activeCcList
             .filter(cc => r[`catRate_${cc.code}`] !== undefined)
             .map(cc => ({
               customerCategoryId: cc.code,
