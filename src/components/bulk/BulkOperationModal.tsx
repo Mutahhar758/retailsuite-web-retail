@@ -189,20 +189,32 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
     priceMap: Map<string, number>,
     itemId: string,
     catCode: string,
-    catTitle?: string
+    catTitle?: string,
+    fallbackPriRate?: number
   ) => {
     const itemIdNorm = String(itemId || '').trim().toLowerCase();
     const catCodeNorm = String(catCode || '').trim().toLowerCase();
     const catTitleNorm = String(catTitle || '').trim().toLowerCase();
     const parsedInt = parseInt(itemIdNorm, 10);
 
-    return (
+    const price = (
       priceMap.get(`${itemIdNorm}:::${catCodeNorm}`) ??
       (catTitleNorm ? priceMap.get(`${itemIdNorm}:::${catTitleNorm}`) : undefined) ??
       (!isNaN(parsedInt) ? priceMap.get(`${parsedInt}:::${catCodeNorm}`) : undefined) ??
       (!isNaN(parsedInt) && catTitleNorm ? priceMap.get(`${parsedInt}:::${catTitleNorm}`) : undefined) ??
       0
     );
+
+    if (price > 0) return price;
+
+    // Default "Retail" customer category to the product's primary rate
+    if (fallbackPriRate && fallbackPriRate > 0) {
+      if (catTitleNorm === 'retail' || catCodeNorm === 'retail' || catTitleNorm.includes('retail')) {
+        return fallbackPriRate;
+      }
+    }
+
+    return 0;
   };
 
   // Populate existing data handler
@@ -226,8 +238,9 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
 
         newRows = list.map(p => {
           const row: any = mapProductToBulkRow(p);
+          const pRate = Number(p.priRate) || 0;
           activeCcList.forEach(cc => {
-            row[`catRate_${cc.code}`] = getPriceForProductCategory(priceMap, p.id, cc.code, cc.title);
+            row[`catRate_${cc.code}`] = getPriceForProductCategory(priceMap, p.id, cc.code, cc.title, pRate);
           });
           return row;
         });
@@ -331,8 +344,9 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
 
             const hydrated = initialRows.map(p => {
               const row: any = { ...p };
+              const pRate = Number(p.priRate) || 0;
               activeCcList.forEach(cc => {
-                row[`catRate_${cc.code}`] = getPriceForProductCategory(priceMap, p.id, cc.code, cc.title);
+                row[`catRate_${cc.code}`] = getPriceForProductCategory(priceMap, p.id, cc.code, cc.title, pRate);
               });
               return row;
             });
@@ -518,7 +532,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
         dataRows = list.map(p => [
           p.id, p.itemType || 'Product', p.barcode || '', p.itemCategoryCode || '', p.title, p.brandId || '',
           p.primaryUnit || '', p.secondaryUnit || '', p.qtyInPack ?? 1, p.priRate, p.secRate,
-          ...activeCcList.map(c => getPriceForProductCategory(priceMap, p.id, c.code, c.title)),
+          ...activeCcList.map(c => getPriceForProductCategory(priceMap, p.id, c.code, c.title, Number(p.priRate) || 0)),
           p.itemType === 'Service' ? 0 : (p.opnStock ?? 0), p.itemType === 'Service' ? 0 : (p.opnRate ?? 0)
         ]);
       } else if (entityType === 'employees') {
@@ -695,6 +709,19 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       }
       if (rowObj.opnStock === undefined) rowObj.opnStock = 0;
       if (rowObj.opnRate === undefined) rowObj.opnRate = 0;
+
+      // Ensure retail customer category is not 0 if primary retail price was provided
+      if (rowObj.priRate && rowObj.priRate > 0) {
+        for (const cc of customerCategoriesRef.current) {
+          const titleNorm = cc.title.toLowerCase().replace(/[\s_-]/g, '');
+          const codeNorm = cc.code.toLowerCase().replace(/[\s_-]/g, '');
+          if (titleNorm === 'retail' || codeNorm === 'retail' || titleNorm.includes('retail')) {
+            if (!rowObj[`catRate_${cc.code}`] || rowObj[`catRate_${cc.code}`] === 0) {
+              rowObj[`catRate_${cc.code}`] = rowObj.priRate;
+            }
+          }
+        }
+      }
 
       return rowObj;
     });
