@@ -53,8 +53,37 @@ export function parseBarcodePayload(
   const cleanDigits = raw.replace(/\D/g, '');
 
   // -------------------------------------------------------------
-  // 0. RetailSuite Compact 18-digit Variable Barcode: 2 + IIIIII + QQQQQ + AAAAAA
+  // 0a. RetailSuite Compact 12-digit All-Numeric Variable Barcode (Qty Only): 2 + IIIIII + QQQQQ
+  // Prefix 2 (1 digit) + Item ID (6 digits) + Qty*1000 (5 digits)
+  // Even length (12 digits) for compact Code-128C; resolves live rate from product.
+  // e.g. 200010500250 -> Item 000105, 0.250 kg (250g), Live rate from product
+  // -------------------------------------------------------------
+  if (cleanDigits.length === 12 && cleanDigits.startsWith('2')) {
+    const itemPart = cleanDigits.substring(1, 7);
+    const qtyPart = cleanDigits.substring(7, 12);
+
+    const item = findItemByPlu(itemPart, items) || findItemByCode(itemPart, items);
+    if (item) {
+      const parsedQty = round3(parseInt(qtyPart, 10) / 1000);
+      const effectiveRate = item.priRate || 0;
+      const totalAmt = round2(parsedQty * effectiveRate);
+
+      return {
+        matchedItem: item,
+        qty: parsedQty,
+        rate: effectiveRate,
+        amount: totalAmt,
+        isVariableWeight: true,
+        unit: resolveItemUnitTitle(item),
+        rawCode: raw
+      };
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 0b. RetailSuite Compact 18-digit Variable Barcode: 2 + IIIIII + QQQQQ + AAAAAA
   // Prefix 2 (1 digit) + Item ID (6 digits) + Qty*1000 (5 digits) + Amount (6 digits, whole number max 9 lac)
+  // If Amount is 000000, resolves live rate from product at scan time.
   // e.g. 200010500325000450 -> Item 000105, 0.325 kg (325g), Rs. 450
   // -------------------------------------------------------------
   if (cleanDigits.length === 18 && cleanDigits.startsWith('2')) {
@@ -65,8 +94,17 @@ export function parseBarcodePayload(
     const item = findItemByPlu(itemPart, items) || findItemByCode(itemPart, items);
     if (item) {
       const parsedQty = round3(parseInt(qtyPart, 10) / 1000);
-      const totalAmt = round2(parseInt(amtPart, 10));
-      const effectiveRate = parsedQty > 0 ? round2(totalAmt / parsedQty) : (item.priRate || 0);
+      const rawAmt = parseInt(amtPart, 10);
+      let effectiveRate: number;
+      let totalAmt: number;
+
+      if (rawAmt > 0) {
+        totalAmt = round2(rawAmt);
+        effectiveRate = parsedQty > 0 ? round2(totalAmt / parsedQty) : (item.priRate || 0);
+      } else {
+        effectiveRate = item.priRate || 0;
+        totalAmt = round2(parsedQty * effectiveRate);
+      }
 
       return {
         matchedItem: item,

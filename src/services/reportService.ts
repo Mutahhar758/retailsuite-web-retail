@@ -583,6 +583,9 @@ export interface BarcodePrintItem {
   unit?: string;
   totalAmount?: number;
   isVariableWeight?: boolean;
+  displayQty?: number;
+  displayUnit?: string;
+  companySubHeader?: string;
 }
 
 export interface BarcodePrintRequest {
@@ -590,9 +593,11 @@ export interface BarcodePrintRequest {
   layout?: 'Roll4Inch3Up' | 'ThermalRoll' | 'SheetA4';
   sideStickersSpreadMm?: number;
   includePrice?: boolean;
+  includeRate?: boolean;
   includeTitle?: boolean;
   includeCompanyName?: boolean;
   companyName?: string;
+  companySubHeader?: string;
 }
 
 
