@@ -387,15 +387,16 @@ export const POSSaleForm: React.FC = () => {
           return i;
         });
       } else {
+        const resolved = resolveDisplayQtyAndUnit(scanQty, item, units as any);
         return [...prev, {
           item,
           qty: scanQty,
           rate: effectiveRate,
           discount: 0,
-          unit: customUnit || item.defaultUnit || item.primaryUnit || '',
-          selectedUnitId: item.defaultUnit || item.primaryUnit || '',
-          selectedUnitFactor: 1,
-          displayQty: scanQty
+          unit: resolved.unitLabel || customUnit || item.defaultUnit || item.primaryUnit || '',
+          selectedUnitId: resolved.selectedUnitId,
+          selectedUnitFactor: resolved.factor,
+          displayQty: resolved.displayQty
         }];
       }
     });
