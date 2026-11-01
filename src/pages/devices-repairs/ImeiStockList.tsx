@@ -16,6 +16,7 @@ import {
 } from '../../services/imeiService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { inventoryService, type Item } from '../../services/inventoryService';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 
 const { Title, Text } = Typography;
 
@@ -409,10 +410,7 @@ export const ImeiStockList: React.FC = () => {
                   showSearch
                   allowClear
                   placeholder="Spare part from stock"
-                  filterOption={(input, option) =>
-                    (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-                  }
-                  options={inventoryItems.map(i => ({ value: i.id, label: `${i.title} (${i.id})` }))}
+                  {...getItemSelectProps(inventoryItems)}
                 />
               </Form.Item>
             </Col>

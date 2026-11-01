@@ -13,6 +13,7 @@ import axios from 'axios';
 import { customerService, type CustomerCreateRequest, type CustomerUpdateRequest, type CustomerSupplyItemDto } from '../../services/customerService';
 import { customerCategoryService, type CustomerCategoryLookupResponse } from '../../services/customerCategoryService';
 import { inventoryService, type Item } from '../../services/inventoryService';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 import { useAppStore } from '../../stores/useAppStore';
 import { useSettingsStore, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 import { getPresentableUploadErrorMessage } from '../../utils/errorUtils';
@@ -295,17 +296,10 @@ export const CustomerForm: React.FC = () => {
           showSearch
           style={{ width: '100%' }}
           placeholder="Select Item"
-          optionFilterProp="children"
           value={val || undefined}
           onChange={(newVal) => updateSupplyRow(record.key, 'itemId', newVal)}
-          filterOption={(input, option) =>
-            (option?.children as any || '').toLowerCase().includes(input.toLowerCase())
-          }
-        >
-          {items.map(i => (
-            <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
-          ))}
-        </Select>
+          {...getItemSelectProps(items)}
+        />
       )
     },
     {

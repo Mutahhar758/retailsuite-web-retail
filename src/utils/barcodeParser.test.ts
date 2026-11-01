@@ -29,6 +29,7 @@ const mockItems: any[] = [
   },
   {
     id: '000105',
+    itemCategoryCode: '01',
     title: 'Dal Chana 5kg',
     barcode: '000105',
     priRate: 1248,
@@ -102,6 +103,10 @@ assert(res9 !== null && res9.matchedItem.title === 'Dal Chana 5kg', 'Resolves Da
 assert(res9?.qty === 0.25, `Qty is 0.25 kg (got ${res9?.qty})`);
 assert(res9?.amount === 312, `Amount is 312 (got ${res9?.amount})`);
 assert(res9?.unit === 'kg', `Unit resolves to 'kg' instead of code '004' (got ${res9?.unit})`);
+
+// Test 10: Category-Item ID lookup (e.g. 01-000105)
+const res10 = parseBarcodePayload('01-000105', mockItems);
+assert(res10 !== null && res10.matchedItem.id === '000105', 'Category-Item ID (01-000105) resolves Item 000105');
 
 if (failed > 0) {
   process.exit(1);

@@ -38,6 +38,7 @@ import { printKotSlip } from '../../utils/kotPrint';
 import { speakKotOrder, type VoiceAccentType } from '../../utils/kotSpeech';
 import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
 import { parseBarcodePayload } from '../../utils/barcodeParser';
+import { matchesItemSearch } from '../../utils/itemSelectOptions';
 import { getEffectiveSubUnits, getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
 
 const { Title, Text } = Typography;
@@ -351,8 +352,7 @@ export const POSSaleForm: React.FC = () => {
 
   const filteredItems = items.filter(item => {
     const matchesCategory = activeCategory === 'all' || item.itemCategoryCode === activeCategory;
-    const matchesSearch = item.title.toLowerCase().includes(searchItemQuery.toLowerCase()) ||
-      (item.barcode && item.barcode.includes(searchItemQuery));
+    const matchesSearch = matchesItemSearch(item, searchItemQuery);
     return matchesCategory && matchesSearch;
   });
 

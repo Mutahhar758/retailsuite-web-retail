@@ -12,6 +12,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { saleSupplyService, type SaleSupply } from '../../services/saleSupplyService';
 import { inventoryService, type Item } from '../../services/inventoryService';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -284,15 +285,11 @@ export const SaleSupplyList: React.FC = () => {
         <Form.Item name="itemId" label="Item">
           <Select 
             placeholder="All Items" 
-            style={{ width: 200 }} 
+            style={{ width: 220 }} 
             allowClear
             showSearch
-            optionFilterProp="children"
-          >
-            {items.map(i => (
-              <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
-            ))}
-          </Select>
+            {...getItemSelectProps(items)}
+          />
         </Form.Item>
         <Form.Item name="voucherNo" label="Voucher #">
           <Input placeholder="Search #" prefix={<SearchOutlined />} allowClear />

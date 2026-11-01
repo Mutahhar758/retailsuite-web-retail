@@ -31,6 +31,7 @@ import {
 } from '../../hooks/useThermalPrinter';
 
 import { rangePresets } from '../../utils/datePresets';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -508,14 +509,7 @@ export const PurchaseSupplyComparisonReport: React.FC = () => {
                 <Select
                   showSearch
                   placeholder="Select Item..."
-                  optionFilterProp="children"
-                  filterOption={(input, option) =>
-                    (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                  }
-                  options={items.map(i => ({
-                    label: i.title,
-                    value: i.id
-                  }))}
+                  {...getItemSelectProps(items)}
                 />
               </Form.Item>
 

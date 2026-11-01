@@ -14,6 +14,7 @@ import dayjs from 'dayjs';
 import { saleSupplyService, type SaleSupplyLine, type SaleSupplyCustomerLineUpdateRequest } from '../../services/saleSupplyService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { inventoryService, type Item } from '../../services/inventoryService';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 import { round } from '../../utils/numberUtils';
 import { rangePresets } from '../../utils/datePresets';
 import { useSettingsStore, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
@@ -643,18 +644,9 @@ export const NormalSupplyRegister: React.FC = () => {
                   showSearch
                   allowClear
                   placeholder="All items supplied"
-                  optionFilterProp="children"
-                  filterOption={(input, option) =>
-                    String(option?.children ?? '').toLowerCase().includes(input.toLowerCase())
-                  }
                   style={{ width: '100%' }}
-                >
-                  {items.map(i => (
-                    <Select.Option key={i.id} value={i.id}>
-                      {i.title}
-                    </Select.Option>
-                  ))}
-                </Select>
+                  {...getItemSelectProps(items)}
+                />
               </Form.Item>
             </Col>
 
@@ -776,10 +768,7 @@ export const NormalSupplyRegister: React.FC = () => {
             <Select
               showSearch
               placeholder="Select item..."
-              optionFilterProp="children"
-              filterOption={(input, option) =>
-                String(option?.children ?? '').toLowerCase().includes(input.toLowerCase())
-              }
+              {...getItemSelectProps(items)}
               onChange={(val) => {
                 const itemObj = items.find(i => i.id === val);
                 if (itemObj) {
@@ -789,13 +778,7 @@ export const NormalSupplyRegister: React.FC = () => {
                   });
                 }
               }}
-            >
-              {items.map(i => (
-                <Select.Option key={i.id} value={i.id}>
-                  {i.title}
-                </Select.Option>
-              ))}
-            </Select>
+            />
           </Form.Item>
 
           <Row gutter={12}>

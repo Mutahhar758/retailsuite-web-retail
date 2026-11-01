@@ -13,6 +13,7 @@ import dayjs from 'dayjs';
 import { reportService, type StockLedgerLine } from '../../services/reportService';
 import api from '../../services/api';
 import { rangePresets } from '../../utils/datePresets';
+import { getItemSelectProps, type SelectableItemLike } from '../../utils/itemSelectOptions';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -20,7 +21,7 @@ const { RangePicker } = DatePicker;
 export const ItemLedger: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState<{ id: string; title: string }[]>([]);
+  const [items, setItems] = useState<SelectableItemLike[]>([]);
   const [ledgerData, setLedgerData] = useState<(StockLedgerLine & { balance: number })[] | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -426,15 +427,9 @@ export const ItemLedger: React.FC = () => {
                   <Select
                     showSearch
                     placeholder="Search product item..."
-                    optionFilterProp="children"
                     style={{ width: '100%' }}
-                  >
-                    {items.map(item => (
-                      <Select.Option key={item.id} value={item.id}>
-                        {item.title}
-                      </Select.Option>
-                    ))}
-                  </Select>
+                    {...getItemSelectProps(items)}
+                  />
                 </Form.Item>
 
                 <Form.Item

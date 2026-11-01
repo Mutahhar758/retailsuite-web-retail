@@ -19,6 +19,7 @@ import {
 } from '../../services/manufacturingService';
 import { bomService, type BomResponse } from '../../services/bomService';
 import { inventoryService, type Item } from '../../services/inventoryService';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 import { unitService, type UnitDto } from '../../services/unitService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 
@@ -477,17 +478,9 @@ export const ManufacturingForm: React.FC = () => {
               return row;
             }));
           }}
-          filterOption={(input, option) =>
-            (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
-          }
           style={{ width: '100%' }}
-        >
-          {items.map(i => (
-            <Option key={i.id} value={i.id}>
-              {i.title} {i.barcode ? `(${i.barcode})` : ''}
-            </Option>
-          ))}
-        </Select>
+          {...getItemSelectProps(items)}
+        />
       )
     },
     {
@@ -711,16 +704,8 @@ export const ManufacturingForm: React.FC = () => {
                       showSearch
                       placeholder="Select Finished Product"
                       onChange={handleFinishedItemChange}
-                      filterOption={(input, option) =>
-                        (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
-                      }
-                    >
-                      {items.map(i => (
-                        <Option key={i.id} value={i.id}>
-                          {i.title} {i.barcode ? `(${i.barcode})` : ''}
-                        </Option>
-                      ))}
-                    </Select>
+                      {...getItemSelectProps(items)}
+                    />
                   </Form.Item>
                 </Col>
                 <Col span={8}>

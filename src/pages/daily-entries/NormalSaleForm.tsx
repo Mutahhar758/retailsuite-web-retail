@@ -33,6 +33,7 @@ import { getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit }
 import { BarcodeFastScanBar } from '../../components/common/BarcodeFastScanBar';
 import { CustomerPriceHistoryModal } from '../../components/sale/CustomerPriceHistoryModal';
 import { useGridKeyboard, closeOpenSelectDropdowns } from '../../hooks/useGridKeyboard';
+import { getItemSelectProps, type SelectableItemLike } from '../../utils/itemSelectOptions';
 import { SaleReceiptModal } from '../../components/SaleReceiptModal';
 import {
   printSaleReceiptDirect,
@@ -59,7 +60,7 @@ interface ItemSelectCellProps {
   rowIdx: number;
   record: any;
   value: string;
-  items: Array<{ id: string | number; title: string }>;
+  items: SelectableItemLike[];
   getCellRef: (rowIdx: number, colKey: string) => React.RefObject<any>;
   handleCellKeyDown: (rowIdx: number, colKey: string, e: React.KeyboardEvent) => void;
   updateLine: (key: number, field: string, val: any) => void;
@@ -87,7 +88,6 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
       onOpenChange={setOpen}
       style={{ width: '100%' }}
       placeholder="Select Item"
-      optionFilterProp="children"
       value={value}
       onSelect={(val) => {
         setOpen(false);
@@ -101,10 +101,7 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
       onBlur={() => {
         setOpen(false);
       }}
-      filterOption={(input, option) =>
-        (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-      }
-      options={items.map(i => ({ value: i.id, label: `${i.title} (${i.id})` }))}
+      {...getItemSelectProps(items)}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
           // If dropdown is open and user pressed enter, let Select's native handler choose the item via onSelect

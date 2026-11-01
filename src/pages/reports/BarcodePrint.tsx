@@ -16,6 +16,7 @@ import { inventoryService } from '../../services/inventoryService';
 import { itemCategoryService } from '../../services/itemCategoryService';
 import { unitService, type UnitDto } from '../../services/unitService';
 import { useAppStore } from '../../stores/useAppStore';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 
 const { Title, Text } = Typography;
 
@@ -552,16 +553,15 @@ export const BarcodePrint: React.FC = () => {
                 </div>
                 <Select
                   showSearch
-                  optionFilterProp="label"
                   style={{ width: '100%' }}
                   placeholder="Select product to print"
                   loading={loadingProducts}
                   value={selectedProductId}
                   onChange={handleSelectProduct}
-                  options={filteredProducts.map(p => ({
-                    label: `${p.title} (${p.barcode || p.id}) - Rs. ${Number(p.priRate || 0).toLocaleString()}`,
-                    value: p.id
-                  }))}
+                  {...getItemSelectProps(
+                    filteredProducts,
+                    (p) => ` - Rs. ${Number(p.priRate || 0).toLocaleString()}`
+                  )}
                 />
               </div>
 

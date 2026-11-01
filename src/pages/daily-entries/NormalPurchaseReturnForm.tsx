@@ -20,6 +20,7 @@ import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, MOBILE_SHOP_ENABL
 import { round } from '../../utils/numberUtils';
 import { BarcodeFastScanBar } from '../../components/common/BarcodeFastScanBar';
 import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 
 const { Title, Text } = Typography;
 
@@ -452,14 +453,10 @@ export const NormalPurchaseReturnForm: React.FC = () => {
           showSearch
           style={{ width: '100%' }}
           placeholder="Select Item"
-          optionFilterProp="children"
           value={text}
           onChange={(val) => updateRow(record.key, 'itemId', val)}
           onKeyDown={(e) => handleCellKeyDown(rowIdx, 'itemId', e)}
-          filterOption={(input, option) =>
-            (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-          }
-          options={items.map(i => ({ value: i.id, label: `${i.title} (${i.id})` }))}
+          {...getItemSelectProps(items)}
         />
       )
     },

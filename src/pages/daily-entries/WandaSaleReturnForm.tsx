@@ -17,6 +17,7 @@ import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../service
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 
 const { Title, Text } = Typography;
 
@@ -305,15 +306,11 @@ export const WandaSaleReturnForm: React.FC = () => {
           showSearch
           style={{ width: '100%' }}
           placeholder="Select Item"
-          optionFilterProp="children"
           value={text}
           onChange={(val) => updateLine(record.key, 'itemId', val)}
           onKeyDown={(e) => handleCellKeyDown(rowIdx, 'itemId', e)}
-        >
-          {items.map(i => (
-            <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
-          ))}
-        </Select>
+          {...getItemSelectProps(items)}
+        />
       )
     },
     {

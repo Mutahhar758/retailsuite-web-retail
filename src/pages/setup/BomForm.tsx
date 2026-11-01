@@ -10,6 +10,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { bomService, type BomCreateOrUpdateRequest } from '../../services/bomService';
 import { inventoryService, type Item } from '../../services/inventoryService';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 import { unitService, type UnitDto } from '../../services/unitService';
 
 const { Title, Text } = Typography;
@@ -353,17 +354,9 @@ export const BomForm: React.FC = () => {
           placeholder="Select Ingredient"
           value={record.rawItemId || undefined}
           onChange={(val) => handleItemSelect(val, record.key)}
-          filterOption={(input, option) =>
-            (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
-          }
           style={{ width: '100%' }}
-        >
-          {items.map(i => (
-            <Option key={i.id} value={i.id}>
-              {i.title} {i.barcode ? `(${i.barcode})` : ''}
-            </Option>
-          ))}
-        </Select>
+          {...getItemSelectProps(items)}
+        />
       )
     },
     {
@@ -548,9 +541,7 @@ export const BomForm: React.FC = () => {
                     <Select
                       showSearch
                       placeholder="Select Finished Product"
-                      filterOption={(input, option) =>
-                        (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
-                      }
+                      {...getItemSelectProps(items)}
                       onChange={(val) => {
                         const item = items.find(i => i.id === val);
                         setFinishedItemId(val);
@@ -560,13 +551,7 @@ export const BomForm: React.FC = () => {
                           form.setFieldValue('unitId', defUnit);
                         }
                       }}
-                    >
-                      {items.map(i => (
-                        <Option key={i.id} value={i.id}>
-                          {i.title} {i.barcode ? `(${i.barcode})` : ''}
-                        </Option>
-                      ))}
-                    </Select>
+                    />
                   </Form.Item>
                 </Col>
                 <Col span={5}>

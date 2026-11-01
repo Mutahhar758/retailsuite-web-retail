@@ -23,6 +23,7 @@ import { inventoryService, type Item, type ItemCustomerCategoryPriceDto } from '
 import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
 import { customerService } from '../../services/customerService';
 import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 
 const { Title, Text } = Typography;
 
@@ -1055,14 +1056,10 @@ export const NormalSaleSupplyForm: React.FC = () => {
                   ref={itemSelectRef}
                   showSearch
                   placeholder="Select Item"
-                  optionFilterProp="children"
                   onChange={handleItemChange}
                   onKeyDown={handleItemSelectKeyDown}
-                >
-                  {items.map(i => (
-                    <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
-                  ))}
-                </Select>
+                  {...getItemSelectProps(items)}
+                />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} lg={5}>

@@ -18,6 +18,7 @@ import {
 import { brandService, type BrandLookupDto } from '../../services/brandService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { inventoryService, type Item } from '../../services/inventoryService';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 
 const { Title, Text } = Typography;
 
@@ -255,13 +256,7 @@ export const RepairJobForm: React.FC = () => {
           placeholder="Select inventory spare part"
           value={val || undefined}
           onChange={(newVal) => handleUpdatePart(record.key, 'itemId', newVal)}
-          filterOption={(input, option) =>
-            (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-          }
-          options={inventoryItems.map(i => ({
-            value: i.id,
-            label: `${i.title} (${i.id})`
-          }))}
+          {...getItemSelectProps(inventoryItems)}
         />
       )
     },

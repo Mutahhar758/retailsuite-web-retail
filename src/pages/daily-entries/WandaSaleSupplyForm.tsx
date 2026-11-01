@@ -20,6 +20,7 @@ import { inventoryService, type Item, type ItemCustomerCategoryPriceDto } from '
 import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
 import { customerService } from '../../services/customerService';
 import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 import { useSettingsStore, TRANSACTION_ENABLE_CARRIAGE_KEY } from '../../stores/useSettingsStore';
 
 const { Title, Text } = Typography;
@@ -1090,14 +1091,10 @@ export const WandaSaleSupplyForm: React.FC = () => {
                   ref={itemSelectRef}
                   showSearch
                   placeholder="Select Item"
-                  optionFilterProp="children"
                   onChange={handleItemChange}
                   onKeyDown={handleItemSelectKeyDown}
-                >
-                  {items.map(i => (
-                    <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
-                  ))}
-                </Select>
+                  {...getItemSelectProps(items)}
+                />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} lg={5}>

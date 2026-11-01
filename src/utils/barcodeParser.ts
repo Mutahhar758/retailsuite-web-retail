@@ -277,13 +277,21 @@ export function findItemByCode(codeToMatch: string, items: Item[]): Item | undef
     (i) => i.barcode && i.barcode.trim().toLowerCase() === target
   );
 
-  // 2. Exact Item ID / Code / ItemKey match
+  // 2. Exact Item ID / Category-Item ID / Code / ItemKey match
   if (!found) {
-    found = items.find(
-      (i) =>
-        String(i.id).trim().toLowerCase() === target ||
-        (i.itemKey && i.itemKey.trim().toLowerCase() === target)
-    );
+    found = items.find((i) => {
+      const idStr = String(i.id ?? '').trim().toLowerCase();
+      const catStr = String(i.itemCategoryCode ?? '').trim().toLowerCase();
+      const numCat = catStr && /^\d+$/.test(catStr) ? String(parseInt(catStr, 10)) : '';
+      const keyStr = i.itemKey ? i.itemKey.trim().toLowerCase() : '';
+
+      if (idStr === target || (keyStr && keyStr === target)) return true;
+      if (catStr && idStr) {
+        if (`${catStr}-${idStr}` === target || `${catStr}${idStr}` === target) return true;
+        if (numCat && (`${numCat}-${idStr}` === target || `${numCat}${idStr}` === target)) return true;
+      }
+      return false;
+    });
   }
 
   // 3. Exact item title match

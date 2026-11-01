@@ -15,10 +15,10 @@ import {
   getProductionStatusConfig 
 } from '../../services/manufacturingService';
 import { inventoryService, type Item } from '../../services/inventoryService';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
-const { Option } = Select;
 
 export const ManufacturingReport: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -180,15 +180,9 @@ export const ManufacturingReport: React.FC = () => {
                 value={selectedProduct}
                 onChange={setSelectedProduct}
                 allowClear
-                style={{ width: 220 }}
-                filterOption={(input, option) =>
-                  (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
-                }
-              >
-                {items.map(i => (
-                  <Option key={i.id} value={i.id}>{i.title}</Option>
-                ))}
-              </Select>
+                style={{ width: 240 }}
+                {...getItemSelectProps(items)}
+              />
               <Button icon={<ReloadOutlined />} onClick={fetchData}>Refresh</Button>
               <Button icon={<PrinterOutlined />} onClick={() => window.print()}>Print</Button>
             </Space>

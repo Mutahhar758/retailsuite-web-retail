@@ -14,6 +14,7 @@ import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, MOBILE_SHOP_ENABL
 import { round } from '../../utils/numberUtils';
 import { stockAdjustmentService } from '../../services/stockAdjustmentService';
 import { inventoryService, type Item } from '../../services/inventoryService';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 
 const { Title, Text } = Typography;
@@ -239,14 +240,10 @@ export const NormalStockAdjustmentForm: React.FC = () => {
           showSearch
           style={{ width: '100%' }}
           placeholder="Select Item"
-          optionFilterProp="children"
           value={text}
           onChange={(val) => updateLine(record.key, 'itemId', val)}
-        >
-          {items.map(i => (
-            <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
-          ))}
-        </Select>
+          {...getItemSelectProps(items)}
+        />
       )
     },
     ...(hasMobileShopFeature ? [

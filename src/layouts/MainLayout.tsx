@@ -49,6 +49,7 @@ const permissionMap: Record<string, string> = {
   '/setup/users': 'Permissions.Users.View',
   '/setup/roles': 'Permissions.Roles.View',
   '/setup/supply-order': 'Permissions.SupplyOrders.View',
+  '/setup/company-info': 'Permissions.Settings.View',
   '/setup/settings': 'Permissions.Settings.View',
   '/setup/printer-settings': 'Permissions.PrinterSettings.View',
   '/setup/opening-balance': 'Permissions.OpeningBalances.View',
@@ -105,6 +106,7 @@ export const MainLayout: React.FC = () => {
         const body = response.data?.body || response.data;
         if (body) {
           updateLicenseFeatures(currentTenantIdentifier, {
+            ...(body.name ? { name: body.name } : {}),
             hasSupplyFeature: body.hasSupplyFeature,
             hasSecondaryQty: body.hasSecondaryQty,
             hasKotFeature: body.hasKotFeature,
@@ -163,6 +165,7 @@ export const MainLayout: React.FC = () => {
       'bank-accounts': 'Bank Accounts',
       'bom': 'Bill of Materials',
       'manufacturing': 'Manufacturing Voucher',
+      'company-info': 'Company Info',
     };
     
     let label = labelMap[path] || path.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
@@ -259,6 +262,7 @@ export const MainLayout: React.FC = () => {
         { key: '/setup/users', label: 'Users' },
         { key: '/setup/roles', label: 'Roles & Permissions' },
         hasSupplyFeature ? { key: '/setup/supply-order', label: 'Supply Order' } : null,
+        { key: '/setup/company-info', label: 'Company Info' },
         { key: '/setup/settings', label: 'Settings' },
         { key: '/setup/printer-settings', label: 'Printer Settings' },
         { key: '/setup/opening-balance', label: 'Opening Balance' },

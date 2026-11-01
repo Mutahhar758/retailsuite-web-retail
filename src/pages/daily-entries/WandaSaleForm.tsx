@@ -29,6 +29,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { CustomerPriceHistoryModal } from '../../components/sale/CustomerPriceHistoryModal';
 import { useGridKeyboard } from '../../hooks/useGridKeyboard';
 import { SaleReceiptModal } from '../../components/SaleReceiptModal';
+import { getItemSelectProps } from '../../utils/itemSelectOptions';
 import {
   printSaleReceiptDirect,
   type SaleReceiptData,
@@ -974,13 +975,9 @@ export const WandaSaleForm: React.FC = () => {
           showSearch
           style={{ width: '100%' }}
           placeholder="Select Item"
-          optionFilterProp="children"
           value={text}
           onChange={(val) => updateLine(record.key, 'itemId', val)}
-          filterOption={(input, option) =>
-            (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-          }
-          options={items.map(i => ({ value: i.id, label: `${i.title} (${i.id})` }))}
+          {...getItemSelectProps(items)}
           onKeyDown={(e) => {
             handleCellKeyDown(rowIdx, 'itemId', e);
             if (e.key === 'Tab' && !record.itemId) {
@@ -992,11 +989,7 @@ export const WandaSaleForm: React.FC = () => {
               }
             }
           }}
-        >
-          {items.map(i => (
-            <Select.Option key={i.id} value={i.id}>{i.title}</Select.Option>
-          ))}
-        </Select>
+        />
       )
     },
     {
