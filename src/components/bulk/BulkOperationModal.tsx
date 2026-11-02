@@ -635,6 +635,13 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           h === 'customername' ||
           h === 'vendor' ||
           h === 'vendorname' ||
+          h === 'supplier' ||
+          h === 'suppliername' ||
+          h === 'businessname' ||
+          h === 'company' ||
+          h === 'companyname' ||
+          h === 'firm' ||
+          h === 'firmname' ||
           h === 'productname' ||
           h === 'employeename' ||
           h === 'party' ||
@@ -642,6 +649,10 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
         ) {
           rowObj.title = val;
           rowObj.name = val;
+        } else if (h === 'firstname' || h === 'first') {
+          rowObj._firstName = val;
+        } else if (h === 'lastname' || h === 'last') {
+          rowObj._lastName = val;
         } else if (h === 'mobile' || h === 'mobileno' || h === 'cell' || h === 'cellno') {
           rowObj.phone1 = val;
         } else if (h === 'phone1') {
@@ -815,6 +826,11 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
             }
           }
         }
+      }
+
+      if (!rowObj.title && (rowObj._firstName || rowObj._lastName)) {
+        rowObj.title = `${rowObj._firstName || ''} ${rowObj._lastName || ''}`.trim();
+        rowObj.name = rowObj.title;
       }
 
       return rowObj;
