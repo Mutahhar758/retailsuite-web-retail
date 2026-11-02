@@ -140,6 +140,7 @@ export interface VendorBulkItemDto {
   emailAlert?: boolean;
   active?: boolean;
   showInSales?: boolean;
+  openingBalance?: number;
 }
 
 export interface VendorBulkUpsertRequest {

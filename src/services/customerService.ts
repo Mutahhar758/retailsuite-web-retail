@@ -169,6 +169,7 @@ export interface CustomerBulkItemDto {
   emailAlert?: boolean;
   active?: boolean;
   customerCategoryId?: string;
+  openingBalance?: number;
 }
 
 export interface CustomerBulkUpsertRequest {

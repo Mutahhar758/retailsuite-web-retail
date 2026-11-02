@@ -86,19 +86,23 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
   const customerCategoriesRef = useRef<CustomerCategoryLookupResponse[]>([]);
   customerCategoriesRef.current = customerCategories;
 
-  // Load lookups when modal opens if products
+  // Load lookups when modal opens
   useEffect(() => {
+    if (visible && (entityType === 'products' || entityType === 'customers')) {
+      customerCategoryService.getLookup().then(cc => {
+        setCustomerCategories(cc);
+        customerCategoriesRef.current = cc;
+      }).catch(() => []);
+    }
     if (visible && entityType === 'products') {
       Promise.all([
         itemCategoryService.getActiveItemCategories().catch(() => []),
         unitService.getActiveUnits().catch(() => []),
-        brandService.getActiveBrands().catch(() => []),
-        customerCategoryService.getLookup().catch(() => [])
-      ]).then(([cat, un, br, cc]) => {
+        brandService.getActiveBrands().catch(() => [])
+      ]).then(([cat, un, br]) => {
         setCategories(cat);
         setUnits(un);
         setBrands(br);
-        setCustomerCategories(cc);
       });
     }
   }, [visible, entityType]);
@@ -111,10 +115,10 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           title: 'Customers',
           idField: 'account',
           idLabel: 'Account Code',
-          sampleHeaders: ['Account', 'Title', 'Phone1', 'Phone2', 'Email', 'CNIC', 'Address', 'Qualification', 'Active'],
+          sampleHeaders: ['A/C No.', 'Customer', 'Contact', 'Mobile', 'Phone', 'Balance', 'Category', 'Address', 'Email', 'Active'],
           sampleData: [
-            ['', 'Sample Customer', '03001234567', '', 'sample@example.com', '35201-1234567-1', 'Gulberg III, Lahore', '', 'true'],
-            ['102001', 'Existing Customer Ltd', '03217654321', '', 'corp@example.com', '', 'Main Boulevard', '', 'true']
+            ['1200', 'FOOD JUNCTION MAFAT', '', '03001234567', '', '0.00', 'Wholesale', 'Main Market', 'customer@example.com', 'true'],
+            ['1119', 'Yawar', '', '03217654321', '', '0.00', 'Retail', 'Lahore', '', 'true']
           ]
         };
       case 'vendors':
@@ -122,10 +126,10 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           title: 'Vendors / Suppliers',
           idField: 'account',
           idLabel: 'Account Code',
-          sampleHeaders: ['Account', 'Title', 'Phone1', 'Phone2', 'Email', 'CNIC', 'Address', 'ShowInSales', 'Active'],
+          sampleHeaders: ['A/C No.', 'Vendor', 'Contact', 'Mobile', 'Phone', 'Balance', 'Address', 'Email', 'ShowInSales', 'Active'],
           sampleData: [
-            ['', 'Global Traders', '03007654321', '', 'supplier@global.com', 'NTN-12345', 'Industrial Estate', 'false', 'true'],
-            ['201001', 'Prime Distributors', '03211122334', '', 'info@prime.com', '', 'Railway Road', 'false', 'true']
+            ['2001', 'Global Traders', '', '03007654321', '', '0.00', 'Industrial Estate', 'supplier@global.com', 'false', 'true'],
+            ['2010', 'Prime Distributors', '', '03211122334', '', '15000', 'Railway Road', 'info@prime.com', 'false', 'true']
           ]
         };
       case 'products': {
@@ -245,7 +249,14 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           return row;
         });
       } else if (entityType === 'customers') {
-        const list = await customerService.getCustomers();
+        const [list, ccList] = await Promise.all([
+          customerService.getCustomers(),
+          customerCategoryService.getLookup().catch(() => [])
+        ]);
+        if (ccList && ccList.length > 0) {
+          setCustomerCategories(ccList);
+          customerCategoriesRef.current = ccList;
+        }
         newRows = list.map(c => ({
           _key: `cust-${c.account}`,
           account: c.account,
@@ -256,6 +267,8 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           cnic: c.cnic || '',
           address: c.address || '',
           qualification: c.qualification || '',
+          customerCategoryId: c.customerCategoryId || '',
+          openingBalance: 0,
           active: c.active ?? true
         }));
       } else if (entityType === 'vendors') {
@@ -269,6 +282,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           email: v.email || '',
           cnic: v.cnic || '',
           address: v.address || '',
+          openingBalance: 0,
           showInSales: v.showInSales ?? false,
           active: v.active ?? true
         }));
@@ -450,8 +464,16 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
   // Add row
   const handleAddRow = () => {
     const newRow: any = { _key: `row-new-${Date.now()}` };
-    if (entityType === 'customers' || entityType === 'vendors') {
+    if (entityType === 'customers') {
       newRow.title = '';
+      const activeCcList = customerCategories.length > 0 ? customerCategories : customerCategoriesRef.current;
+      newRow.customerCategoryId = activeCcList[0]?.code || '';
+      newRow.openingBalance = 0;
+      newRow.active = true;
+    } else if (entityType === 'vendors') {
+      newRow.title = '';
+      newRow.openingBalance = 0;
+      newRow.showInSales = false;
       newRow.active = true;
     } else if (entityType === 'products') {
       newRow.itemType = 'Product';
@@ -497,17 +519,17 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
 
       if (entityType === 'customers') {
         const list = await customerService.getCustomers();
-        headers = ['Account', 'Title', 'Phone1', 'Phone2', 'Email', 'CNIC', 'Address', 'Qualification', 'Active'];
+        headers = ['Account', 'Customer', 'Phone1', 'Phone2', 'Email', 'CNIC', 'Address', 'Category', 'Balance', 'Active'];
         dataRows = list.map(c => [
           c.account, c.title, c.phone1 || '', c.phone2 || '', c.email || '',
-          c.cnic || '', c.address || '', c.qualification || '', c.active ? 'true' : 'false'
+          c.cnic || '', c.address || '', c.customerCategoryTitle || c.customerCategoryId || '', '0.00', c.active ? 'true' : 'false'
         ]);
       } else if (entityType === 'vendors') {
         const list = await vendorService.getVendors();
-        headers = ['Account', 'Title', 'Phone1', 'Phone2', 'Email', 'CNIC', 'Address', 'ShowInSales', 'Active'];
+        headers = ['Account', 'Vendor', 'Phone1', 'Phone2', 'Email', 'CNIC', 'Address', 'Balance', 'ShowInSales', 'Active'];
         dataRows = list.map(v => [
           v.account, v.title, v.phone1 || '', v.phone2 || '', v.email || '',
-          v.cnic || '', v.address || '', v.showInSales ? 'true' : 'false', v.active ? 'true' : 'false'
+          v.cnic || '', v.address || '', '0.00', v.showInSales ? 'true' : 'false', v.active ? 'true' : 'false'
         ]);
       } else if (entityType === 'products') {
         const [list, catPrices, ccList] = await Promise.all([
@@ -561,7 +583,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       return;
     }
 
-    const rawHeaders = matrix[0].map(h => h.trim().toLowerCase().replace(/[\s_-]/g, ''));
+    const rawHeaders = matrix[0].map(h => h.trim().toLowerCase().replace(/[\s/._-]/g, ''));
     const dataLines = matrix.slice(1);
 
     const mapped = dataLines.map((line, idx) => {
@@ -569,19 +591,91 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       rawHeaders.forEach((h, colIndex) => {
         const val = line[colIndex]?.trim() ?? '';
         // Map common synonyms
-        if (h === 'account' || h === 'accountcode' || h === 'code') {
+        if (
+          h === 'account' ||
+          h === 'accountcode' ||
+          h === 'code' ||
+          h === 'acno' ||
+          h === 'accno' ||
+          h === 'accountno' ||
+          h === 'ac' ||
+          h === 'a/cno' ||
+          h === 'a/c' ||
+          h === 'acnumber' ||
+          h === 'accountnumber'
+        ) {
           rowObj.account = val;
         } else if (h === 'id' || h === 'itemid' || h === 'productid' || h === 'empid' || h === 'employeeid') {
           rowObj.id = val;
-        } else if (h === 'type' || h === 'itemtype') {
-          rowObj.itemType = val.toLowerCase() === 'service' ? 'Service' : 'Product';
-        } else if (h === 'title' || h === 'name' || h === 'customername' || h === 'vendorname' || h === 'productname' || h === 'employeename') {
+        } else if (
+          h === 'type' ||
+          h === 'itemtype' ||
+          h === 'customertype' ||
+          h === 'customercategory' ||
+          h === 'customercategoryid' ||
+          h === 'custcategory' ||
+          h === 'partytype' ||
+          (entityType === 'customers' && (h === 'category' || h === 'cat'))
+        ) {
+          if (entityType === 'products') {
+            rowObj.itemType = val.toLowerCase() === 'service' ? 'Service' : 'Product';
+          } else if (entityType === 'customers') {
+            const valTrim = val.trim();
+            const activeCcList = customerCategories.length > 0 ? customerCategories : customerCategoriesRef.current;
+            const matchedCat = activeCcList.find(
+              c => c.code.trim().toLowerCase() === valTrim.toLowerCase() ||
+                   c.title.trim().toLowerCase() === valTrim.toLowerCase()
+            );
+            rowObj.customerCategoryId = matchedCat ? matchedCat.code : valTrim;
+          }
+        } else if (
+          h === 'title' ||
+          h === 'name' ||
+          h === 'customer' ||
+          h === 'customername' ||
+          h === 'vendor' ||
+          h === 'vendorname' ||
+          h === 'productname' ||
+          h === 'employeename' ||
+          h === 'party' ||
+          h === 'partyname'
+        ) {
           rowObj.title = val;
           rowObj.name = val;
-        } else if (h === 'phone' || h === 'phone1' || h === 'mobile' || h === 'contact') {
+        } else if (h === 'mobile' || h === 'mobileno' || h === 'cell' || h === 'cellno') {
           rowObj.phone1 = val;
-        } else if (h === 'phone2' || h === 'tel' || h === 'telephone') {
-          rowObj.phone2 = val;
+        } else if (h === 'phone1') {
+          rowObj.phone1 = val;
+        } else if (h === 'phone' || h === 'phone2' || h === 'tel' || h === 'telephone' || h === 'officephone') {
+          if (rowObj.phone1 && rowObj.phone1 !== val) {
+            rowObj.phone2 = val;
+          } else {
+            rowObj.phone1 = val;
+          }
+        } else if (h === 'contact' || h === 'contactperson' || h === 'contactname') {
+          if (/^[\d+()\s-]{7,}$/.test(val) && !rowObj.phone1) {
+            rowObj.phone1 = val;
+          } else if (/^[\d+()\s-]{7,}$/.test(val) && !rowObj.phone2) {
+            rowObj.phone2 = val;
+          } else if (!rowObj.qualification) {
+            rowObj.qualification = val;
+          }
+        } else if (
+          h === 'balance' ||
+          h === 'basebalance' ||
+          h === 'openingbalance' ||
+          h === 'openbalance' ||
+          h === 'opnbal' ||
+          h === 'bal' ||
+          h === 'opbal' ||
+          h === 'currentbalance'
+        ) {
+          const parsed = parseFloat(val.replace(/,/g, ''));
+          if (!isNaN(parsed)) {
+            if (rowObj.openingBalance === undefined || h === 'balance' || h === 'openingbalance') {
+              rowObj.openingBalance = parsed;
+            }
+          }
         } else if (h === 'email') {
           rowObj.email = val;
         } else if (h === 'cnic' || h === 'ntn') {
@@ -595,7 +689,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
         } else if (
           h === 'itemcategorycode' ||
           h === 'categorycode' ||
-          h === 'category' ||
+          (entityType === 'products' && h === 'category') ||
           h === 'standardcategory' ||
           h === 'itemcategory' ||
           h === 'productcategory' ||
@@ -726,8 +820,27 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       return rowObj;
     });
 
-    setRows(mapped);
-    message.success(`Loaded ${mapped.length} rows into the grid`);
+    const filteredMapped = mapped.filter(r => {
+      const hasTitle = Boolean(r.title && String(r.title).trim());
+      const hasName = Boolean(r.name && String(r.name).trim());
+      const hasId = Boolean(r.id && String(r.id).trim());
+      const hasAccount = Boolean(r.account && String(r.account).trim());
+      const hasPhone = Boolean(r.phone1 && String(r.phone1).trim());
+
+      if (entityType === 'customers' || entityType === 'vendors') {
+        return hasTitle || (hasAccount && hasPhone);
+      }
+      if (entityType === 'products') {
+        return hasTitle || hasId;
+      }
+      if (entityType === 'employees') {
+        return hasName || hasId;
+      }
+      return hasTitle || hasName || hasId || hasAccount;
+    });
+
+    setRows(filteredMapped);
+    message.success(`Loaded ${filteredMapped.length} rows into the grid`);
   };
 
   // Upload CSV handler
@@ -800,7 +913,9 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           cnic: r.cnic || undefined,
           address: r.address || undefined,
           qualification: r.qualification || undefined,
-          active: r.active ?? true
+          active: r.active ?? true,
+          customerCategoryId: r.customerCategoryId?.trim() || undefined,
+          openingBalance: r.openingBalance != null && !isNaN(Number(r.openingBalance)) ? Number(r.openingBalance) : undefined
         }));
         result = await customerService.bulkUpsert({ customers: payload });
       } else if (entityType === 'vendors') {
@@ -814,7 +929,8 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           address: r.address || undefined,
           qualification: r.qualification || undefined,
           active: r.active ?? true,
-          showInSales: r.showInSales ?? false
+          showInSales: r.showInSales ?? false,
+          openingBalance: r.openingBalance != null && !isNaN(Number(r.openingBalance)) ? Number(r.openingBalance) : undefined
         }));
         result = await vendorService.bulkUpsert({ vendors: payload });
       } else if (entityType === 'products') {
@@ -971,7 +1087,79 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
               </Tooltip>
             );
           }
-        },
+        }
+      );
+
+      if (entityType === 'customers') {
+        baseCols.push(
+          {
+            title: 'Category',
+            dataIndex: 'customerCategoryId',
+            key: 'customerCategoryId',
+            width: 170,
+            render: (val: string, record: any) => {
+              const activeCcList = customerCategories.length > 0 ? customerCategories : customerCategoriesRef.current;
+              return (
+                <Select
+                  value={val || undefined}
+                  placeholder="Select Category"
+                  size="small"
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  style={{ width: '100%' }}
+                  onChange={v => handleCellChange(record._key, 'customerCategoryId', v || '')}
+                  options={activeCcList.map(cc => ({
+                    value: cc.code,
+                    label: cc.title ? `${cc.title} (${cc.code})` : cc.code
+                  }))}
+                />
+              );
+            }
+          },
+          {
+            title: 'Opening Balance',
+            dataIndex: 'openingBalance',
+            key: 'openingBalance',
+            width: 140,
+            render: (val: number, record: any) => (
+              <Tooltip title="Opening balance (Receivable: Dr / positive; Advance: Cr / negative)">
+                <InputNumber
+                  value={val ?? 0}
+                  precision={2}
+                  step={100}
+                  placeholder="0.00"
+                  size="small"
+                  style={{ width: '100%' }}
+                  onChange={v => handleCellChange(record._key, 'openingBalance', v ?? 0)}
+                />
+              </Tooltip>
+            )
+          }
+        );
+      } else if (entityType === 'vendors') {
+        baseCols.push({
+          title: 'Opening Balance',
+          dataIndex: 'openingBalance',
+          key: 'openingBalance',
+          width: 140,
+          render: (val: number, record: any) => (
+            <Tooltip title="Opening balance (Payable: Cr / positive; Advance: Dr / negative)">
+              <InputNumber
+                value={val ?? 0}
+                precision={2}
+                step={100}
+                placeholder="0.00"
+                size="small"
+                style={{ width: '100%' }}
+                onChange={v => handleCellChange(record._key, 'openingBalance', v ?? 0)}
+              />
+            </Tooltip>
+          )
+        });
+      }
+
+      baseCols.push(
         {
           title: 'Phone 1',
           dataIndex: 'phone1',
