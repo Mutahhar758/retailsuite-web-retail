@@ -154,9 +154,15 @@ export const FixedAssetList: React.FC = () => {
         remarks: values.remarks,
       });
 
-      message.success(
-        `Asset "${values.title}" created successfully! ${result.voucherNo ? `(Voucher #${result.voucherNo})` : ''}`
-      );
+      if (result.voucherNo === 'OP-BAL') {
+        message.success(
+          `Existing asset "${values.title}" registered with opening value of Rs. ${Number(values.cost || 0).toLocaleString()}!`
+        );
+      } else {
+        message.success(
+          `Asset "${values.title}" created successfully! ${result.voucherNo ? `(Voucher #${result.voucherNo})` : ''}`
+        );
+      }
       setIsAssetModalOpen(false);
       assetForm.resetFields();
       fetchData();
@@ -495,72 +501,103 @@ export const FixedAssetList: React.FC = () => {
             </Radio.Group>
           </Form.Item>
 
-          {paymentMode !== 'opening' && (
-            <Row gutter={12}>
-              <Col span={12}>
+          {paymentMode === 'opening' ? (
+            <>
+              <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', padding: '10px 14px', borderRadius: 6, marginBottom: 16 }}>
+                <Text style={{ fontSize: 13, color: '#389e0d' }}>
+                  ℹ️ This is an existing asset already owned by the business. Its recorded value will increase your <strong>Fixed Assets</strong> on the Balance Sheet and credit <strong>Owner's Capital / Equity</strong>.
+                </Text>
+              </div>
+
+              <Row gutter={12}>
+                <Col span={24}>
+                  <Form.Item
+                    name="cost"
+                    label="Opening Valuation / Book Value (Rs.)"
+                    tooltip="Estimated current value or purchase value of this existing asset."
+                    rules={[{ required: true, message: 'Please enter asset opening value' }]}
+                  >
+                    <InputNumber
+                      style={{ width: '100%' }}
+                      placeholder="e.g. 150,000"
+                      min={1}
+                      formatter={(val) => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      parser={(val) => (val ? Number(val.replace(/\$\s?|(,*)/g, '')) : 0) as any}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Form.Item name="remarks" label="Notes / Description (Optional)">
+                <Input.TextArea rows={2} placeholder="e.g. Installed in store 2 years ago, in good working condition" />
+              </Form.Item>
+            </>
+          ) : (
+            <>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item
+                    name="cost"
+                    label="Purchase Cost (Rs.)"
+                    rules={[{ required: true, message: 'Please enter purchase amount' }]}
+                  >
+                    <InputNumber
+                      style={{ width: '100%' }}
+                      placeholder="0.00"
+                      min={1}
+                      formatter={(val) => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      parser={(val) => (val ? Number(val.replace(/\$\s?|(,*)/g, '')) : 0) as any}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="purchaseDate"
+                    label="Purchase Date"
+                    rules={[{ required: true, message: 'Please select purchase date' }]}
+                  >
+                    <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              {paymentMode === 'cash_bank' && (
                 <Form.Item
-                  name="cost"
-                  label="Purchase Cost (Rs.)"
-                  rules={[{ required: true, message: 'Please enter purchase amount' }]}
+                  name="cashBankAccountId"
+                  label="Paid From (Cash / Bank)"
+                  rules={[{ required: true, message: 'Please select payment account' }]}
                 >
-                  <InputNumber
-                    style={{ width: '100%' }}
-                    placeholder="0.00"
-                    min={1}
-                    formatter={(val) => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                    parser={(val) => (val ? Number(val.replace(/\$\s?|(,*)/g, '')) : 0) as any}
-                  />
+                  <Select placeholder="Select Cash or Bank account">
+                    {cashBankAccounts.map((cb) => (
+                      <Select.Option key={cb.account} value={cb.account}>
+                        <BankOutlined style={{ marginRight: 6 }} />
+                        {cb.title}
+                      </Select.Option>
+                    ))}
+                  </Select>
                 </Form.Item>
-              </Col>
-              <Col span={12}>
+              )}
+
+              {paymentMode === 'vendor_credit' && (
                 <Form.Item
-                  name="purchaseDate"
-                  label="Purchase Date"
-                  rules={[{ required: true, message: 'Please select purchase date' }]}
+                  name="vendorAccountId"
+                  label="Supplier / Vendor"
+                  rules={[{ required: true, message: 'Please select supplier' }]}
                 >
-                  <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
+                  <Select placeholder="Select supplier">
+                    {vendorAccounts.map((v) => (
+                      <Select.Option key={v.account} value={v.account}>
+                        {v.title}
+                      </Select.Option>
+                    ))}
+                  </Select>
                 </Form.Item>
-              </Col>
-            </Row>
-          )}
+              )}
 
-          {paymentMode === 'cash_bank' && (
-            <Form.Item
-              name="cashBankAccountId"
-              label="Paid From (Cash / Bank)"
-              rules={[{ required: true, message: 'Please select payment account' }]}
-            >
-              <Select placeholder="Select Cash or Bank account">
-                {cashBankAccounts.map((cb) => (
-                  <Select.Option key={cb.account} value={cb.account}>
-                    <BankOutlined style={{ marginRight: 6 }} />
-                    {cb.title}
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          )}
-
-          {paymentMode === 'vendor_credit' && (
-            <Form.Item
-              name="vendorAccountId"
-              label="Supplier / Vendor"
-              rules={[{ required: true, message: 'Please select supplier' }]}
-            >
-              <Select placeholder="Select supplier">
-                {vendorAccounts.map((v) => (
-                  <Select.Option key={v.account} value={v.account}>
-                    {v.title}
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          )}
-
-          {paymentMode !== 'opening' && (
-            <Form.Item name="remarks" label="Payment Note / Description">
-              <Input.TextArea rows={2} placeholder="e.g. Purchased for Ground Floor Counter from Al-Rehman Electronics" />
-            </Form.Item>
+              <Form.Item name="remarks" label="Payment Note / Description">
+                <Input.TextArea rows={2} placeholder="e.g. Purchased for Ground Floor Counter from Al-Rehman Electronics" />
+              </Form.Item>
+            </>
           )}
         </Form>
       </Modal>

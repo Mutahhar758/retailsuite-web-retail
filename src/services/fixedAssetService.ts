@@ -1,6 +1,7 @@
 import { chartOfAccountService, type ChartOfAccountHeadDto } from './chartOfAccountService';
 import { paymentService, type PaymentCreateRequest } from './paymentService';
 import { journalVoucherService, type JournalVoucherCreateRequest } from './journalVoucherService';
+import { openingBalanceService } from './openingBalanceService';
 
 export const FIXED_ASSETS_PREFIX = '001001';
 
@@ -108,6 +109,13 @@ export const fixedAssetService = {
           ],
         };
         voucherNo = await journalVoucherService.create(jvReq);
+      } else if (req.paymentMode === 'opening') {
+        // Record as Opening Balance in GL (Dr. Fixed Asset, Cr. Owner's Equity/Capital)
+        await openingBalanceService.upsert({
+          account,
+          drAmount: req.cost,
+        });
+        voucherNo = 'OP-BAL';
       }
     }
 
