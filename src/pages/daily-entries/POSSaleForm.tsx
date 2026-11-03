@@ -62,7 +62,7 @@ interface InvoiceTab {
   cart: CartItem[];
   discountPercent: number;
   discountFlat: number;
-  noteCounts: Record<number, number>;
+  tenderedCash?: number | null;
   searchItemQuery: string;
   activeCategory: string;
   orderType: string;
@@ -135,7 +135,7 @@ export const POSSaleForm: React.FC = () => {
       cart: [],
       discountPercent: 0,
       discountFlat: 0,
-      noteCounts: { 1: 0, 2: 0, 5: 0, 10: 0, 20: 0, 50: 0, 100: 0, 500: 0, 1000: 0, 5000: 0 },
+      tenderedCash: null,
       searchItemQuery: '',
       activeCategory: 'all',
       orderType: 'Takeaway',
@@ -153,7 +153,7 @@ export const POSSaleForm: React.FC = () => {
   const cart = activeTab?.cart || [];
   const discountPercent = activeTab?.discountPercent || 0;
   const discountFlat = activeTab?.discountFlat || 0;
-  const noteCounts = activeTab?.noteCounts || { 1: 0, 2: 0, 5: 0, 10: 0, 20: 0, 50: 0, 100: 0, 500: 0, 1000: 0, 5000: 0 };
+  const rawTenderedCash = activeTab?.tenderedCash;
   const selectedCustomer = activeTab?.selectedCustomer || null;
   const selectedNarration = activeTab?.selectedNarration || null;
   const searchItemQuery = activeTab?.searchItemQuery || '';
@@ -187,8 +187,8 @@ export const POSSaleForm: React.FC = () => {
     updateActiveTab(t => ({ ...t, discountFlat: typeof val === 'function' ? val(t.discountFlat) : val }));
   };
 
-  const setNoteCounts = (val: Record<number, number> | ((prev: Record<number, number>) => Record<number, number>)) => {
-    updateActiveTab(t => ({ ...t, noteCounts: typeof val === 'function' ? val(t.noteCounts) : val }));
+  const setTenderedCash = (val: number | null | ((prev: number | null) => number | null)) => {
+    updateActiveTab(t => ({ ...t, tenderedCash: typeof val === 'function' ? val(t.tenderedCash ?? null) : val }));
   };
 
   const setSelectedCustomer = (val: ChartOfAccountHeadDto | null | ((prev: ChartOfAccountHeadDto | null) => ChartOfAccountHeadDto | null)) => {
@@ -256,20 +256,20 @@ export const POSSaleForm: React.FC = () => {
     return saved !== null ? saved === 'true' : true;
   });
 
-  const currencyNotes = [1, 2, 5, 10, 20, 50, 100, 500, 1000, 5000];
+  const [isFirstTyping, setIsFirstTyping] = useState<boolean>(true);
+  const tenderInputRef = React.useRef<any>(null);
 
-  const noteStyles: Record<number, { bg: string; border: string; text: string }> = {
-    1: { bg: 'linear-gradient(135deg, #b45309, #d97706)', border: '#b45309', text: '#ffffff' },
-    2: { bg: 'linear-gradient(135deg, #94a3b8, #cbd5e1)', border: '#94a3b8', text: '#1e293b' },
-    5: { bg: 'linear-gradient(135deg, #ca8a04, #eab308)', border: '#ca8a04', text: '#ffffff' },
-    10: { bg: 'linear-gradient(135deg, #15803d, #22c55e)', border: '#15803d', text: '#ffffff' },
-    20: { bg: 'linear-gradient(135deg, #c2410c, #f97316)', border: '#c2410c', text: '#ffffff' },
-    50: { bg: 'linear-gradient(135deg, #6b21a8, #a855f7)', border: '#6b21a8', text: '#ffffff' },
-    100: { bg: 'linear-gradient(135deg, #b91c1c, #ef4444)', border: '#b91c1c', text: '#ffffff' },
-    500: { bg: 'linear-gradient(135deg, #047857, #10b981)', border: '#047857', text: '#ffffff' },
-    1000: { bg: 'linear-gradient(135deg, #1d4ed8, #3b82f6)', border: '#1d4ed8', text: '#ffffff' },
-    5000: { bg: 'linear-gradient(135deg, #a16207, #eab308)', border: '#a16207', text: '#ffffff' }
-  };
+  useEffect(() => {
+    if (isPaymentModalVisible) {
+      setTenderedCash(netAmount);
+      setIsFirstTyping(true);
+      const timer = setTimeout(() => {
+        tenderInputRef.current?.focus?.();
+        tenderInputRef.current?.select?.();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isPaymentModalVisible]);
 
   useEffect(() => {
     offlineCacheService.getCustomers()
@@ -567,7 +567,8 @@ export const POSSaleForm: React.FC = () => {
   const totalDiscount = totalItemDiscount + percentDiscountAmount + discountFlat;
   const netAmount = Math.max(0, grossTotal - totalDiscount);
 
-  const cashReceived = Object.entries(noteCounts).reduce((sum, [note, count]) => sum + (Number(note) * count), 0);
+  const tenderedCash = rawTenderedCash !== undefined && rawTenderedCash !== null ? rawTenderedCash : netAmount;
+  const cashReceived = tenderedCash;
   const cashBack = Math.max(0, cashReceived - netAmount);
 
   const generateReceiptTextLines = (
@@ -682,35 +683,57 @@ export const POSSaleForm: React.FC = () => {
     }
   );
 
-  const handleNoteTap = (note: number) => {
-    setNoteCounts(prev => ({
-      ...prev,
-      [note]: prev[note] + 1
-    }));
+  const handleExactCash = () => {
+    setIsFirstTyping(false);
+    setTenderedCash(netAmount);
+    message.success('Set to exact amount');
   };
 
   const handleResetCash = () => {
-    setNoteCounts({ 1: 0, 2: 0, 5: 0, 10: 0, 20: 0, 50: 0, 100: 0, 500: 0, 1000: 0, 5000: 0 });
-    message.info('Cash received reset');
+    setIsFirstTyping(false);
+    setTenderedCash(0);
+    message.info('Cash tender cleared');
   };
 
-  const handleExactCash = () => {
-    let remaining = Math.ceil(netAmount);
-    const newCounts: Record<number, number> = { 1: 0, 2: 0, 5: 0, 10: 0, 20: 0, 50: 0, 100: 0, 500: 0, 1000: 0, 5000: 0 };
+  const handleQuickAdd = (delta: number) => {
+    setIsFirstTyping(false);
+    setTenderedCash(prev => {
+      const current = prev !== null && prev !== undefined ? prev : netAmount;
+      return current + delta;
+    });
+  };
 
-    const sortedNotes = [...currencyNotes].reverse();
-    for (const note of sortedNotes) {
-      if (remaining >= note) {
-        const count = Math.floor(remaining / note);
-        newCounts[note] = count;
-        remaining %= note;
+  const handleNumpadDigit = (digit: string) => {
+    if (isFirstTyping) {
+      setIsFirstTyping(false);
+      setTenderedCash(Number(digit));
+    } else {
+      const currentStr = String(tenderedCash ?? 0);
+      const nextStr = currentStr === '0' ? digit : currentStr + digit;
+      setTenderedCash(Number(nextStr));
+    }
+  };
+
+  const handleNumpadDoubleZero = () => {
+    if (isFirstTyping) {
+      setIsFirstTyping(false);
+      setTenderedCash(0);
+    } else {
+      const currentStr = String(tenderedCash ?? 0);
+      if (currentStr !== '0' && currentStr !== '') {
+        setTenderedCash(Number(currentStr + '00'));
       }
     }
-    if (remaining > 0) {
-      newCounts[1] = (newCounts[1] || 0) + remaining;
+  };
+
+  const handleNumpadBackspace = () => {
+    setIsFirstTyping(false);
+    const currentStr = String(tenderedCash ?? 0);
+    if (currentStr.length <= 1) {
+      setTenderedCash(0);
+    } else {
+      setTenderedCash(Number(currentStr.slice(0, -1)));
     }
-    setNoteCounts(newCounts);
-    message.success('Auto-selected exact cash notes');
   };
 
   const handleQuickDiscount = (pct: number) => {
@@ -729,7 +752,7 @@ export const POSSaleForm: React.FC = () => {
     setCart([]);
     setDiscountPercent(0);
     setDiscountFlat(0);
-    handleResetCash();
+    setTenderedCash(null);
     setSelectedNarration(null);
     if (customers.length > 0) {
       setSelectedCustomer(customers[0]);
@@ -1140,7 +1163,7 @@ export const POSSaleForm: React.FC = () => {
       cart: [],
       discountPercent: 0,
       discountFlat: 0,
-      noteCounts: { 1: 0, 2: 0, 5: 0, 10: 0, 20: 0, 50: 0, 100: 0, 500: 0, 1000: 0, 5000: 0 },
+      tenderedCash: null,
       searchItemQuery: '',
       activeCategory: 'all',
       orderType: 'Takeaway',
@@ -2552,165 +2575,185 @@ export const POSSaleForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Cash Denominations Section (Coins & Notes combined) */}
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cash Denominations</span>
-              <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>(Tap to Add)</span>
+          {/* Direct Cash Tender Input (Keyboard & Touch) */}
+          <div style={{ marginTop: 2 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Cash Received (Type or Tap)
+              </span>
+              <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                Press Enter to Save & Print
+              </span>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start' }}>
-              {/* Coins: 1, 2, 5 */}
-              {[1, 2, 5].map(coin => {
-                const style = noteStyles[coin];
-                const count = noteCounts[coin] || 0;
-                return (
-                  <Button
-                    key={coin}
-                    className="pos-cash-coin-btn"
-                    onClick={() => handleNoteTap(coin)}
-                    style={{
-                      width: 50,
-                      height: 50,
-                      background: style.bg,
-                      borderColor: style.border,
-                      color: style.text,
-                      fontWeight: 900,
-                      fontSize: 15,
-                      padding: 0,
-                      borderRadius: '50%',
-                      display: 'inline-flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      position: 'relative',
-                      boxShadow: '0 3px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.4)',
-                      border: `2px solid ${style.border}`
-                    }}
-                  >
-                    {count > 0 && (
-                      <div style={{
-                        position: 'absolute',
-                        top: -4,
-                        right: -4,
-                        backgroundColor: '#ef4444',
-                        color: '#ffffff',
-                        borderRadius: '50%',
-                        width: 18,
-                        height: 18,
-                        fontSize: 10,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 900,
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                        border: 'none'
-                      }}>
-                        {count}
-                      </div>
-                    )}
-                    <span style={{ fontSize: 20, fontWeight: 900, lineHeight: 1 }}>{coin}</span>
-                  </Button>
-                );
-              })}
-
-              {/* Notes: 10, 20, 50, 100, 500, 1000, 5000 */}
-              {[10, 20, 50, 100, 500, 1000, 5000].map(note => {
-                const style = noteStyles[note];
-                const count = noteCounts[note] || 0;
-                return (
-                  <Button
-                    key={note}
-                    className="pos-cash-note-btn"
-                    onClick={() => handleNoteTap(note)}
-                    style={{
-                      width: 72,
-                      height: 44,
-                      background: style.bg,
-                      borderColor: style.border,
-                      color: style.text,
-                      fontWeight: 900,
-                      fontSize: 14,
-                      padding: 0,
-                      borderRadius: 8,
-                      display: 'inline-flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      position: 'relative',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
-                      border: 'none'
-                    }}
-                  >
-                    {count > 0 && (
-                      <div style={{
-                        position: 'absolute',
-                        top: -6,
-                        right: -6,
-                        backgroundColor: '#ef4444',
-                        color: '#ffffff',
-                        borderRadius: '50%',
-                        width: 18,
-                        height: 18,
-                        fontSize: 10,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 900,
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                      }}>
-                        {count}
-                      </div>
-                    )}
-                    <span style={{ fontSize: 20, fontWeight: 900, lineHeight: 1 }}>{note}</span>
-                  </Button>
-                );
-              })}
-            </div>
+            <InputNumber
+              ref={tenderInputRef}
+              autoFocus
+              value={tenderedCash}
+              onChange={val => {
+                setIsFirstTyping(false);
+                setTenderedCash(val !== null ? val : 0);
+              }}
+              onFocus={e => e.target.select()}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleSaveSale(true);
+                }
+              }}
+              controls={false}
+              precision={2}
+              prefix={<span style={{ fontSize: 18, fontWeight: 800, color: '#64748b', marginRight: 6 }}>Rs.</span>}
+              style={{
+                width: '100%',
+                height: 54,
+                fontSize: 26,
+                fontWeight: 900,
+                borderRadius: 12,
+                display: 'flex',
+                alignItems: 'center',
+                borderColor: '#3b82f6',
+                boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.12)'
+              }}
+            />
           </div>
 
-          {/* Note Selection Details readout */}
-          {Object.entries(noteCounts).some(([_, count]) => count > 0) && (
-            <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, marginTop: 2 }}>
-              <strong>Selected:</strong> {Object.entries(noteCounts)
-                .filter(([_, count]) => count > 0)
-                .map(([note, count]) => `${count} x Rs.${note}`)
-                .join(', ')}
-            </div>
-          )}
-
-          {/* Helper Action Buttons */}
-          <div style={{ display: 'flex', gap: 12, marginTop: 2 }}>
+          {/* Quick Tender Shortcuts */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <Button
-              type="dashed"
+              type="primary"
+              ghost
               onClick={handleExactCash}
               style={{
-                flex: 1,
-                height: 42,
-                fontWeight: 700,
+                flex: '1 1 auto',
+                height: 40,
+                fontWeight: 800,
+                fontSize: 13,
+                borderRadius: 8,
+                borderColor: '#16a34a',
                 color: '#16a34a',
-                borderColor: '#22c55e',
-                backgroundColor: '#f0fdf4',
-                borderRadius: 10,
-                fontSize: 13
+                backgroundColor: '#f0fdf4'
               }}
             >
-              💵 Same / Exact Amount
+              💵 Exact (Rs. {netAmount.toLocaleString()})
             </Button>
+            {[50, 100, 500, 1000].map(add => (
+              <Button
+                key={add}
+                onClick={() => handleQuickAdd(add)}
+                style={{
+                  flex: '1 1 auto',
+                  height: 40,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  borderRadius: 8,
+                  borderColor: '#cbd5e1',
+                  backgroundColor: '#f8fafc',
+                  color: '#1e293b'
+                }}
+              >
+                +{add}
+              </Button>
+            ))}
             <Button
-              type="dashed"
               danger
+              type="dashed"
               onClick={handleResetCash}
               style={{
-                flex: 1,
-                height: 42,
+                height: 40,
                 fontWeight: 700,
-                borderRadius: 10,
-                fontSize: 13
+                fontSize: 13,
+                borderRadius: 8
               }}
             >
-              🧹 Clear Cash
+              Clear
             </Button>
+          </div>
+
+          {/* On-Screen Touch Numpad */}
+          <div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: 8,
+              backgroundColor: '#f8fafc',
+              padding: 12,
+              borderRadius: 12,
+              border: '1px solid #e2e8f0'
+            }}>
+              {['1', '2', '3'].map(d => (
+                <Button
+                  key={d}
+                  onClick={() => handleNumpadDigit(d)}
+                  style={{ height: 46, fontSize: 18, fontWeight: 800, borderRadius: 8, backgroundColor: '#ffffff', borderColor: '#cbd5e1' }}
+                >
+                  {d}
+                </Button>
+              ))}
+              <Button
+                onClick={() => handleQuickAdd(500)}
+                style={{ height: 46, fontSize: 13, fontWeight: 800, borderRadius: 8, backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' }}
+              >
+                +500
+              </Button>
+
+              {['4', '5', '6'].map(d => (
+                <Button
+                  key={d}
+                  onClick={() => handleNumpadDigit(d)}
+                  style={{ height: 46, fontSize: 18, fontWeight: 800, borderRadius: 8, backgroundColor: '#ffffff', borderColor: '#cbd5e1' }}
+                >
+                  {d}
+                </Button>
+              ))}
+              <Button
+                onClick={() => handleQuickAdd(1000)}
+                style={{ height: 46, fontSize: 13, fontWeight: 800, borderRadius: 8, backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' }}
+              >
+                +1000
+              </Button>
+
+              {['7', '8', '9'].map(d => (
+                <Button
+                  key={d}
+                  onClick={() => handleNumpadDigit(d)}
+                  style={{ height: 46, fontSize: 18, fontWeight: 800, borderRadius: 8, backgroundColor: '#ffffff', borderColor: '#cbd5e1' }}
+                >
+                  {d}
+                </Button>
+              ))}
+              <Button
+                onClick={() => handleQuickAdd(5000)}
+                style={{ height: 46, fontSize: 13, fontWeight: 800, borderRadius: 8, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#15803d' }}
+              >
+                +5000
+              </Button>
+
+              <Button
+                onClick={handleNumpadDoubleZero}
+                style={{ height: 46, fontSize: 16, fontWeight: 800, borderRadius: 8, backgroundColor: '#ffffff', borderColor: '#cbd5e1' }}
+              >
+                00
+              </Button>
+              <Button
+                onClick={() => handleNumpadDigit('0')}
+                style={{ height: 46, fontSize: 18, fontWeight: 800, borderRadius: 8, backgroundColor: '#ffffff', borderColor: '#cbd5e1' }}
+              >
+                0
+              </Button>
+              <Button
+                onClick={handleNumpadBackspace}
+                style={{ height: 46, fontSize: 18, fontWeight: 800, borderRadius: 8, backgroundColor: '#fef2f2', borderColor: '#fecaca', color: '#dc2626' }}
+              >
+                ⌫
+              </Button>
+              <Button
+                onClick={handleResetCash}
+                style={{ height: 46, fontSize: 14, fontWeight: 800, borderRadius: 8, backgroundColor: '#f8fafc', borderColor: '#cbd5e1', color: '#64748b' }}
+              >
+                C
+              </Button>
+            </div>
           </div>
 
           {/* Checkout Action Buttons */}
