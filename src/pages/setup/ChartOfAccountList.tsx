@@ -2,13 +2,15 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Card, Button, Space, Typography, Tag, message, 
   Modal, Form, Input, Popconfirm, Tree,
-  Spin, Empty, Row, Col, Divider
+  Spin, Empty, Row, Col, Divider, Segmented, Tabs
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, 
   ReloadOutlined, ApartmentOutlined,
-  SearchOutlined
+  SearchOutlined, BankOutlined,
+  ShopOutlined, TeamOutlined, DollarOutlined
 } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import { chartOfAccountService, type ChartOfAccountDto } from '../../services/chartOfAccountService';
 import type { DataNode } from 'antd/es/tree';
 
@@ -33,9 +35,10 @@ const getLevelStyle = (level: number) => {
 };
 
 export const ChartOfAccountList: React.FC = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ChartOfAccountDto[]>([]);
-  const [searchValue, setSearchValue] = useState('');
+  const [viewMode, setViewMode] = useState<'friendly' | 'tree'>('friendly');
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [autoExpandParent, setAutoExpandParent] = useState(true);
@@ -54,7 +57,7 @@ export const ChartOfAccountList: React.FC = () => {
       // Auto expand first level
       const rootKeys = result.filter(item => !item.parentId).map(item => item.account);
       setExpandedKeys(rootKeys);
-    } catch (error) {
+    } catch {
       message.error('Failed to fetch chart of accounts');
     } finally {
       setLoading(false);
@@ -68,7 +71,6 @@ export const ChartOfAccountList: React.FC = () => {
   const treeData = useMemo(() => {
     if (!data || data.length === 0) return [];
     
-    // Group accounts by parentId for O(1) lookup
     const groupedByParent = data.reduce((acc, item) => {
       const pId = item.parentId || '';
       if (!acc[pId]) acc[pId] = [];
@@ -97,7 +99,6 @@ export const ChartOfAccountList: React.FC = () => {
     setAutoExpandParent(false);
   };
 
-  // Pre-calculate flattened data for faster search
   const flatData = useMemo(() => {
     const flatten = (list: AccountNode[]): { key: string; title: string; parentKey: string | null }[] => {
       const result: { key: string; title: string; parentKey: string | null }[] = [];
@@ -119,7 +120,6 @@ export const ChartOfAccountList: React.FC = () => {
 
   const onSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = e.target;
-    setSearchValue(value);
     
     if (!value) {
       setExpandedKeys(data.filter(item => !item.parentId).map(item => item.account));
@@ -148,43 +148,30 @@ export const ChartOfAccountList: React.FC = () => {
     return data.find(item => item.account === selectedKey) || null;
   }, [data, selectedKey]);
 
-  const handleAddChild = () => {
-    if (!selectedAccount) {
-      message.warning('Please select a parent account');
-      return;
-    }
-    if (selectedAccount.accLevel >= 5) {
-      message.error('Cannot create child for a detail account');
-      return;
-    }
+  const handleAddChild = (parent: ChartOfAccountDto) => {
     setEditingRecord(null);
-    setParentRecord(selectedAccount);
+    setParentRecord(parent);
     form.resetFields();
     setIsModalVisible(true);
   };
 
-  const handleEdit = () => {
-    if (!selectedAccount) {
-      message.warning('Please select an account to edit');
-      return;
-    }
-    setEditingRecord(selectedAccount);
-    setParentRecord(data.find(item => item.account === selectedAccount.parentId) || null);
-    form.setFieldsValue({ 
-      title: selectedAccount.title,
-    });
+  const handleEdit = (record: ChartOfAccountDto) => {
+    setEditingRecord(record);
+    setParentRecord(null);
+    form.setFieldsValue({ title: record.title });
     setIsModalVisible(true);
   };
 
-  const handleDelete = async () => {
-    if (!selectedAccount) return;
+  const handleDelete = async (account: string) => {
     try {
-      await chartOfAccountService.delete(selectedAccount.account);
+      await chartOfAccountService.delete(account);
       message.success('Account deleted successfully');
-      setSelectedKey(null);
       fetchData();
-    } catch (error) {
-      // Error message handled by interceptor
+      if (selectedKey === account) {
+        setSelectedKey(null);
+      }
+    } catch {
+      // Error handled by interceptor
     }
   };
 
@@ -205,22 +192,136 @@ export const ChartOfAccountList: React.FC = () => {
       }
       setIsModalVisible(false);
       fetchData();
-    } catch (error) {
-      console.error('Validation failed:', error);
+    } catch {
+      // Error handled by interceptor
     }
   };
 
+  const renderFriendlyCategory = (rootCode: string) => {
+    const childrenL2 = data.filter(d => d.parentId === rootCode);
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: 12 }}>
+        {childrenL2.map(l2 => {
+          const childrenL3 = data.filter(d => d.parentId === l2.account);
+
+          let quickAction = null;
+          if (l2.account === '001001') {
+            quickAction = (
+              <Button type="primary" size="small" icon={<ShopOutlined />} onClick={() => navigate('/setup/fixed-assets')}>
+                Manage Fixed Assets
+              </Button>
+            );
+          } else if (l2.account === '001002') {
+            quickAction = (
+              <Space>
+                <Button size="small" icon={<BankOutlined />} onClick={() => navigate('/setup/bank-accounts')}>
+                  Manage Banks
+                </Button>
+                <Button size="small" icon={<TeamOutlined />} onClick={() => navigate('/setup/customers')}>
+                  Customers
+                </Button>
+              </Space>
+            );
+          } else if (l2.account === '002001') {
+            quickAction = (
+              <Button size="small" icon={<TeamOutlined />} onClick={() => navigate('/setup/vendors')}>
+                Manage Vendors
+              </Button>
+            );
+          } else if (l2.account === '004002') {
+            quickAction = (
+              <Button type="primary" danger size="small" icon={<DollarOutlined />} onClick={() => navigate('/daily-entries/expenses')}>
+                Record Expense
+              </Button>
+            );
+          }
+
+          return (
+            <Card
+              key={l2.account}
+              size="small"
+              title={
+                <Space>
+                  <Text strong style={{ fontSize: 16 }}>{l2.title}</Text>
+                  <Tag style={{ fontFamily: 'monospace' }}>{l2.account}</Tag>
+                </Space>
+              }
+              extra={quickAction}
+              style={{ borderRadius: 8, border: '1px solid #f0f0f0' }}
+            >
+              {childrenL3.length === 0 ? (
+                <Text type="secondary">No sub-groups defined.</Text>
+              ) : (
+                <Row gutter={[16, 16]}>
+                  {childrenL3.map(l3 => {
+                    const childrenL4 = data.filter(d => d.parentId === l3.account);
+                    return (
+                      <Col xs={24} md={12} key={l3.account}>
+                        <div style={{ background: '#fafafa', padding: 12, borderRadius: 6, border: '1px solid #f0f0f0', height: '100%' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <Text strong style={{ color: '#262626' }}>{l3.title}</Text>
+                          </div>
+                          {childrenL4.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {childrenL4.map(l4 => {
+                                const detailsCount = data.filter(d => d.parentId === l4.account).length;
+                                return (
+                                  <div
+                                    key={l4.account}
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      padding: '4px 8px',
+                                      background: '#ffffff',
+                                      borderRadius: 4,
+                                      border: '1px solid #f5f5f5',
+                                      fontSize: 13,
+                                    }}
+                                  >
+                                    <span>{l4.title}</span>
+                                    <Tag color={detailsCount > 0 ? 'green' : 'default'} style={{ fontSize: 10 }}>
+                                      {detailsCount} detail {detailsCount === 1 ? 'account' : 'accounts'}
+                                    </Tag>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <Text type="secondary" style={{ fontSize: 12 }}>No subcategories</Text>
+                          )}
+                        </div>
+                      </Col>
+                    );
+                  })}
+                </Row>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
-    <Card className="shadow-sm border-gray-100 rounded-xl min-h-[600px]">
-      <div className="flex justify-between items-center mb-6">
+    <Card className="shadow-sm border-gray-100 rounded-xl">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <Space align="center">
           <ApartmentOutlined style={{ fontSize: 24, color: '#1677ff' }} />
           <div>
             <Title level={4} style={{ margin: 0 }}>Chart of Accounts</Title>
-            <Text type="secondary">Manage your organization's financial account structure</Text>
+            <Text type="secondary">Explore accounts, hierarchy, or manage standard financial categories</Text>
           </div>
         </Space>
-        <Space>
+        <Space wrap>
+          <Segmented
+            value={viewMode}
+            onChange={(val) => setViewMode(val as 'friendly' | 'tree')}
+            options={[
+              { label: '🌟 Simplified View', value: 'friendly' },
+              { label: '🌲 Accountant Tree View', value: 'tree' },
+            ]}
+          />
           <Button 
             icon={<ReloadOutlined />} 
             onClick={fetchData}
@@ -231,178 +332,189 @@ export const ChartOfAccountList: React.FC = () => {
         </Space>
       </div>
 
-      <Divider />
+      <Divider style={{ margin: '12px 0 20px 0' }} />
 
-      <Row gutter={24}>
-        <Col span={10}>
+      {viewMode === 'friendly' ? (
+        <Tabs
+          defaultActiveKey="001"
+          items={[
+            {
+              key: '001',
+              label: '🏢 Assets',
+              children: renderFriendlyCategory('001'),
+            },
+            {
+              key: '004',
+              label: '📉 Expenses',
+              children: renderFriendlyCategory('004'),
+            },
+            {
+              key: '002',
+              label: '💳 Liabilities',
+              children: renderFriendlyCategory('002'),
+            },
+            {
+              key: '003',
+              label: '💰 Income',
+              children: renderFriendlyCategory('003'),
+            },
+            {
+              key: '005',
+              label: '🏛️ Capital / Equity',
+              children: renderFriendlyCategory('005'),
+            },
+          ]}
+        />
+      ) : (
+        /* Accountant Tree Mode */
+        <div>
           <div className="mb-4">
             <Search 
-              placeholder="Search accounts..." 
-              onChange={onSearch} 
+              placeholder="Search accounts by name or code..." 
+              onChange={onSearch}
               prefix={<SearchOutlined />}
-              className="mb-4"
+              style={{ maxWidth: 400 }}
+              allowClear
             />
-            <div className="border border-gray-100 rounded-lg p-4 bg-gray-50 max-h-[500px] overflow-auto">
-              {loading ? (
-                <div className="flex justify-center p-8"><Spin /></div>
-              ) : treeData.length > 0 ? (
-                <Tree
-                  blockNode
-                  virtual
-                  onExpand={onExpand}
-                  expandedKeys={expandedKeys}
-                  autoExpandParent={autoExpandParent}
-                  onSelect={(keys) => setSelectedKey(keys[0] as string)}
-                  selectedKeys={selectedKey ? [selectedKey] : []}
-                  treeData={treeData}
-                  titleRender={(node: any) => {
-                    const index = node.title.toLowerCase().indexOf(searchValue.toLowerCase());
-                    const beforeStr = node.title.substring(0, index);
-                    const afterStr = node.title.substring(index + searchValue.length);
-                    
-                    const style = getLevelStyle(node.accLevel);
-
-                    const title =
-                      index > -1 ? (
-                        <span style={style}>
-                          {beforeStr}
-                          <span style={{ color: '#f50' }}>{node.title.substring(index, index + searchValue.length)}</span>
-                          {afterStr}
-                        </span>
-                      ) : (
-                        <span style={style}>{node.title}</span>
-                      );
-                    
-                    return (
-                      <div className="flex justify-between items-center w-full pr-2 py-1">
-                        <span>{title}</span>
-                        {node.accType === 'Detail' && <Tag color="blue" style={{ fontSize: '10px' }}>Detail</Tag>}
-                      </div>
-                    );
-                  }}
-                />
-              ) : (
-                <Empty description="No accounts found" />
-              )}
-            </div>
           </div>
-        </Col>
-        
-        <Col span={14}>
-          <Card 
-            title={<Title level={4} style={{ margin: 0 }}>Account Details</Title>}
-            styles={{ body: { padding: '32px', minHeight: '500px' } }}
-            className="h-full border-gray-100 bg-gray-50"
-            extra={
-              selectedAccount && (
-                <Space>
-                  <Button 
-                    type="primary" 
-                    icon={<PlusOutlined />} 
-                    onClick={handleAddChild}
-                    disabled={selectedAccount.accLevel >= 5}
-                  >
-                    Add Child
-                  </Button>
-                  <Button 
-                    icon={<EditOutlined />} 
-                    onClick={handleEdit}
-                  >
-                    Edit
-                  </Button>
-                  <Popconfirm
-                    title="Delete Account"
-                    description="Are you sure you want to delete this account?"
-                    onConfirm={handleDelete}
-                    okText="Yes"
-                    cancelText="No"
-                    disabled={data.some(item => item.parentId === selectedAccount.account)}
-                  >
-                    <Button 
-                      danger 
-                      icon={<DeleteOutlined />}
-                      disabled={data.some(item => item.parentId === selectedAccount.account)}
-                    >
-                      Delete
-                    </Button>
-                  </Popconfirm>
-                </Space>
-              )
-            }
-          >
-            {selectedAccount ? (
-              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                {/* Header Section */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
-                  <div>
-                    <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '8px' }}>
-                      Account Title
-                    </Text>
-                    <Title level={2} style={{ margin: 0, lineHeight: 1.2 }}>{selectedAccount.title}</Title>
+
+          <Row gutter={[24, 24]}>
+            <Col xs={24} lg={14}>
+              <Card 
+                title="Account Hierarchy" 
+                size="small"
+                className="bg-gray-50 border-gray-200"
+              >
+                {loading ? (
+                  <div className="flex justify-center p-8">
+                    <Spin tip="Loading Chart of Accounts..." />
                   </div>
-                  <Tag color={selectedAccount.accType === 'Detail' ? 'blue' : 'gold'} style={{ padding: '4px 16px', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 'bold' }}>
-                    {selectedAccount.accType}
-                  </Tag>
-                </div>
-
-                {/* Data Section */}
-                <div style={{ backgroundColor: '#fafafa', padding: '24px', borderRadius: '12px', border: '1px solid #f0f0f0', marginBottom: 'auto' }}>
-                  <Row gutter={[40, 40]}>
-                    <Col span={12}>
-                      <Space direction="vertical" size={4}>
-                        <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase' }}>Account Code</Text>
-                        <Text strong style={{ fontSize: '20px', color: '#1677ff', fontFamily: 'monospace' }}>{selectedAccount.account}</Text>
-                      </Space>
-                    </Col>
-                    <Col span={12}>
-                      <Space direction="vertical" size={4}>
-                        <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase' }}>Parent Account</Text>
-                        <Text strong style={{ fontSize: '16px' }}>{selectedAccount.parentId || 'ROOT'}</Text>
-                      </Space>
-                    </Col>
-                    <Col span={12}>
-                      <Space direction="vertical" size={4}>
-                        <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase' }}>Account Level</Text>
-                        <Tag bordered={false} style={{ backgroundColor: '#fff', border: '1px solid #d9d9d9', fontWeight: 'bold', margin: 0, padding: '2px 12px' }}>
-                          LEVEL {selectedAccount.accLevel}
-                        </Tag>
-                      </Space>
-                    </Col>
-                  </Row>
-                </div>
-
-                {/* Footer Section */}
-                <div style={{ marginTop: '48px', paddingTop: '32px', borderTop: '1px solid #f0f0f0' }}>
-                  <Row gutter={[48, 24]}>
-                    <Col span={12}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Created Information</Text>
-                        <Text strong style={{ fontSize: '14px' }}>{selectedAccount.createdBy}</Text>
-                        <Text type="secondary" style={{ fontSize: '12px' }}>{new Date(selectedAccount.createdOn).toLocaleString()}</Text>
-                      </div>
-                    </Col>
-                    {selectedAccount.lastModifiedBy && (
-                      <Col span={12}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Last Modified Information</Text>
-                          <Text strong style={{ fontSize: '14px' }}>{selectedAccount.lastModifiedBy}</Text>
-                          <Text type="secondary" style={{ fontSize: '12px' }}>{new Date(selectedAccount.lastModifiedOn!).toLocaleString()}</Text>
+                ) : treeData.length > 0 ? (
+                  <Tree
+                    showLine={{ showLeafIcon: false }}
+                    showIcon={false}
+                    expandedKeys={expandedKeys}
+                    autoExpandParent={autoExpandParent}
+                    onExpand={onExpand}
+                    selectedKeys={selectedKey ? [selectedKey] : []}
+                    onSelect={(keys) => {
+                      if (keys.length > 0) {
+                        setSelectedKey(keys[0] as string);
+                      } else {
+                        setSelectedKey(null);
+                      }
+                    }}
+                    titleRender={(node: any) => {
+                      const isDetail = node.accType === 'Detail';
+                      const levelStyle = getLevelStyle(node.accLevel);
+                      return (
+                        <div className="flex items-center justify-between py-1 px-2 hover:bg-blue-50 rounded group w-full">
+                          <Space size={8}>
+                            <Tag 
+                              color={isDetail ? 'green' : 'blue'} 
+                              bordered={false}
+                              className="text-xs font-mono"
+                              style={{ margin: 0 }}
+                            >
+                              {node.key}
+                            </Tag>
+                            <span style={levelStyle}>
+                              {node.title}
+                            </span>
+                          </Space>
+                          <Tag 
+                            color={isDetail ? 'cyan' : 'default'}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 text-xs"
+                          >
+                            Level {node.accLevel}
+                          </Tag>
                         </div>
-                      </Col>
-                    )}
-                  </Row>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-[300px] text-gray-400">
-                <ApartmentOutlined style={{ fontSize: 48, marginBottom: 16 }} />
-                <p>Select an account from the tree to view details or manage</p>
-              </div>
-            )}
-          </Card>
-        </Col>
-      </Row>
+                      );
+                    }}
+                    treeData={treeData}
+                  />
+                ) : (
+                  <Empty description="No accounts found" />
+                )}
+              </Card>
+            </Col>
 
+            <Col xs={24} lg={10}>
+              <Card 
+                title="Account Overview" 
+                size="small"
+                className="border-gray-200"
+              >
+                {selectedAccount ? (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+                      <div>
+                        <Title level={4} style={{ margin: 0 }}>{selectedAccount.title}</Title>
+                        <Space style={{ marginTop: '8px' }}>
+                          <Tag color={selectedAccount.accType === 'Detail' ? 'green' : 'blue'} style={{ padding: '2px 8px', fontSize: '12px' }}>
+                            {selectedAccount.accType} Account
+                          </Tag>
+                          <Tag style={{ padding: '2px 8px', fontSize: '12px' }}>Level {selectedAccount.accLevel}</Tag>
+                        </Space>
+                      </div>
+                      <Space>
+                        <Button 
+                          icon={<EditOutlined />} 
+                          onClick={() => handleEdit(selectedAccount)}
+                        >
+                          Edit
+                        </Button>
+                        {selectedAccount.accType !== 'Detail' && selectedAccount.accLevel < 5 && (
+                          <Button 
+                            type="primary" 
+                            icon={<PlusOutlined />} 
+                            onClick={() => handleAddChild(selectedAccount)}
+                          >
+                            Add Child
+                          </Button>
+                        )}
+                        <Popconfirm
+                          title="Delete Account"
+                          description="Are you sure you want to delete this account?"
+                          onConfirm={() => handleDelete(selectedAccount.account)}
+                          okText="Yes"
+                          cancelText="No"
+                        >
+                          <Button danger icon={<DeleteOutlined />} />
+                        </Popconfirm>
+                      </Space>
+                    </div>
+
+                    <Divider style={{ margin: '16px 0' }} />
+
+                    <Row gutter={[24, 24]}>
+                      <Col span={12}>
+                        <Space direction="vertical" size={2}>
+                          <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase' }}>Account Code</Text>
+                          <Text strong style={{ fontSize: '18px', color: '#1677ff', fontFamily: 'monospace' }}>{selectedAccount.account}</Text>
+                        </Space>
+                      </Col>
+                      <Col span={12}>
+                        <Space direction="vertical" size={2}>
+                          <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase' }}>Parent Account</Text>
+                          <Text strong style={{ fontSize: '16px' }}>{selectedAccount.parentId || 'ROOT'}</Text>
+                        </Space>
+                      </Col>
+                    </Row>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-[300px] text-gray-400">
+                    <ApartmentOutlined style={{ fontSize: 48, marginBottom: 16 }} />
+                    <p>Select an account from the tree to view details or manage</p>
+                  </div>
+                )}
+              </Card>
+            </Col>
+          </Row>
+        </div>
+      )}
+
+      {/* Modal for editing or adding child account */}
       <Modal
         title={editingRecord ? "Edit Account" : `New Child Account for ${parentRecord?.title}`}
         open={isModalVisible}
@@ -442,3 +554,5 @@ export const ChartOfAccountList: React.FC = () => {
     </Card>
   );
 };
+
+export default ChartOfAccountList;

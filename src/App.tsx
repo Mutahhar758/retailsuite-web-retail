@@ -38,6 +38,7 @@ import { WandaStockAdjustmentForm } from './pages/daily-entries/WandaStockAdjust
 import { BankReconciliation } from './pages/daily-entries/BankReconciliation';
 import { KitchenDisplay } from './pages/daily-entries/KitchenDisplay';
 import { RecurringVoucherList } from './pages/daily-entries/RecurringVoucherList';
+import { ExpenseManagement } from './pages/daily-entries/ExpenseManagement';
 import { AccountStatement } from './pages/reports/AccountStatement';
 import { AccountStatementWithDue } from './pages/reports/AccountStatementWithDue';
 import { TrialBalanceReport } from './pages/reports/TrialBalanceReport';
@@ -61,6 +62,7 @@ import { SettingsPage } from './pages/setup/SettingsPage';
 import { CompanyInfoPage } from './pages/setup/CompanyInfoPage';
 import { ChartOfAccountList } from './pages/setup/ChartOfAccountList';
 import { DetailAccountList } from './pages/setup/DetailAccountList';
+import { FixedAssetList } from './pages/setup/FixedAssetList';
 import { BankAccountList } from './pages/setup/BankAccountList';
 import { InventoryItemList } from './pages/setup/InventoryItemList';
 import { InventoryItemForm } from './pages/setup/InventoryItemForm';
@@ -155,6 +157,7 @@ function App() {
             <Route index element={<Dashboard />} />
             
             {/* Daily Entries */}
+            <Route path="daily-entries/expenses" element={<ExpenseManagement />} />
             <Route path="daily-entries/payment-voucher" element={<PaymentVoucherList />} />
             <Route path="daily-entries/payment-voucher/new" element={<PaymentVoucherForm />} />
             <Route path="daily-entries/payment-voucher/:voucherNo" element={<PaymentVoucherForm />} />
@@ -229,6 +232,7 @@ function App() {
             <Route path="setup/item-categories" element={<ItemCategoryList />} />
             <Route path="setup/chart-of-accounts" element={<ChartOfAccountList />} />
             <Route path="setup/detail-accounts" element={<DetailAccountList />} />
+            <Route path="setup/fixed-assets" element={<FixedAssetList />} />
             <Route path="setup/bank-accounts" element={<BankAccountList />} />
              <Route path="setup/item-details" element={<InventoryItemList />} />
             <Route path="setup/item-details/new" element={<InventoryItemForm />} />

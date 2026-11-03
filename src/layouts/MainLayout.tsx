@@ -37,6 +37,7 @@ const permissionMap: Record<string, string> = {
   '/': 'Permissions.Dashboard.View',
   '/setup/chart-of-accounts': 'Permissions.ChartOfAccounts.View',
   '/setup/detail-accounts': 'Permissions.DetailAccounts.View',
+  '/setup/fixed-assets': 'Permissions.ChartOfAccounts.View',
   '/setup/bank-accounts': 'Permissions.BankAccounts.View',
   '/setup/customers': 'Permissions.Customers.View',
   '/setup/customer-categories': 'Permissions.CustomerCategories.View',
@@ -55,6 +56,7 @@ const permissionMap: Record<string, string> = {
   '/setup/opening-balance': 'Permissions.OpeningBalances.View',
   '/setup/bom': 'Permissions.BillOfMaterials.View',
 
+  '/daily-entries/expenses': 'Permissions.PaymentVouchers.View',
   '/daily-entries/payment-voucher': 'Permissions.PaymentVouchers.View',
   '/daily-entries/receipt-voucher': 'Permissions.ReceiptVouchers.View',
   '/daily-entries/journal-voucher': 'Permissions.JournalVouchers.View',
@@ -248,6 +250,7 @@ export const MainLayout: React.FC = () => {
       children: [
         { key: '/setup/chart-of-accounts', label: 'Chart of Accounts' },
         { key: '/setup/detail-accounts', label: 'Detail Accounts' },
+        { key: '/setup/fixed-assets', label: 'Fixed Assets' },
         { key: '/setup/bank-accounts', label: 'Bank Accounts' },
         { key: '/setup/customers', label: 'Customer' },
         { key: '/setup/customer-categories', label: 'Customer Category' },
@@ -274,6 +277,7 @@ export const MainLayout: React.FC = () => {
       icon: <AppstoreOutlined />, 
       label: 'Daily Entries',
       children: [
+        { key: '/daily-entries/expenses', label: 'Expenses' },
         { key: '/daily-entries/payment-voucher', label: 'Payment Voucher' },
         { key: '/daily-entries/receipt-voucher', label: 'Receipt Voucher' },
         { key: '/daily-entries/journal-voucher', label: 'Journal Voucher' },

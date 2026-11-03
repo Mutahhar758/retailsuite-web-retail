@@ -1,6 +1,4 @@
 import api from './api';
-// Force reload
-
 
 export interface ChartOfAccountHeadDto {
   account: string;
@@ -48,6 +46,12 @@ export const chartOfAccountService = {
 
   async getCustomerAccounts() {
     const response = await api.get('/api/chartofaccounts/customers');
+    return response.data.body as ChartOfAccountHeadDto[];
+  },
+
+  async getLookup(prefix: string, level?: number) {
+    const query = level !== undefined ? `?prefix=${encodeURIComponent(prefix)}&level=${level}` : `?prefix=${encodeURIComponent(prefix)}`;
+    const response = await api.get(`/api/chartofaccounts/lookup${query}`);
     return response.data.body as ChartOfAccountHeadDto[];
   },
 
