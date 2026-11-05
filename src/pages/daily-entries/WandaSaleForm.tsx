@@ -48,6 +48,7 @@ interface SaleTab {
   cashBack: number;
   date: any;
   saleLines: any[];
+  isManualCash?: boolean;
 }
 
 export const WandaSaleForm: React.FC = () => {
@@ -76,7 +77,7 @@ export const WandaSaleForm: React.FC = () => {
   const [categoryPrices, setCategoryPrices] = useState<ItemCustomerCategoryPriceDto[]>([]);
   const [saleLines, setSaleLines] = useState<any[]>([]);
   const [cacheMissError, setCacheMissError] = useState<string | null>(null);
-  const prevTotalAmountRef = useRef(0);
+  const manualCashTabsRef = useRef<Record<string, boolean>>({});
   const originalAccountIdRef = useRef<string | null>(null);
 
   // Price history modal state
@@ -191,7 +192,8 @@ export const WandaSaleForm: React.FC = () => {
       cashReceipt: 0,
       cashBack: 0,
       date: dayjs(),
-      saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]
+      saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }],
+      isManualCash: false
     }];
   });
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
@@ -208,8 +210,29 @@ export const WandaSaleForm: React.FC = () => {
     }
   }, [saleLines, activeTabId, isEdit]);
 
-  const handleFormValuesChange = (_: any, allValues: any) => {
-    if (isEdit) return;
+  const handleFormValuesChange = (changedValues: any, allValues: any) => {
+    if (isEdit) {
+      if (changedValues.cashReceipt !== undefined) {
+        const receipt = (changedValues.cashReceipt !== null && changedValues.cashReceipt !== undefined) ? Number(changedValues.cashReceipt) : 0;
+        form.setFieldValue('cashBack', Math.max(0, receipt - totalAmount));
+      }
+      return;
+    }
+
+    const isCashReceiptChanged = changedValues.cashReceipt !== undefined;
+    if (isCashReceiptChanged) {
+      manualCashTabsRef.current[activeTabId] = true;
+    }
+
+    const currentReceipt = (allValues.cashReceipt !== null && allValues.cashReceipt !== undefined) ? Number(allValues.cashReceipt) : 0;
+    const currentCashBack = isCashReceiptChanged
+      ? Math.max(0, currentReceipt - totalAmount)
+      : (allValues.cashBack || 0);
+
+    if (isCashReceiptChanged) {
+      form.setFieldValue('cashBack', currentCashBack);
+    }
+
     setTabs(prev => prev.map(t => {
       if (t.id === activeTabId) {
         return {
@@ -217,9 +240,10 @@ export const WandaSaleForm: React.FC = () => {
           account: allValues.account || null,
           narration: allValues.narration || null,
           description: allValues.description || '',
-          cashReceipt: allValues.cashReceipt || 0,
-          cashBack: allValues.cashBack || 0,
-          date: allValues.date || dayjs()
+          cashReceipt: currentReceipt,
+          cashBack: currentCashBack,
+          date: allValues.date || dayjs(),
+          isManualCash: isCashReceiptChanged ? true : t.isManualCash
         };
       }
       return t;
@@ -230,6 +254,7 @@ export const WandaSaleForm: React.FC = () => {
     if (targetId === activeTabId) return;
 
     const currentValues = form.getFieldsValue();
+    const currentCashReceipt = (currentValues.cashReceipt !== undefined && currentValues.cashReceipt !== null) ? Number(currentValues.cashReceipt) : 0;
     setTabs(prev => prev.map(t => {
       if (t.id === activeTabId) {
         return {
@@ -237,10 +262,11 @@ export const WandaSaleForm: React.FC = () => {
           account: currentValues.account || null,
           narration: currentValues.narration || null,
           description: currentValues.description || '',
-          cashReceipt: currentValues.cashReceipt || 0,
+          cashReceipt: currentCashReceipt,
           cashBack: currentValues.cashBack || 0,
           date: currentValues.date || dayjs(),
-          saleLines: saleLines
+          saleLines: saleLines,
+          isManualCash: manualCashTabsRef.current[activeTabId] ?? false
         };
       }
       return t;
@@ -250,6 +276,7 @@ export const WandaSaleForm: React.FC = () => {
 
     const targetTab = tabs.find(t => t.id === targetId);
     if (targetTab) {
+      manualCashTabsRef.current[targetId] = targetTab.isManualCash ?? false;
       form.setFieldsValue({
         date: targetTab.date,
         account: targetTab.account,
@@ -265,6 +292,7 @@ export const WandaSaleForm: React.FC = () => {
 
   const handleAddTab = () => {
     const currentValues = form.getFieldsValue();
+    const currentCashReceipt = (currentValues.cashReceipt !== undefined && currentValues.cashReceipt !== null) ? Number(currentValues.cashReceipt) : 0;
     setTabs(prev => prev.map(t => {
       if (t.id === activeTabId) {
         return {
@@ -272,10 +300,11 @@ export const WandaSaleForm: React.FC = () => {
           account: currentValues.account || null,
           narration: currentValues.narration || null,
           description: currentValues.description || '',
-          cashReceipt: currentValues.cashReceipt || 0,
+          cashReceipt: currentCashReceipt,
           cashBack: currentValues.cashBack || 0,
           date: currentValues.date || dayjs(),
-          saleLines: saleLines
+          saleLines: saleLines,
+          isManualCash: manualCashTabsRef.current[activeTabId] ?? false
         };
       }
       return t;
@@ -287,6 +316,7 @@ export const WandaSaleForm: React.FC = () => {
     })) + 1 : 1;
 
     const newTabId = Date.now().toString();
+    manualCashTabsRef.current[newTabId] = false;
     const newTab: SaleTab = {
       id: newTabId,
       name: `Tab ${nextNum}`,
@@ -296,14 +326,15 @@ export const WandaSaleForm: React.FC = () => {
       cashReceipt: 0,
       cashBack: 0,
       date: dayjs(),
-      saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]
+      saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }],
+      isManualCash: false
     };
 
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTabId);
 
     form.resetFields();
-    form.setFieldsValue({ date: dayjs() });
+    form.setFieldsValue({ date: dayjs(), cashReceipt: 0, cashBack: 0 });
     setSaleLines(newTab.saleLines);
     message.success(`Created Tab ${nextNum}`);
     focusCustomerSelect();
@@ -321,12 +352,14 @@ export const WandaSaleForm: React.FC = () => {
 
     const performClose = () => {
       const tabToCloseIndex = tabs.findIndex(t => t.id === id);
+      delete manualCashTabsRef.current[id];
       const newTabs = tabs.filter(t => t.id !== id);
       setTabs(newTabs);
 
       if (activeTabId === id) {
         const nextActiveIndex = Math.min(tabToCloseIndex, newTabs.length - 1);
         const nextTab = newTabs[nextActiveIndex];
+        manualCashTabsRef.current[nextTab.id] = nextTab.isManualCash ?? false;
         setActiveTabId(nextTab.id);
 
         form.setFieldsValue({
@@ -363,16 +396,30 @@ export const WandaSaleForm: React.FC = () => {
     const tabToCloseId = activeTabId;
     if (tabs.length === 1) {
       form.resetFields();
-      form.setFieldsValue({ date: dayjs() });
+      form.setFieldsValue({ date: dayjs(), cashReceipt: 0, cashBack: 0 });
       setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
+      manualCashTabsRef.current[activeTabId] = false;
+      setTabs(prev => prev.map(t => t.id === activeTabId ? {
+        ...t,
+        account: null,
+        narration: null,
+        description: '',
+        cashReceipt: 0,
+        cashBack: 0,
+        date: dayjs(),
+        saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }],
+        isManualCash: false
+      } : t));
       focusCustomerSelect();
     } else {
       const tabToCloseIndex = tabs.findIndex(t => t.id === tabToCloseId);
+      delete manualCashTabsRef.current[tabToCloseId];
       const newTabs = tabs.filter(t => t.id !== tabToCloseId);
       setTabs(newTabs);
 
       const nextActiveIndex = Math.min(tabToCloseIndex, newTabs.length - 1);
       const nextTab = newTabs[nextActiveIndex];
+      manualCashTabsRef.current[nextTab.id] = nextTab.isManualCash ?? false;
       setActiveTabId(nextTab.id);
 
       form.setFieldsValue({
@@ -415,6 +462,9 @@ export const WandaSaleForm: React.FC = () => {
     } else {
       const copyFrom = (location.state as any)?.copyFrom;
       if (copyFrom) {
+        if (copyFrom.cashReceipt !== undefined) {
+          manualCashTabsRef.current[activeTabId] = true;
+        }
         form.setFieldsValue({
           date: dayjs(),
           account: copyFrom.account,
@@ -847,22 +897,27 @@ export const WandaSaleForm: React.FC = () => {
 
   useEffect(() => {
     if (!isEdit) {
-      const currentReceipt = form.getFieldValue('cashReceipt');
-      const isAutoSynced = currentReceipt === undefined || currentReceipt === null || currentReceipt === 0 || currentReceipt === prevTotalAmountRef.current;
+      const isManual = manualCashTabsRef.current[activeTabId];
 
-      if (isAutoSynced) {
+      if (!isManual) {
         form.setFieldsValue({
           cashReceipt: totalAmount,
           cashBack: 0
         });
+        setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, cashReceipt: totalAmount, cashBack: 0 } : t));
       } else {
-        form.setFieldValue('cashBack', Math.max(0, (currentReceipt || 0) - totalAmount));
+        const currentReceipt = form.getFieldValue('cashReceipt');
+        const receiptVal = (currentReceipt !== undefined && currentReceipt !== null) ? Number(currentReceipt) : 0;
+        const newCashBack = Math.max(0, receiptVal - totalAmount);
+        form.setFieldValue('cashBack', newCashBack);
+        setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, cashBack: newCashBack } : t));
       }
-      prevTotalAmountRef.current = totalAmount;
     } else if (isEdit && loading === false) {
-      form.setFieldValue('cashBack', Math.max(0, cashReceipt - totalAmount));
+      const currentReceipt = form.getFieldValue('cashReceipt');
+      const receiptVal = (currentReceipt !== undefined && currentReceipt !== null) ? Number(currentReceipt) : 0;
+      form.setFieldValue('cashBack', Math.max(0, receiptVal - totalAmount));
     }
-  }, [totalAmount, cashReceipt, isEdit, loading]);
+  }, [totalAmount, isEdit, loading, activeTabId]);
 
   const handleSave = async (options: { shouldPrint?: boolean } = {}) => {
     const shouldPrint = options.shouldPrint ?? true;
@@ -1561,8 +1616,13 @@ export const WandaSaleForm: React.FC = () => {
                       controls={false}
                       keyboard={false}
                       precision={2}
-                      formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      formatter={value => (value !== undefined && value !== null) ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
                       parser={value => value?.replace(/\$\s?|(,*)/g, '') as any}
+                      onFocus={(e) => {
+                        const input = e.target as HTMLInputElement;
+                        input?.select?.();
+                        setTimeout(() => input?.select?.(), 20);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
@@ -1586,7 +1646,7 @@ export const WandaSaleForm: React.FC = () => {
                       keyboard={false}
                       precision={2}
                       readOnly
-                      formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      formatter={value => (value !== undefined && value !== null) ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
                     />
                   </Form.Item>
                 </Col>
