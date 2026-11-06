@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Space,
   Typography,
@@ -45,6 +45,8 @@ interface InlineMultiPaymentSectionProps {
   payments: PaymentEntry[];
   onChange: (payments: PaymentEntry[], totalPaid: number, balance: number) => void;
   onSave?: () => void;
+  isEdit?: boolean;
+  resetKey?: string | number;
 }
 
 export const InlineMultiPaymentSection: React.FC<InlineMultiPaymentSectionProps> = ({
@@ -53,10 +55,26 @@ export const InlineMultiPaymentSection: React.FC<InlineMultiPaymentSectionProps>
   partyName,
   payments,
   onChange,
-  onSave
+  onSave,
+  isEdit = false,
+  resetKey
 }) => {
   const [accounts, setAccounts] = useState<ChartOfAccountHeadDto[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
+
+  // Track previous netAmount and whether user manually customized payment amounts or cleared all lines
+  const prevNetAmountRef = useRef<number>(netAmount);
+  const isManualAmountRef = useRef<boolean>(false);
+  const userClearedAllRef = useRef<boolean>(false);
+  const initializedEditRef = useRef<boolean>(false);
+
+  // Reset tracking refs when switching tabs, starting a new voucher, or switching vouchers
+  useEffect(() => {
+    prevNetAmountRef.current = netAmount;
+    isManualAmountRef.current = false;
+    userClearedAllRef.current = false;
+    initializedEditRef.current = false;
+  }, [resetKey]);
 
   // Helper to distinguish Bank vs Cash
   const isBankAccount = (accountTitle: string = '') => {
@@ -115,18 +133,84 @@ export const InlineMultiPaymentSection: React.FC<InlineMultiPaymentSectionProps>
     );
   }, [accounts]);
 
-  // By default, automatically select default cash account and set amount = netAmount
+  // Automatically select default cash account and keep single payment synced with netAmount when items are added/modified/removed
   useEffect(() => {
-    if (defaultCashAccount && payments.length === 0 && netAmount > 0) {
-      const initialLine: PaymentEntry = {
-        key: 'default-cash-1',
-        accountId: defaultCashAccount.account,
-        accountTitle: defaultCashAccount.title,
-        amount: netAmount
-      };
-      onChange([initialLine], netAmount, 0);
+    const prevNet = prevNetAmountRef.current;
+    const netChanged = Math.abs(netAmount - prevNet) >= 0.005;
+    prevNetAmountRef.current = netAmount;
+
+    // 1. If netAmount dropped to 0 (e.g. all item records removed or form reset to new)
+    if (netAmount <= 0) {
+      isManualAmountRef.current = false;
+      userClearedAllRef.current = false;
+      if (payments.length > 0) {
+        onChange([], 0, 0);
+      }
+      return;
     }
-  }, [defaultCashAccount, netAmount, payments.length]);
+
+    // Handle initial load of an existing voucher in Edit mode
+    if (isEdit && !initializedEditRef.current && netAmount > 0) {
+      initializedEditRef.current = true;
+      if (payments.length === 0) {
+        userClearedAllRef.current = true;
+        return;
+      }
+      if (payments.length === 1) {
+        const currentAmt = Number(payments[0].amount) || 0;
+        if (Math.abs(currentAmt - netAmount) >= 0.01) {
+          isManualAmountRef.current = true;
+        }
+        return;
+      }
+      if (payments.length > 1) {
+        isManualAmountRef.current = true;
+        return;
+      }
+    }
+
+    // 2. netAmount > 0 and no payment rows yet
+    if (payments.length === 0) {
+      if (!userClearedAllRef.current && defaultCashAccount) {
+        const initialLine: PaymentEntry = {
+          key: 'default-cash-1',
+          accountId: defaultCashAccount.account,
+          accountTitle: defaultCashAccount.title,
+          amount: netAmount
+        };
+        onChange([initialLine], netAmount, 0);
+      } else if (netChanged) {
+        onChange([], 0, netAmount);
+      }
+      return;
+    }
+
+    // 3. netAmount > 0 and 1 payment row exists
+    if (payments.length === 1 && netChanged) {
+      const singleLine = payments[0];
+      const currentAmt = Number(singleLine.amount) || 0;
+      const matchedPrevNet = Math.abs(currentAmt - prevNet) < 0.01;
+
+      if (!isManualAmountRef.current || matchedPrevNet) {
+        const updatedLine: PaymentEntry = {
+          ...singleLine,
+          amount: netAmount
+        };
+        onChange([updatedLine], netAmount, 0);
+      } else {
+        const bal = Number((netAmount - currentAmt).toFixed(2));
+        onChange(payments, currentAmt, bal);
+      }
+      return;
+    }
+
+    // 4. netAmount > 0 and multiple payment rows exist
+    if (payments.length > 1 && netChanged) {
+      const sum = payments.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+      const bal = Number((netAmount - sum).toFixed(2));
+      onChange(payments, sum, bal);
+    }
+  }, [defaultCashAccount, netAmount, payments.length, isEdit]);
 
   const totalPaid = useMemo(() => {
     return payments.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
@@ -143,6 +227,8 @@ export const InlineMultiPaymentSection: React.FC<InlineMultiPaymentSectionProps>
   };
 
   const handleAddLine = (customRemainder?: number, customPayments?: PaymentEntry[]) => {
+    isManualAmountRef.current = true;
+    userClearedAllRef.current = false;
     const basePayments = customPayments || payments;
     const usedAccIds = new Set(basePayments.map(l => l.accountId));
     // Default next account to a bank or petty cash not yet selected
@@ -181,6 +267,10 @@ export const InlineMultiPaymentSection: React.FC<InlineMultiPaymentSectionProps>
 
   const handleRemoveLine = (key: string) => {
     const remaining = payments.filter(l => l.key !== key);
+    if (remaining.length === 0) {
+      userClearedAllRef.current = true;
+      isManualAmountRef.current = true;
+    }
     notifyChange(remaining);
   };
 
@@ -198,6 +288,13 @@ export const InlineMultiPaymentSection: React.FC<InlineMultiPaymentSectionProps>
       }
       return line;
     });
+    if (updates.amount !== undefined) {
+      if (updated.length === 1 && Math.abs((Number(updates.amount) || 0) - netAmount) < 0.01) {
+        isManualAmountRef.current = false;
+      } else {
+        isManualAmountRef.current = true;
+      }
+    }
     notifyChange(updated);
   };
 

@@ -134,6 +134,7 @@ export const NormalPurchaseForm: React.FC = () => {
 
   // Multi-Payment / Split Tender state
   const [splitPayments, setSplitPayments] = useState<PaymentEntry[]>([]);
+  const [resetCounter, setResetCounter] = useState(0);
 
   const isEdit = !!voucherNo && voucherNo !== 'new' && voucherNo !== '[object Object]';
 
@@ -244,8 +245,16 @@ export const NormalPurchaseForm: React.FC = () => {
   }, []);
 
   const handleNew = useCallback(() => {
+    if (isEdit) {
+      setSplitPayments([]);
+      setResetCounter(c => c + 1);
+      navigate('/daily-entries/purchase/new');
+      return;
+    }
     form.resetFields();
     form.setFieldsValue({ date: dayjs(), cashPaid: 0, cashBack: 0 });
+    setSplitPayments([]);
+    setResetCounter(c => c + 1);
     setPurchaseLines([{
       key: Date.now(),
       seq: 1,
@@ -259,7 +268,7 @@ export const NormalPurchaseForm: React.FC = () => {
       secRate: 0
     }]);
     setTimeout(() => datePickerRef.current?.focus(), 50);
-  }, [form]);
+  }, [form, isEdit, navigate]);
 
   useEffect(() => {
     const fetchLookups = async () => {
@@ -299,6 +308,8 @@ export const NormalPurchaseForm: React.FC = () => {
               checkNum: p.checkNum,
               checkDate: p.checkDate
             })));
+          } else {
+            setSplitPayments([]);
           }
           if (details && details.length > 0) {
             const first = details[0];
@@ -315,6 +326,7 @@ export const NormalPurchaseForm: React.FC = () => {
             setPurchaseLines(details.map((d, i) => ({
               key: i,
               seq: d.seq,
+              isSaved: true,
               itemId: d.itemId,
               unit: d.unit,
               qty: d.qty,
@@ -356,6 +368,7 @@ export const NormalPurchaseForm: React.FC = () => {
           ...l,
           key: Date.now() + idx,
           seq: idx + 1,
+          isSaved: false,
           imei: l.imei || '',
           imei2: l.imei2 || '',
           ptaStatus: l.ptaStatus || undefined,
@@ -365,6 +378,8 @@ export const NormalPurchaseForm: React.FC = () => {
           secRate: l.secRate || 0,
           secUnit: l.secUnit || null
         }));
+        setSplitPayments([]);
+        setResetCounter(c => c + 1);
         setPurchaseLines(initialLines.length > 0 ? initialLines : [{
           key: Date.now(),
           seq: 1,
@@ -378,7 +393,10 @@ export const NormalPurchaseForm: React.FC = () => {
           secRate: 0
         }]);
       } else {
-        form.setFieldsValue({ date: dayjs() });
+        form.resetFields();
+        form.setFieldsValue({ date: dayjs(), cashPaid: 0, cashBack: 0 });
+        setSplitPayments([]);
+        setResetCounter(c => c + 1);
         setPurchaseLines([{
           key: Date.now(),
           seq: 1,
@@ -396,7 +414,7 @@ export const NormalPurchaseForm: React.FC = () => {
   }, [isEdit, voucherNo, form, navigate, location.state]);
 
   const removeRow = async (record: any) => {
-    if (isEdit && record.seq) {
+    if (isEdit && record.isSaved && record.seq) {
       try {
         await purchaseService.deleteLine(voucherNo!, record.seq);
         message.success('Row deleted from database');
@@ -405,11 +423,11 @@ export const NormalPurchaseForm: React.FC = () => {
         return;
       }
     }
-    setPurchaseLines(purchaseLines.filter(row => row.key !== record.key));
+    setPurchaseLines(prev => prev.filter(row => row.key !== record.key));
   };
 
   const updateRow = (key: any, field: string, value: any) => {
-    setPurchaseLines(purchaseLines.map(row => {
+    setPurchaseLines(prev => prev.map(row => {
       if (row.key === key) {
         const updated = { ...row, [field]: value };
         const cleanVal = typeof value === 'string' ? value.replace(/,/g, '') : value;
@@ -591,12 +609,6 @@ export const NormalPurchaseForm: React.FC = () => {
   const cashPaid = Form.useWatch('cashPaid', form) || 0;
   const cashBack = Form.useWatch('cashBack', form) || 0;
   const balance = totalAmount - cashPaid + cashBack;
-
-  useEffect(() => {
-    if (!isEdit) {
-      form.setFieldsValue({ cashPaid: totalAmount, cashBack: 0 });
-    }
-  }, [totalAmount, isEdit, form]);
 
   const handleSave = async () => {
     try {
@@ -984,6 +996,12 @@ export const NormalPurchaseForm: React.FC = () => {
             </div>
           </Space>
           <Space>
+            <Button
+              icon={<PlusOutlined />}
+              onClick={handleNew}
+            >
+              New (F1)
+            </Button>
             {isEdit && (
               <Popconfirm title="Delete this purchase?" onConfirm={handleDelete}>
                 <Button danger icon={<DeleteOutlined />}>Delete</Button>
@@ -1156,6 +1174,8 @@ export const NormalPurchaseForm: React.FC = () => {
           netAmount={totalAmount}
           partyName={vendors.find(v => v.account === form.getFieldValue('account'))?.title}
           payments={splitPayments}
+          isEdit={isEdit}
+          resetKey={isEdit ? `edit-${voucherNo}-${resetCounter}` : `new-${resetCounter}`}
           onSave={() => handleSave()}
           onChange={(updatedPayments, totalPaid, remBalance) => {
             setSplitPayments(updatedPayments);

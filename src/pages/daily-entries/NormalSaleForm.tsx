@@ -54,6 +54,7 @@ interface SaleTab {
   cashBack: number;
   date: any;
   saleLines: any[];
+  splitPayments?: PaymentEntry[];
   isManualCash?: boolean;
 }
 
@@ -192,6 +193,7 @@ export const NormalSaleForm: React.FC = () => {
 
   // Multi-Payment / Split Tender state
   const [splitPayments, setSplitPayments] = useState<PaymentEntry[]>([]);
+  const [resetCounter, setResetCounter] = useState(0);
 
   const getResolvedUnitTitle = (unitCodeOrTitle?: string | null, item?: Item | null, selectedUnitId?: string | null): string => {
     const code = selectedUnitId || unitCodeOrTitle;
@@ -301,22 +303,23 @@ export const NormalSaleForm: React.FC = () => {
       cashBack: 0,
       date: dayjs(),
       saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0 }],
+      splitPayments: [],
       isManualCash: false
     }];
   });
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id);
 
-  // Sync saleLines to current active tab state whenever saleLines updates
+  // Sync saleLines and splitPayments to current active tab state whenever they update
   useEffect(() => {
     if (activeTabId && !isEdit) {
       setTabs(prev => prev.map(t => {
         if (t.id === activeTabId) {
-          return { ...t, saleLines };
+          return { ...t, saleLines, splitPayments };
         }
         return t;
       }));
     }
-  }, [saleLines, activeTabId, isEdit]);
+  }, [saleLines, splitPayments, activeTabId, isEdit]);
 
   const handleFormValuesChange = (changedValues: any, allValues: any) => {
     if (isEdit) {
@@ -374,6 +377,7 @@ export const NormalSaleForm: React.FC = () => {
           cashBack: currentValues.cashBack || 0,
           date: currentValues.date || dayjs(),
           saleLines: saleLines,
+          splitPayments: splitPayments,
           isManualCash: manualCashTabsRef.current[activeTabId] ?? false
         };
       }
@@ -394,11 +398,19 @@ export const NormalSaleForm: React.FC = () => {
         cashBack: targetTab.cashBack
       });
       setSaleLines(targetTab.saleLines);
+      setSplitPayments(targetTab.splitPayments || []);
       focusCustomerSelect();
     }
   };
 
   const handleAddTab = () => {
+    if (isEdit) {
+      setSplitPayments([]);
+      setResetCounter(c => c + 1);
+      navigate('/daily-entries/sale/new');
+      return;
+    }
+
     const currentValues = form.getFieldsValue();
     const currentCashReceipt = (currentValues.cashReceipt !== undefined && currentValues.cashReceipt !== null) ? Number(currentValues.cashReceipt) : 0;
     setTabs(prev => prev.map(t => {
@@ -412,6 +424,7 @@ export const NormalSaleForm: React.FC = () => {
           cashBack: currentValues.cashBack || 0,
           date: currentValues.date || dayjs(),
           saleLines: saleLines,
+          splitPayments: splitPayments,
           isManualCash: manualCashTabsRef.current[activeTabId] ?? false
         };
       }
@@ -435,6 +448,7 @@ export const NormalSaleForm: React.FC = () => {
       cashBack: 0,
       date: dayjs(),
       saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0 }],
+      splitPayments: [],
       isManualCash: false
     };
 
@@ -444,6 +458,8 @@ export const NormalSaleForm: React.FC = () => {
     form.resetFields();
     form.setFieldsValue({ date: dayjs(), cashReceipt: 0, cashBack: 0 });
     setSaleLines(newTab.saleLines);
+    setSplitPayments([]);
+    setResetCounter(c => c + 1);
     message.success(`Created Tab ${nextNum}`);
     focusCustomerSelect();
   };
@@ -479,6 +495,7 @@ export const NormalSaleForm: React.FC = () => {
           cashBack: nextTab.cashBack
         });
         setSaleLines(nextTab.saleLines);
+        setSplitPayments(nextTab.splitPayments || []);
       }
       message.info(`Closed ${targetTab.name}`);
     };
@@ -506,6 +523,8 @@ export const NormalSaleForm: React.FC = () => {
       form.resetFields();
       form.setFieldsValue({ date: dayjs(), cashReceipt: 0, cashBack: 0 });
       setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0 }]);
+      setSplitPayments([]);
+      setResetCounter(c => c + 1);
       manualCashTabsRef.current[activeTabId] = false;
       setTabs(prev => prev.map(t => t.id === activeTabId ? {
         ...t,
@@ -516,6 +535,7 @@ export const NormalSaleForm: React.FC = () => {
         cashBack: 0,
         date: dayjs(),
         saleLines: [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0 }],
+        splitPayments: [],
         isManualCash: false
       } : t));
       focusCustomerSelect();
@@ -539,6 +559,7 @@ export const NormalSaleForm: React.FC = () => {
         cashBack: nextTab.cashBack
       });
       setSaleLines(nextTab.saleLines);
+      setSplitPayments(nextTab.splitPayments || []);
       message.info("Closed completed sale tab");
       focusCustomerSelect();
     }
@@ -621,6 +642,8 @@ export const NormalSaleForm: React.FC = () => {
           secRate: l.secRate || 0,
           secUnit: l.secUnit || null
         }));
+        setSplitPayments([]);
+        setResetCounter(c => c + 1);
         setSaleLines(initialLines.length > 0 ? initialLines : [{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0 }]);
         setTabs(prev => prev.map((t, idx) => idx === 0 ? {
           ...t,
@@ -630,12 +653,15 @@ export const NormalSaleForm: React.FC = () => {
           cashReceipt: copyFrom.cashReceipt,
           cashBack: copyFrom.cashBack,
           date: dayjs(),
-          saleLines: initialLines.length > 0 ? initialLines : t.saleLines
+          saleLines: initialLines.length > 0 ? initialLines : t.saleLines,
+          splitPayments: []
         } : t));
       } else {
         originalAccountIdRef.current = null;
+        setSplitPayments([]);
+        setResetCounter(c => c + 1);
         setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, carriage: 0, amount: 0, secQty: 0, secRate: 0 }]);
-        form.setFieldsValue({ date: dayjs() });
+        form.setFieldsValue({ date: dayjs(), cashReceipt: 0, cashBack: 0 });
       }
     }
     focusCustomerSelect();
@@ -741,6 +767,8 @@ export const NormalSaleForm: React.FC = () => {
           checkNum: p.checkNum,
           checkDate: p.checkDate
         })));
+      } else {
+        setSplitPayments([]);
       }
       if (details.length > 0) {
         const first = details[0];
@@ -2063,14 +2091,25 @@ export const NormalSaleForm: React.FC = () => {
           netAmount={totalAmount}
           partyName={customers.find(c => c.account === form.getFieldValue('account'))?.title}
           payments={splitPayments}
+          isEdit={isEdit}
+          resetKey={isEdit ? `edit-${voucherNo}-${resetCounter}` : `tab-${activeTabId}-${resetCounter}`}
           onSave={handleSave}
           onChange={(updatedPayments, totalPaid, remBalance) => {
             setSplitPayments(updatedPayments);
             manualCashTabsRef.current[activeTabId] = true;
+            const newCashBack = remBalance < 0 ? Math.abs(remBalance) : 0;
             form.setFieldsValue({
               cashReceipt: totalPaid,
-              cashBack: remBalance < 0 ? Math.abs(remBalance) : 0
+              cashBack: newCashBack
             });
+            if (!isEdit && activeTabId) {
+              setTabs(prev => prev.map(t => t.id === activeTabId ? {
+                ...t,
+                splitPayments: updatedPayments,
+                cashReceipt: totalPaid,
+                cashBack: newCashBack
+              } : t));
+            }
           }}
         />
 
