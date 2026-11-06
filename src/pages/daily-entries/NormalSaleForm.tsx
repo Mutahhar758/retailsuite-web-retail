@@ -35,6 +35,7 @@ import { CustomerPriceHistoryModal } from '../../components/sale/CustomerPriceHi
 import { useGridKeyboard, closeOpenSelectDropdowns } from '../../hooks/useGridKeyboard';
 import { getItemSelectProps, type SelectableItemLike } from '../../utils/itemSelectOptions';
 import { SaleReceiptModal } from '../../components/SaleReceiptModal';
+import { InlineMultiPaymentSection, type PaymentEntry } from '../../components/InlineMultiPaymentSection';
 import {
   printSaleReceiptDirect,
   type SaleReceiptData,
@@ -118,7 +119,7 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
             focusCell(rowIdx, 'qty');
           } else {
             // No item selected -> go to cash tendered
-            const cashReceiptInput = document.querySelector('.pos-cash-receipt input') as HTMLInputElement;
+            const cashReceiptInput = document.querySelector('.payment-record-amount input') as HTMLInputElement;
             if (cashReceiptInput) {
               cashReceiptInput.focus();
               cashReceiptInput.select();
@@ -131,7 +132,7 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
           setOpen(false);
           if (!record.itemId) {
             e.preventDefault();
-            const cashReceiptInput = document.querySelector('.pos-cash-receipt input') as HTMLInputElement;
+            const cashReceiptInput = document.querySelector('.payment-record-amount input') as HTMLInputElement;
             if (cashReceiptInput) {
               cashReceiptInput.focus();
               cashReceiptInput.select();
@@ -188,6 +189,9 @@ export const NormalSaleForm: React.FC = () => {
   // Sale Receipt modal state
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
   const [activeReceiptData, setActiveReceiptData] = useState<SaleReceiptData | null>(null);
+
+  // Multi-Payment / Split Tender state
+  const [splitPayments, setSplitPayments] = useState<PaymentEntry[]>([]);
 
   const getResolvedUnitTitle = (unitCodeOrTitle?: string | null, item?: Item | null, selectedUnitId?: string | null): string => {
     const code = selectedUnitId || unitCodeOrTitle;
@@ -723,7 +727,21 @@ export const NormalSaleForm: React.FC = () => {
   const fetchDetail = async () => {
     setLoading(true);
     try {
-      const details = await saleService.getDetail(voucherNo!);
+      const [details, payments] = await Promise.all([
+        saleService.getDetail(voucherNo!),
+        saleService.getPayments(voucherNo!).catch(() => [])
+      ]);
+      if (payments && payments.length > 0) {
+        setSplitPayments(payments.map(p => ({
+          key: String(p.seq),
+          accountId: p.accountId,
+          accountTitle: p.accountTitle,
+          amount: p.amount,
+          reference: p.reference,
+          checkNum: p.checkNum,
+          checkDate: p.checkDate
+        })));
+      }
       if (details.length > 0) {
         const first = details[0];
         originalAccountIdRef.current = first.accountId ? String(first.accountId) : null;
@@ -1208,6 +1226,14 @@ export const NormalSaleForm: React.FC = () => {
         date: values.date.format('YYYY-MM-DD'),
         cashReceipt: values.cashReceipt || 0,
         cashBack: values.cashBack || 0,
+        payments: splitPayments.map((p, idx) => ({
+          seq: idx + 1,
+          accountId: p.accountId,
+          amount: p.amount,
+          reference: p.reference,
+          checkNum: p.checkNum,
+          checkDate: p.checkDate
+        })),
         lines: validLines.map(l => {
           const item = items.find(i => i.id === l.itemId);
           return {
@@ -1645,7 +1671,7 @@ export const NormalSaleForm: React.FC = () => {
                   pendingFocusRef.current = { rowIdx: rowIdx + 1, colKey: 'itemId' };
                 }
               } else {
-                const cashReceiptInput = document.querySelector('.pos-cash-receipt input') as HTMLInputElement;
+                const cashReceiptInput = document.querySelector('.payment-record-amount input') as HTMLInputElement;
                 if (cashReceiptInput) {
                   cashReceiptInput.focus();
                   cashReceiptInput.select();
@@ -1970,7 +1996,7 @@ export const NormalSaleForm: React.FC = () => {
                 filterOption={(input, option) =>
                   (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
                 }
-                options={customers.map(c => ({ value: c.account, label: `${c.title} (${c.account})` }))}
+                options={customers.map(c => ({ value: c.account, label: `${c.title} (${c.accountType || (c.account.startsWith('002') ? 'Vendor' : 'Customer')})` }))}
               />
             </Form.Item>
           </Col>
@@ -2031,64 +2057,38 @@ export const NormalSaleForm: React.FC = () => {
         />
         <KeyboardShortcutsBar shortcuts={[{ key: 'F1', label: 'New Tab' }, { key: 'F2', label: 'Customer' }, { key: 'F3', label: 'Barcode' }, { key: 'Alt+P / F12', label: 'Save & Print' }, { key: 'Alt+S / F5', label: 'Save Only' }, { key: 'Ins', label: 'Add Row' }, { key: 'Enter', label: 'Next Field' }, { key: '↑↓←→', label: 'Navigate' }, { key: 'Esc', label: 'Cancel Edit' }]} />
 
-        <div style={{ marginTop: 24, padding: 16, backgroundColor: '#f8fafc', borderRadius: 8 }}>
+        {/* Inline Multi-Account & Partial Payment Settlement */}
+        <InlineMultiPaymentSection
+          type="sale"
+          netAmount={totalAmount}
+          partyName={customers.find(c => c.account === form.getFieldValue('account'))?.title}
+          payments={splitPayments}
+          onSave={handleSave}
+          onChange={(updatedPayments, totalPaid, remBalance) => {
+            setSplitPayments(updatedPayments);
+            manualCashTabsRef.current[activeTabId] = true;
+            form.setFieldsValue({
+              cashReceipt: totalPaid,
+              cashBack: remBalance < 0 ? Math.abs(remBalance) : 0
+            });
+          }}
+        />
+
+        <div style={{ marginTop: 16, padding: '12px 16px', backgroundColor: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+          {/* Hidden Form Items to preserve form submission values */}
+          <Form.Item name="cashReceipt" hidden><InputNumber /></Form.Item>
+          <Form.Item name="cashBack" hidden><InputNumber /></Form.Item>
+
           <Row gutter={24} align="middle">
-            <Col xs={24} md={8}>
+            <Col xs={12}>
               <div style={{ textAlign: 'left' }}>
-                <Text type="secondary">Total Items:</Text>
+                <Text type="secondary">Total Lines:</Text>
                 <Title level={4} style={{ margin: 0 }}>
-                  {saleLines.filter(l => l.itemId).length} lines
+                  {saleLines.filter(l => l.itemId).length} items
                 </Title>
               </div>
             </Col>
-            <Col xs={24} md={8}>
-              <Row gutter={8}>
-                <Col span={12}>
-                  <Form.Item label="Cash Tendered (Rs.)" name="cashReceipt" style={{ marginBottom: 0 }}>
-                    <InputNumber
-                      className="pos-cash-receipt"
-                      style={{ width: '100%', fontSize: 16, fontWeight: 'bold' }}
-                      min={0}
-                      controls={false}
-                      keyboard={false}
-                      precision={2}
-                      formatter={value => (value !== undefined && value !== null) ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                      parser={value => value?.replace(/\$\s?|(,*)/g, '') as any}
-                      onFocus={(e) => {
-                        const input = e.target as HTMLInputElement;
-                        input?.select?.();
-                        setTimeout(() => input?.select?.(), 20);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleSave();
-                        }
-                      }}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item label="Change Due (Rs.)" name="cashBack" style={{ marginBottom: 0 }}>
-                    <InputNumber
-                      style={{
-                        width: '100%',
-                        fontSize: 16,
-                        fontWeight: 'bold',
-                        color: cashBack > 0 ? '#10b981' : undefined
-                      }}
-                      min={0}
-                      controls={false}
-                      keyboard={false}
-                      precision={2}
-                      readOnly
-                      formatter={value => (value !== undefined && value !== null) ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
-                    />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </Col>
-            <Col xs={24} md={8}>
+            <Col xs={12}>
               <div style={{ textAlign: 'right' }}>
                 <Text type="secondary">Net Total Bill</Text>
                 <Title level={2} style={{ margin: 0, color: '#0ea5e9' }}>

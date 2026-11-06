@@ -22,6 +22,7 @@ import { getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit }
 import { BarcodeFastScanBar } from '../../components/common/BarcodeFastScanBar';
 import { useGridKeyboard } from '../../hooks/useGridKeyboard';
 import { getItemSelectProps, type SelectableItemLike } from '../../utils/itemSelectOptions';
+import { InlineMultiPaymentSection, type PaymentEntry } from '../../components/InlineMultiPaymentSection';
 
 const { Title, Text } = Typography;
 
@@ -84,7 +85,7 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
           if (record.itemId) {
             focusCell(rowIdx, 'qty');
           } else {
-            const cashPaidInput = document.querySelector('.purchase-cash-paid input') as HTMLInputElement;
+            const cashPaidInput = document.querySelector('.payment-record-amount input') as HTMLInputElement;
             if (cashPaidInput) {
               cashPaidInput.focus();
               cashPaidInput.select();
@@ -97,7 +98,7 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
           setOpen(false);
           if (!record.itemId) {
             e.preventDefault();
-            const cashPaidInput = document.querySelector('.purchase-cash-paid input') as HTMLInputElement;
+            const cashPaidInput = document.querySelector('.payment-record-amount input') as HTMLInputElement;
             if (cashPaidInput) {
               cashPaidInput.focus();
               cashPaidInput.select();
@@ -130,6 +131,9 @@ export const NormalPurchaseForm: React.FC = () => {
   const [vendors, setVendors] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [purchaseLines, setPurchaseLines] = useState<any[]>([]);
+
+  // Multi-Payment / Split Tender state
+  const [splitPayments, setSplitPayments] = useState<PaymentEntry[]>([]);
 
   const isEdit = !!voucherNo && voucherNo !== 'new' && voucherNo !== '[object Object]';
 
@@ -281,7 +285,21 @@ export const NormalPurchaseForm: React.FC = () => {
       const loadPurchase = async () => {
         try {
           setLoading(true);
-          const details = await purchaseService.getDetail(voucherNo!);
+          const [details, payments] = await Promise.all([
+            purchaseService.getDetail(voucherNo!),
+            purchaseService.getPayments(voucherNo!).catch(() => [])
+          ]);
+          if (payments && payments.length > 0) {
+            setSplitPayments(payments.map(p => ({
+              key: String(p.seq),
+              accountId: p.accountId,
+              accountTitle: p.accountTitle,
+              amount: p.amount,
+              reference: p.reference,
+              checkNum: p.checkNum,
+              checkDate: p.checkDate
+            })));
+          }
           if (details && details.length > 0) {
             const first = details[0];
             form.setFieldsValue({
@@ -606,6 +624,14 @@ export const NormalPurchaseForm: React.FC = () => {
         cashBack: values.cashBack || 0,
         sellerCnic: values.sellerCnic || null,
         sellerContact: values.sellerContact || null,
+        payments: splitPayments.map((p, idx) => ({
+          seq: idx + 1,
+          accountId: p.accountId,
+          amount: p.amount,
+          reference: p.reference,
+          checkNum: p.checkNum,
+          checkDate: p.checkDate
+        })),
         lines: validLines.map(l => ({
           seq: l.seq,
           itemId: l.itemId,
@@ -1124,62 +1150,35 @@ export const NormalPurchaseForm: React.FC = () => {
           />
         <KeyboardShortcutsBar shortcuts={[{ key: 'F1', label: 'New' }, { key: 'F2', label: 'Vendor' }, { key: 'F3', label: 'Barcode' }, { key: 'F5', label: 'Save' }, { key: 'Ins', label: 'Add Row' }, { key: 'Enter', label: 'Next Field' }, { key: '↑↓←→', label: 'Navigate' }, { key: 'Esc', label: 'Cancel Edit' }]} />
 
-          <div className="mt-8 pt-6 border-t border-gray-100">
-            <Row gutter={24} align="bottom">
-              <Col xs={24} sm={8} lg={6}>
-                <Form.Item label="Cash Paid" name="cashPaid">
-                  <InputNumber
-                    className="purchase-cash-paid"
-                    style={{ width: '100%' }}
-                    onFocus={(e) => {
-                      const input = e.target as HTMLInputElement;
-                      input?.select?.();
-                      setTimeout(() => input?.select?.(), 20);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSave();
-                      }
-                    }}
-                    size="large"
-                    min={0}
-                    controls={false}
-                    keyboard={false}
-                    placeholder="0.00"
-                    formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                  />
-                </Form.Item>
+        {/* Inline Multi-Account & Partial Payment Settlement */}
+        <InlineMultiPaymentSection
+          type="purchase"
+          netAmount={totalAmount}
+          partyName={vendors.find(v => v.account === form.getFieldValue('account'))?.title}
+          payments={splitPayments}
+          onSave={() => handleSave()}
+          onChange={(updatedPayments, totalPaid, remBalance) => {
+            setSplitPayments(updatedPayments);
+            form.setFieldsValue({
+              cashPaid: totalPaid,
+              cashBack: remBalance < 0 ? Math.abs(remBalance) : 0
+            });
+          }}
+        />
+
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            {/* Hidden Form Items to preserve form submission values */}
+            <Form.Item name="cashPaid" hidden><InputNumber /></Form.Item>
+            <Form.Item name="cashBack" hidden><InputNumber /></Form.Item>
+
+            <Row gutter={24} align="middle">
+              <Col xs={24} sm={12}>
+                <Text type="secondary">Total Lines:</Text>
+                <div className="text-xl font-bold text-gray-800">
+                  {purchaseLines.filter(l => l.itemId).length} items
+                </div>
               </Col>
-              <Col xs={24} sm={8} lg={6}>
-                <Form.Item label="Cash Back" name="cashBack">
-                  <InputNumber
-                    className="purchase-cash-back"
-                    style={{ width: '100%' }}
-                    onFocus={(e) => {
-                      const input = e.target as HTMLInputElement;
-                      input?.select?.();
-                      setTimeout(() => input?.select?.(), 20);
-                    }}
-                    size="large"
-                    min={0}
-                    controls={false}
-                    keyboard={false}
-                    placeholder="0.00"
-                    formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Tab' && !e.shiftKey) {
-                        e.preventDefault();
-                        const saveBtn = document.querySelector('.purchase-save-btn') as HTMLButtonElement;
-                        if (saveBtn) {
-                          saveBtn.focus();
-                        }
-                      }
-                    }}
-                  />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={8} lg={12}>
+              <Col xs={24} sm={12}>
                 <div className="text-right pb-6">
                   <Text type="secondary" className="uppercase text-xs tracking-widest block mb-1">Net Balance</Text>
                   <div className="flex items-center justify-end gap-3">

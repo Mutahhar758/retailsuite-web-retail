@@ -2,6 +2,7 @@ import api from './api';
 
 export interface BankAccountResponse {
   account: string;
+  accountType?: 'Cash' | 'Bank';
   bankName?: string;
   accountTitle: string;
   accountNumber?: string;
@@ -20,7 +21,8 @@ export interface BankAccountResponse {
 }
 
 export interface BankAccountCreateRequest {
-  bankName: string;
+  accountType?: 'Cash' | 'Bank';
+  bankName?: string;
   accountTitle: string;
   accountNumber?: string;
   iban?: string;
@@ -34,6 +36,7 @@ export interface BankAccountCreateRequest {
 }
 
 export interface BankAccountUpdateRequest {
+  accountType?: 'Cash' | 'Bank';
   bankName?: string;
   accountTitle?: string;
   accountNumber?: string;

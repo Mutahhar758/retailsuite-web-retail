@@ -105,6 +105,14 @@ export interface SaleCreateRequest {
   cashReceipt: number;
   cashBack: number;
   lines: SaleLineRequest[];
+  payments?: {
+    seq: number;
+    accountId: string;
+    amount: number;
+    reference?: string;
+    checkNum?: string;
+    checkDate?: string;
+  }[];
 }
 
 export interface SaleUpdateRequest {
@@ -115,6 +123,14 @@ export interface SaleUpdateRequest {
   cashReceipt: number;
   cashBack: number;
   lines: SaleLineRequest[];
+  payments?: {
+    seq: number;
+    accountId: string;
+    amount: number;
+    reference?: string;
+    checkNum?: string;
+    checkDate?: string;
+  }[];
 }
 
 export interface SaleListParams {
@@ -213,6 +229,19 @@ export const saleService = {
 
   async update(voucherNo: string, request: SaleUpdateRequest) {
     await api.put(`/api/sales/${voucherNo}`, request);
+  },
+
+  async getPayments(voucherNo: string) {
+    const response = await api.get(`/api/sales/${voucherNo}/payments`);
+    return (response.data.body || []) as {
+      seq: number;
+      accountId: string;
+      accountTitle?: string;
+      amount: number;
+      reference?: string;
+      checkNum?: string;
+      checkDate?: string;
+    }[];
   },
 
   async delete(voucherNo: string) {

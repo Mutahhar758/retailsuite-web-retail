@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Table, Card, Button, Space, Typography, Tag, message,
   Input, Tooltip, Avatar, Modal, Form, Row, Col, Switch,
-  Statistic, Select, Popconfirm, InputNumber, AutoComplete
+  Statistic, Select, Popconfirm, InputNumber, AutoComplete,
+  Segmented
 } from 'antd';
 import {
   BankOutlined, PlusOutlined, EditOutlined, DeleteOutlined,
-  ReloadOutlined, SearchOutlined, FileTextOutlined, CheckCircleOutlined,
-  CopyOutlined, CheckSquareOutlined
+  ReloadOutlined, SearchOutlined, FileTextOutlined,
+  CopyOutlined, CheckSquareOutlined, WalletOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -45,10 +46,12 @@ export const BankAccountList: React.FC = () => {
   const [data, setData] = useState<BankAccountResponse[]>([]);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'Cash' | 'Bank'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<BankAccountResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
+  const selectedAccountType = Form.useWatch('accountType', form) || 'Bank';
   const navigate = useNavigate();
 
   const fetchData = useCallback(async () => {
@@ -57,7 +60,7 @@ export const BankAccountList: React.FC = () => {
       const accounts = await bankAccountService.getBankAccounts();
       setData(accounts);
     } catch (error: any) {
-      message.error(error.response?.data?.message || 'Failed to load bank accounts');
+      message.error(error.response?.data?.message || 'Failed to load accounts');
     } finally {
       setLoading(false);
     }
@@ -67,10 +70,11 @@ export const BankAccountList: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  const handleOpenAddModal = () => {
+  const handleOpenAddModal = (defaultType: 'Cash' | 'Bank' = 'Bank') => {
     setEditingAccount(null);
     form.resetFields();
     form.setFieldsValue({
+      accountType: defaultType,
       currency: 'PKR',
       active: true,
       openingBalance: 0
@@ -82,6 +86,7 @@ export const BankAccountList: React.FC = () => {
     setEditingAccount(record);
     form.resetFields();
     form.setFieldsValue({
+      accountType: record.accountType || 'Bank',
       bankName: record.bankName || '',
       accountTitle: record.accountTitle || '',
       accountNumber: record.accountNumber || '',
@@ -101,46 +106,49 @@ export const BankAccountList: React.FC = () => {
     try {
       const values = await form.validateFields();
       setSubmitting(true);
+      const isCash = values.accountType === 'Cash';
 
       if (editingAccount) {
         const updateReq: BankAccountUpdateRequest = {
-          bankName: values.bankName,
+          accountType: values.accountType || 'Bank',
+          bankName: isCash ? 'Cash' : values.bankName,
           accountTitle: values.accountTitle,
-          accountNumber: values.accountNumber || null,
-          iban: values.iban || null,
-          branchName: values.branchName || null,
-          branchCode: values.branchCode || null,
-          swiftCode: values.swiftCode || null,
+          accountNumber: isCash ? null : (values.accountNumber || null),
+          iban: isCash ? null : (values.iban || null),
+          branchName: isCash ? null : (values.branchName || null),
+          branchCode: isCash ? null : (values.branchCode || null),
+          swiftCode: isCash ? null : (values.swiftCode || null),
           currency: values.currency || 'PKR',
           notes: values.notes || null,
           active: values.active,
           openingBalance: values.openingBalance != null ? Number(values.openingBalance) : 0
         };
         await bankAccountService.update(editingAccount.account, updateReq);
-        message.success(`Bank account "${values.accountTitle}" updated successfully`);
+        message.success(`${isCash ? 'Cash' : 'Bank'} account "${values.accountTitle}" updated successfully`);
       } else {
         const createReq: BankAccountCreateRequest = {
-          bankName: values.bankName,
+          accountType: values.accountType || 'Bank',
+          bankName: isCash ? 'Cash' : values.bankName,
           accountTitle: values.accountTitle,
-          accountNumber: values.accountNumber || null,
-          iban: values.iban || null,
-          branchName: values.branchName || null,
-          branchCode: values.branchCode || null,
-          swiftCode: values.swiftCode || null,
+          accountNumber: isCash ? null : (values.accountNumber || null),
+          iban: isCash ? null : (values.iban || null),
+          branchName: isCash ? null : (values.branchName || null),
+          branchCode: isCash ? null : (values.branchCode || null),
+          swiftCode: isCash ? null : (values.swiftCode || null),
           currency: values.currency || 'PKR',
           notes: values.notes || null,
           active: values.active ?? true,
           openingBalance: values.openingBalance != null ? Number(values.openingBalance) : 0
         };
         await bankAccountService.create(createReq);
-        message.success(`Bank account "${values.accountTitle}" created successfully`);
+        message.success(`${isCash ? 'Cash' : 'Bank'} account "${values.accountTitle}" created successfully`);
       }
 
       setIsModalOpen(false);
       fetchData();
     } catch (error: any) {
       if (error?.errorFields) return; // Form validation error
-      message.error(error.response?.data?.message || 'Failed to save bank account');
+      message.error(error.response?.data?.message || 'Failed to save account');
     } finally {
       setSubmitting(false);
     }
@@ -180,95 +188,132 @@ export const BankAccountList: React.FC = () => {
         (statusFilter === 'active' && acc.active) ||
         (statusFilter === 'inactive' && !acc.active);
 
-      return matchesSearch && matchesStatus;
+      const matchesType =
+        typeFilter === 'all' ||
+        (acc.accountType ? acc.accountType === typeFilter : typeFilter === 'Bank');
+
+      return matchesSearch && matchesStatus && matchesType;
     });
-  }, [data, searchText, statusFilter]);
+  }, [data, searchText, statusFilter, typeFilter]);
 
   // Statistics
-  const activeCount = useMemo(() => {
-    return data.filter(item => item.active).length;
+  const cashCount = useMemo(() => {
+    return data.filter(item => item.accountType === 'Cash').length;
+  }, [data]);
+
+  const bankCount = useMemo(() => {
+    return data.filter(item => item.accountType !== 'Cash').length;
   }, [data]);
 
   const columns = [
     {
-      title: 'Bank & Account Title',
+      title: 'Type',
+      key: 'accountType',
+      width: '100px',
+      render: (_: any, record: BankAccountResponse) => (
+        record.accountType === 'Cash' ? (
+          <Tag color="green" icon={<WalletOutlined />}>Cash</Tag>
+        ) : (
+          <Tag color="blue" icon={<BankOutlined />}>Bank</Tag>
+        )
+      ),
+    },
+    {
+      title: 'Account / Bank Name',
       key: 'bankInfo',
       sorter: (a: BankAccountResponse, b: BankAccountResponse) =>
         (a.bankName || a.accountTitle).localeCompare(b.bankName || b.accountTitle),
-      render: (_: any, record: BankAccountResponse) => (
-        <Space size="middle">
-          <Avatar
-            icon={<BankOutlined />}
-            size="large"
-            style={{
-              backgroundColor: '#e6f4ff',
-              color: '#1677ff',
-              border: '1px solid #91caff'
-            }}
-          />
-          <Space direction="vertical" size={1}>
-            <Text strong style={{ fontSize: '15px' }}>
-              {record.bankName || 'Bank'}
-            </Text>
-            <Text type="secondary" style={{ fontSize: '13px' }}>
-              {record.accountTitle}
-            </Text>
+      render: (_: any, record: BankAccountResponse) => {
+        const isCash = record.accountType === 'Cash';
+        return (
+          <Space size="middle">
+            <Avatar
+              icon={isCash ? <WalletOutlined /> : <BankOutlined />}
+              size="large"
+              style={{
+                backgroundColor: isCash ? '#f6ffed' : '#e6f4ff',
+                color: isCash ? '#52c41a' : '#1677ff',
+                border: isCash ? '1px solid #b7eb8f' : '1px solid #91caff'
+              }}
+            />
+            <Space direction="vertical" size={1}>
+              <Text strong style={{ fontSize: '15px' }}>
+                {isCash ? record.accountTitle : (record.bankName || 'Bank')}
+              </Text>
+              {!isCash && (
+                <Text type="secondary" style={{ fontSize: '13px' }}>
+                  {record.accountTitle}
+                </Text>
+              )}
+              <Text type="secondary" style={{ fontSize: '11px', fontFamily: 'monospace' }}>
+                COA: {record.account}
+              </Text>
+            </Space>
           </Space>
-        </Space>
-      ),
+        );
+      },
     },
     {
       title: 'Account Number & IBAN',
       key: 'accNumber',
-      render: (_: any, record: BankAccountResponse) => (
-        <Space direction="vertical" size={2}>
-          {record.accountNumber ? (
-            <Space size={6}>
-              <Text strong style={{ fontFamily: 'monospace', fontSize: '14px', color: '#0958d9' }}>
-                {record.accountNumber}
+      render: (_: any, record: BankAccountResponse) => {
+        if (record.accountType === 'Cash') {
+          return <Text type="secondary" italic>Cash Drawer / Counter</Text>;
+        }
+        return (
+          <Space direction="vertical" size={2}>
+            {record.accountNumber ? (
+              <Space size={6}>
+                <Text strong style={{ fontFamily: 'monospace', fontSize: '14px', color: '#0958d9' }}>
+                  {record.accountNumber}
+                </Text>
+                <Tooltip title="Copy Account Number">
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<CopyOutlined style={{ fontSize: '12px' }} />}
+                    onClick={() => copyToClipboard(record.accountNumber!, 'Account Number')}
+                  />
+                </Tooltip>
+              </Space>
+            ) : (
+              <Text type="secondary" italic>No Account Number</Text>
+            )}
+            {record.iban && (
+              <Text type="secondary" style={{ fontSize: '12px', fontFamily: 'monospace' }}>
+                IBAN: {record.iban}
               </Text>
-              <Tooltip title="Copy Account Number">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<CopyOutlined style={{ fontSize: '12px' }} />}
-                  onClick={() => copyToClipboard(record.accountNumber!, 'Account Number')}
-                />
-              </Tooltip>
-            </Space>
-          ) : (
-            <Text type="secondary" italic>No Account Number</Text>
-          )}
-          {record.iban && (
-            <Text type="secondary" style={{ fontSize: '12px', fontFamily: 'monospace' }}>
-              IBAN: {record.iban}
-            </Text>
-          )}
-        </Space>
-      ),
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: 'Branch Details',
       key: 'branch',
-      render: (_: any, record: BankAccountResponse) => (
-        <Space direction="vertical" size={1}>
-          <Text style={{ fontSize: '13px' }}>
-            {record.branchName || 'Main Branch'}
-          </Text>
-          {record.branchCode && (
-            <Text type="secondary" style={{ fontSize: '12px' }}>
-              Branch Code: {record.branchCode}
+      render: (_: any, record: BankAccountResponse) => {
+        if (record.accountType === 'Cash') {
+          return <Text type="secondary">—</Text>;
+        }
+        return (
+          <Space direction="vertical" size={1}>
+            <Text style={{ fontSize: '13px' }}>
+              {record.branchName || 'Main Branch'}
             </Text>
-          )}
-          {record.swiftCode && (
-            <Text type="secondary" style={{ fontSize: '12px' }}>
-              SWIFT: {record.swiftCode}
-            </Text>
-          )}
-        </Space>
-      ),
+            {record.branchCode && (
+              <Text type="secondary" style={{ fontSize: '12px' }}>
+                Branch Code: {record.branchCode}
+              </Text>
+            )}
+            {record.swiftCode && (
+              <Text type="secondary" style={{ fontSize: '12px' }}>
+                SWIFT: {record.swiftCode}
+              </Text>
+            )}
+          </Space>
+        );
+      },
     },
-
     {
       title: 'Opening Balance',
       dataIndex: 'openingBalance',
@@ -300,7 +345,7 @@ export const BankAccountList: React.FC = () => {
       width: '210px',
       render: (_: any, record: BankAccountResponse) => (
         <Space size={4} wrap>
-          <Tooltip title="Edit Bank Account Details">
+          <Tooltip title="Edit Account Details">
             <Button
               type="text"
               icon={<EditOutlined style={{ color: '#1677ff' }} />}
@@ -316,23 +361,25 @@ export const BankAccountList: React.FC = () => {
             />
           </Tooltip>
 
-          <Tooltip title="Reconcile Checks & Bank Statement">
-            <Button
-              type="text"
-              icon={<CheckSquareOutlined style={{ color: '#722ed1' }} />}
-              onClick={() => navigate(`/daily-entries/bank-reconciliation?account=${encodeURIComponent(record.account)}`)}
-            />
-          </Tooltip>
+          {record.accountType !== 'Cash' && (
+            <Tooltip title="Reconcile Checks & Bank Statement">
+              <Button
+                type="text"
+                icon={<CheckSquareOutlined style={{ color: '#722ed1' }} />}
+                onClick={() => navigate(`/daily-entries/bank-reconciliation?account=${encodeURIComponent(record.account)}`)}
+              />
+            </Tooltip>
+          )}
 
           <Popconfirm
-            title="Delete Bank Account"
-            description="Are you sure? You cannot delete bank accounts that already have transactions."
+            title="Delete Account"
+            description="Are you sure? You cannot delete accounts that already have transactions."
             okText="Delete"
             cancelText="Cancel"
             okButtonProps={{ danger: true }}
             onConfirm={() => handleDelete(record.account)}
           >
-            <Tooltip title="Delete Bank Account">
+            <Tooltip title="Delete Account">
               <Button
                 type="text"
                 danger
@@ -359,10 +406,10 @@ export const BankAccountList: React.FC = () => {
               />
               <div>
                 <Title level={3} style={{ margin: 0 }}>
-                  Bank Accounts
+                  Cash & Bank Accounts
                 </Title>
                 <Text type="secondary">
-                  Manage company bank accounts, branches, and details easily.
+                  Manage company cash drawers, petty cash, and bank accounts. Automatically organized under Chart of Accounts.
                 </Text>
               </div>
             </Space>
@@ -377,9 +424,16 @@ export const BankAccountList: React.FC = () => {
                 Refresh
               </Button>
               <Button
+                icon={<WalletOutlined style={{ color: '#52c41a' }} />}
+                onClick={() => handleOpenAddModal('Cash')}
+                size="large"
+              >
+                Add Cash Account
+              </Button>
+              <Button
                 type="primary"
                 icon={<PlusOutlined />}
-                onClick={handleOpenAddModal}
+                onClick={() => handleOpenAddModal('Bank')}
                 size="large"
                 style={{ fontWeight: 500 }}
               >
@@ -392,22 +446,32 @@ export const BankAccountList: React.FC = () => {
 
       {/* Summary KPI Cards */}
       <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
-        <Col xs={24} sm={12}>
+        <Col xs={24} sm={8}>
           <Card bordered={false} style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
             <Statistic
-              title={<Text type="secondary"><BankOutlined /> Total Bank Accounts</Text>}
+              title={<Text type="secondary"><BankOutlined /> Total Accounts</Text>}
               value={data.length}
               suffix={<Text type="secondary" style={{ fontSize: '14px' }}>accounts</Text>}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={12}>
+        <Col xs={24} sm={8}>
           <Card bordered={false} style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
             <Statistic
-              title={<Text type="secondary"><CheckCircleOutlined style={{ color: '#52c41a' }} /> Active Accounts</Text>}
-              value={activeCount}
+              title={<Text type="secondary"><WalletOutlined style={{ color: '#52c41a' }} /> Cash Drawers / Petty Cash</Text>}
+              value={cashCount}
               valueStyle={{ color: '#3f8600' }}
-              suffix={<Text type="secondary" style={{ fontSize: '14px' }}>/ {data.length}</Text>}
+              suffix={<Text type="secondary" style={{ fontSize: '14px' }}>drawers</Text>}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card bordered={false} style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <Statistic
+              title={<Text type="secondary"><BankOutlined style={{ color: '#1677ff' }} /> Bank Accounts</Text>}
+              value={bankCount}
+              valueStyle={{ color: '#1677ff' }}
+              suffix={<Text type="secondary" style={{ fontSize: '14px' }}>banks</Text>}
             />
           </Card>
         </Col>
@@ -419,9 +483,9 @@ export const BankAccountList: React.FC = () => {
         style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}
         title={
           <Row justify="space-between" align="middle" gutter={[16, 16]}>
-            <Col xs={24} md={12}>
+            <Col xs={24} md={10}>
               <Input
-                placeholder="Search by bank name, account title, account number, IBAN or branch..."
+                placeholder="Search by name, account title, account number, or branch..."
                 prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
                 value={searchText}
                 onChange={e => setSearchText(e.target.value)}
@@ -429,12 +493,21 @@ export const BankAccountList: React.FC = () => {
                 style={{ width: '100%', maxWidth: '420px' }}
               />
             </Col>
-            <Col xs={24} md={12} style={{ textAlign: 'right' }}>
-              <Space>
+            <Col xs={24} md={14} style={{ textAlign: 'right' }}>
+              <Space wrap>
+                <Segmented
+                  value={typeFilter}
+                  onChange={val => setTypeFilter(val as any)}
+                  options={[
+                    { label: `All (${data.length})`, value: 'all' },
+                    { label: `Cash (${cashCount})`, value: 'Cash' },
+                    { label: `Banks (${bankCount})`, value: 'Bank' },
+                  ]}
+                />
                 <Select
                   value={statusFilter}
                   onChange={val => setStatusFilter(val)}
-                  style={{ width: 140 }}
+                  style={{ width: 130 }}
                   options={[
                     { label: 'All Statuses', value: 'all' },
                     { label: 'Active Only', value: 'active' },
@@ -455,29 +528,36 @@ export const BankAccountList: React.FC = () => {
         />
       </Card>
 
-      {/* Add / Edit Bank Account Modal */}
+      {/* Add / Edit Account Modal */}
       <Modal
         title={
           <Space align="center" size="small">
             <Avatar
-              icon={<BankOutlined />}
-              style={{ backgroundColor: '#e6f4ff', color: '#1677ff' }}
+              icon={selectedAccountType === 'Cash' ? <WalletOutlined /> : <BankOutlined />}
+              style={{
+                backgroundColor: selectedAccountType === 'Cash' ? '#f6ffed' : '#e6f4ff',
+                color: selectedAccountType === 'Cash' ? '#52c41a' : '#1677ff'
+              }}
             />
-            <span>{editingAccount ? 'Edit Bank Account' : 'Add New Bank Account'}</span>
+            <span>
+              {editingAccount
+                ? `Edit ${editingAccount.accountType === 'Cash' ? 'Cash' : 'Bank'} Account`
+                : `Add New ${selectedAccountType === 'Cash' ? 'Cash' : 'Bank'} Account`}
+            </span>
           </Space>
         }
         open={isModalOpen}
         onOk={handleModalSave}
         onCancel={() => setIsModalOpen(false)}
         confirmLoading={submitting}
-        okText={editingAccount ? 'Update Bank Account' : 'Create Bank Account'}
+        okText={editingAccount ? 'Update Account' : 'Create Account'}
         width={650}
         destroyOnClose
       >
         <Paragraph type="secondary" style={{ marginBottom: '20px', fontSize: '13px' }}>
-          {editingAccount
-            ? 'Update your bank and account details below.'
-            : 'Enter your bank details below to add a new account.'}
+          {selectedAccountType === 'Cash'
+            ? 'Cash accounts (petty cash, registers, counters) will automatically link under the COA Cash hierarchy.'
+            : 'Bank accounts will automatically link under the COA Bank Accounts hierarchy.'}
         </Paragraph>
 
         <Form
@@ -485,96 +565,125 @@ export const BankAccountList: React.FC = () => {
           layout="vertical"
           requiredMark="optional"
         >
-          <Row gutter={16}>
-            <Col xs={24} sm={12}>
-              <Form.Item
-                label="Bank Name"
-                name="bankName"
-                rules={[{ required: true, message: 'Please select or enter the bank name' }]}
-                tooltip="Name of the financial institution"
-              >
-                <AutoComplete
-                  placeholder="e.g. Meezan Bank, HBL, Allied Bank"
-                  options={POPULAR_BANKS.map(b => ({ value: b }))}
-                  filterOption={(input, option) =>
-                    (option?.value?.toLowerCase() ?? '').includes(input.toLowerCase())
-                  }
-                />
-              </Form.Item>
-            </Col>
+          <Form.Item
+            label="Account Category"
+            name="accountType"
+            rules={[{ required: true }]}
+          >
+            <Segmented
+              disabled={!!editingAccount}
+              block
+              size="middle"
+              options={[
+                { label: '🏦 Bank Account', value: 'Bank' },
+                { label: '💵 Cash Account / Petty Cash', value: 'Cash' },
+              ]}
+            />
+          </Form.Item>
 
-            <Col xs={24} sm={12}>
-              <Form.Item
-                label="Account Title"
-                name="accountTitle"
-                rules={[{ required: true, message: 'Please enter the account title' }]}
-                tooltip="Title as registered in bank statement (e.g. ABC Retail Collection A/C)"
-              >
-                <Input placeholder="e.g. Main Operational Current A/C" />
-              </Form.Item>
-            </Col>
-          </Row>
+          {selectedAccountType === 'Bank' ? (
+            <>
+              <Row gutter={16}>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    label="Bank Name"
+                    name="bankName"
+                    rules={[{ required: true, message: 'Please select or enter the bank name' }]}
+                    tooltip="Name of the financial institution"
+                  >
+                    <AutoComplete
+                      placeholder="e.g. Meezan Bank, HBL, Allied Bank"
+                      options={POPULAR_BANKS.map(b => ({ value: b }))}
+                      filterOption={(input, option) =>
+                        (option?.value?.toLowerCase() ?? '').includes(input.toLowerCase())
+                      }
+                    />
+                  </Form.Item>
+                </Col>
 
-          <Row gutter={16}>
-            <Col xs={24} sm={12}>
-              <Form.Item
-                label="Account Number"
-                name="accountNumber"
-                tooltip="Bank account number printed on your checkbook or statement"
-              >
-                <Input placeholder="e.g. 01020304050607" />
-              </Form.Item>
-            </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    label="Account Title"
+                    name="accountTitle"
+                    rules={[{ required: true, message: 'Please enter the account title' }]}
+                    tooltip="Title as registered in bank statement (e.g. ABC Retail Collection A/C)"
+                  >
+                    <Input placeholder="e.g. Main Operational Current A/C" />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-            <Col xs={24} sm={12}>
-              <Form.Item
-                label="IBAN"
-                name="iban"
-                tooltip="International Bank Account Number (24 digits for Pakistan)"
-              >
-                <Input placeholder="e.g. PK36MEZN0001020304050607" />
-              </Form.Item>
-            </Col>
-          </Row>
+              <Row gutter={16}>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    label="Account Number"
+                    name="accountNumber"
+                    tooltip="Bank account number printed on your checkbook or statement"
+                  >
+                    <Input placeholder="e.g. 01020304050607" />
+                  </Form.Item>
+                </Col>
 
-          <Row gutter={16}>
-            <Col xs={24} sm={12}>
-              <Form.Item
-                label="Branch Name"
-                name="branchName"
-                tooltip="Branch location name"
-              >
-                <Input placeholder="e.g. F-10 Markaz Branch" />
-              </Form.Item>
-            </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    label="IBAN"
+                    name="iban"
+                    tooltip="International Bank Account Number (24 digits for Pakistan)"
+                  >
+                    <Input placeholder="e.g. PK36MEZN0001020304050607" />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-            <Col xs={24} sm={6}>
-              <Form.Item
-                label="Branch Code"
-                name="branchCode"
-                tooltip="4-digit branch code"
-              >
-                <Input placeholder="e.g. 0142" />
-              </Form.Item>
-            </Col>
+              <Row gutter={16}>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    label="Branch Name"
+                    name="branchName"
+                    tooltip="Branch location name"
+                  >
+                    <Input placeholder="e.g. F-10 Markaz Branch" />
+                  </Form.Item>
+                </Col>
 
-            <Col xs={24} sm={6}>
-              <Form.Item
-                label="SWIFT / BIC"
-                name="swiftCode"
-                tooltip="Bank SWIFT/BIC code for international wire transfers"
-              >
-                <Input placeholder="e.g. MEZNPKKA" />
-              </Form.Item>
-            </Col>
-          </Row>
+                <Col xs={24} sm={6}>
+                  <Form.Item
+                    label="Branch Code"
+                    name="branchCode"
+                    tooltip="4-digit branch code"
+                  >
+                    <Input placeholder="e.g. 0142" />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={6}>
+                  <Form.Item
+                    label="SWIFT / BIC"
+                    name="swiftCode"
+                    tooltip="Bank SWIFT/BIC code for international wire transfers"
+                  >
+                    <Input placeholder="e.g. MEZNPKKA" />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </>
+          ) : (
+            <Form.Item
+              label="Cash Account Title / Drawer Name"
+              name="accountTitle"
+              rules={[{ required: true, message: 'Please enter cash account title' }]}
+              tooltip="Name for this cash till or drawer (e.g. Counter 1 Cash, Petty Cash, Main Safe Cash)"
+            >
+              <Input placeholder="e.g. Counter 1 Cash, Shop Petty Cash, Main Cash Drawer" />
+            </Form.Item>
+          )}
 
           <Row gutter={16}>
             <Col xs={24} sm={12}>
               <Form.Item
                 label="Opening Balance (Rs.)"
                 name="openingBalance"
-                tooltip="Initial starting balance for this bank account"
+                tooltip="Initial starting balance for this account"
               >
                 <InputNumber
                   style={{ width: '100%' }}
@@ -625,7 +734,7 @@ export const BankAccountList: React.FC = () => {
           >
             <Input.TextArea
               rows={2}
-              placeholder="Optional notes or instructions regarding this bank account..."
+              placeholder="Optional notes or instructions regarding this account..."
             />
           </Form.Item>
         </Form>

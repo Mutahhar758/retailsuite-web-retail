@@ -422,7 +422,7 @@ export const RepairJobForm: React.FC = () => {
                       }
                       options={customers.map(c => ({
                         value: c.account,
-                        label: `${c.title} (${c.account})`
+                        label: `${c.title} (${c.accountType || (c.account.startsWith('002') ? 'Vendor' : 'Customer')})`
                       }))}
                     />
                   </Form.Item>

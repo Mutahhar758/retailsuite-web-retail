@@ -1544,7 +1544,7 @@ export const WandaSaleForm: React.FC = () => {
                 filterOption={(input, option) =>
                   (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
                 }
-                options={customers.map(c => ({ value: c.account, label: `${c.title} (${c.account})` }))}
+                options={customers.map(c => ({ value: c.account, label: `${c.title} (${c.accountType || (c.account.startsWith('002') ? 'Vendor' : 'Customer')})` }))}
               />
             </Form.Item>
           </Col>

@@ -736,7 +736,7 @@ export const WandaSupplyRegister: React.FC = () => {
                 >
                   {customers.map(c => (
                     <Select.Option key={c.account} value={c.account}>
-                      {c.title} ({c.account})
+                      {c.title} ({c.accountType || (c.account.startsWith('002') ? 'Vendor' : 'Customer')})
                     </Select.Option>
                   ))}
                 </Select>

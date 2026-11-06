@@ -46,6 +46,7 @@ const { RangePicker } = DatePicker;
 interface CustomerOption {
   account: string;
   title: string;
+  accountType?: string;
   phone?: string;
   address?: string;
 }
@@ -627,7 +628,7 @@ export const NormalCustomerBill: React.FC = () => {
               >
                 {customers.map(c => (
                   <Select.Option key={c.account} value={c.account}>
-                    {c.title} ({c.account})
+                    {c.title} ({c.accountType || (c.account.startsWith('002') ? 'Vendor' : 'Customer')})
                   </Select.Option>
                 ))}
               </Select>

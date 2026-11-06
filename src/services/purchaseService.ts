@@ -63,6 +63,14 @@ export interface PurchaseCreateRequest {
     secRate?: number;
     secUnit?: string | null;
   }[];
+  payments?: {
+    seq: number;
+    accountId: string;
+    amount: number;
+    reference?: string;
+    checkNum?: string;
+    checkDate?: string;
+  }[];
 }
 
 export interface PurchaseListParams {
@@ -97,6 +105,19 @@ export const purchaseService = {
   async getDetail(voucherNo: string) {
     const response = await api.get(`/api/purchases/${voucherNo}`);
     return response.data.body as PurchaseLine[];
+  },
+
+  async getPayments(voucherNo: string) {
+    const response = await api.get(`/api/purchases/${voucherNo}/payments`);
+    return (response.data.body || []) as {
+      seq: number;
+      accountId: string;
+      accountTitle?: string;
+      amount: number;
+      reference?: string;
+      checkNum?: string;
+      checkDate?: string;
+    }[];
   },
 
   async create(data: PurchaseCreateRequest): Promise<string> {

@@ -2298,7 +2298,7 @@ export const POSSaleForm: React.FC = () => {
                     </div>
                   }
                   title={<span style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{item.title}</span>}
-                  description={<span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>Code: {item.account}</span>}
+                  description={<span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>({item.accountType || (item.account.startsWith('002') ? 'Vendor' : 'Customer')})</span>}
                 />
               </List.Item>
             )}

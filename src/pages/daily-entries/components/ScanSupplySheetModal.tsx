@@ -264,7 +264,7 @@ export const ScanSupplySheetModal: React.FC<ScanSupplySheetModalProps> = ({
               (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
             }
             options={customers.map(c => ({
-              label: `${c.title} (${c.account})`,
+              label: `${c.title} (${c.accountType || (c.account.startsWith('002') ? 'Vendor' : 'Customer')})`,
               value: c.account
             }))}
           />

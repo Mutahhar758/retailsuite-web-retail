@@ -164,7 +164,7 @@ export const MainLayout: React.FC = () => {
       'item-details': 'Product',
       'item-categories': 'Product Category',
       'item-ledger': 'Product Ledger',
-      'bank-accounts': 'Bank Accounts',
+      'bank-accounts': 'Cash & Bank Accounts',
       'bom': 'Bill of Materials',
       'manufacturing': 'Manufacturing Voucher',
       'company-info': 'Company Info',
@@ -208,7 +208,7 @@ export const MainLayout: React.FC = () => {
         content: (
           <div>
             <p>You have <strong>{pendingCount}</strong> offline sale voucher{pendingCount > 1 ? 's' : ''} that {pendingCount > 1 ? 'have' : 'has'} not been synced to the server yet.</p>
-            <p style={{ color: '#d46b08', marginTop: 8 }}>ℹ️ They are saved securely on this device and will automatically sync the next time you log back in to this organization.</p>
+            <p style={{ color: '#d46b08', marginTop: 8 }}>â„¹ï¸ They are saved securely on this device and will automatically sync the next time you log back in to this organization.</p>
           </div>
         ),
         okText: 'Log Out Now',
@@ -251,7 +251,7 @@ export const MainLayout: React.FC = () => {
         { key: '/setup/chart-of-accounts', label: 'Chart of Accounts' },
         { key: '/setup/detail-accounts', label: 'Detail Accounts' },
         { key: '/setup/fixed-assets', label: 'Fixed Assets' },
-        { key: '/setup/bank-accounts', label: 'Bank Accounts' },
+        { key: '/setup/bank-accounts', label: 'Cash & Bank Accounts' },
         { key: '/setup/customers', label: 'Customer' },
         { key: '/setup/customer-categories', label: 'Customer Category' },
         { key: '/setup/vendors', label: 'Vendor' },
@@ -444,7 +444,7 @@ export const MainLayout: React.FC = () => {
 
   const menuItems = transformMenuItems(filterMenuItemsByPermissions(baseMenuItemsWithShortcuts));
 
-  // ── Offline mode: only show Sale and POS Sale ──────────────────────────────
+  // â”€â”€ Offline mode: only show Sale and POS Sale â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const offlineMenuItems = [
     {
       key: '/daily-entries/sale',
@@ -496,8 +496,8 @@ export const MainLayout: React.FC = () => {
           {/* Logo / brand */}
           <div className="h-16 flex items-center justify-center m-4 text-xl font-bold" style={{ color: !isOnline ? '#d46b08' : token.colorPrimary }}>
             {collapsed
-              ? (!isOnline ? '✕' : 'R')
-              : (!isOnline ? '⚡ Offline' : 'Retail')
+              ? (!isOnline ? 'âœ•' : 'R')
+              : (!isOnline ? 'âš¡ Offline' : 'Retail')
             }
           </div>
 
@@ -586,7 +586,7 @@ export const MainLayout: React.FC = () => {
             {isHorizontal && (
               <>
                 <div className="text-xl font-bold mr-8" style={{ color: !isOnline ? '#d46b08' : token.colorPrimary }}>
-                  {!isOnline ? '⚡ Offline Mode' : 'RetailSuite Portal'}
+                  {!isOnline ? 'âš¡ Offline Mode' : 'RetailSuite Portal'}
                 </div>
                 <Menu
                   theme={appTheme}

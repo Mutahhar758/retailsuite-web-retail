@@ -3,7 +3,11 @@ import api from './api';
 export interface ChartOfAccountHeadDto {
   account: string;
   title: string;
+  accountType?: 'Customer' | 'Vendor' | string;
   customerCategoryId?: string;
+  parentCustomerAccountId?: string | null;
+  parentCustomerTitle?: string | null;
+  isSubAccount?: boolean;
 }
 
 export interface ChartOfAccountDto {
