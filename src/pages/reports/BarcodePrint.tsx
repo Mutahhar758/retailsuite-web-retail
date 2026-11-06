@@ -55,14 +55,13 @@ export const BarcodePrint: React.FC = () => {
   // Active Item Configuration
   const [selectedProductId, setSelectedProductId] = useState<string | undefined>(undefined);
   const [selectedItem, setSelectedItem] = useState<ProductOption | null>(null);
-  const [printPrice, setPrintPrice] = useState<number>(0);
   const [copies, setCopies] = useState<number>(10);
 
-  // Variable Qty / Weight & Rate Mode (Prints on Primary Unit)
+  // Variable Qty / Weight Mode (Prints on Primary Unit)
   const [isVariableWeight, setIsVariableWeight] = useState<boolean>(false);
-  const [embedPriceInBarcode, setEmbedPriceInBarcode] = useState<boolean>(true);
   const [printQty, setPrintQty] = useState<number>(1);
-  const [totalAmount, setTotalAmount] = useState<number>(0);
+  const [calcRate, setCalcRate] = useState<number>(0);
+  const [calcAmount, setCalcAmount] = useState<number>(0);
 
   // Batch Print Queue
   const [layout, setLayout] = useState<'Roll4Inch3Up' | 'ThermalRoll' | 'SheetA4'>('Roll4Inch3Up');
@@ -133,7 +132,9 @@ export const BarcodePrint: React.FC = () => {
           if (match) {
             setSelectedProductId(match.id);
             setSelectedItem(match);
-            setPrintPrice(match.priRate || 0);
+            const rate = Math.round(match.priRate || 0);
+            setCalcRate(rate);
+            setCalcAmount(Math.round(1 * rate));
             if (match.itemCategoryCode) {
               setSelectedCategory(match.itemCategoryCode);
             }
@@ -141,7 +142,9 @@ export const BarcodePrint: React.FC = () => {
         } else if (items.length > 0) {
           setSelectedProductId(items[0].id);
           setSelectedItem(items[0]);
-          setPrintPrice(items[0].priRate || 0);
+          const rate = Math.round(items[0].priRate || 0);
+          setCalcRate(rate);
+          setCalcAmount(Math.round(1 * rate));
         }
       } catch (err) {
         console.error('Failed to load items/categories', err);
@@ -173,7 +176,9 @@ export const BarcodePrint: React.FC = () => {
       if (matchInCat.length > 0 && (!selectedItem || selectedItem.itemCategoryCode !== catCode)) {
         setSelectedProductId(matchInCat[0].id);
         setSelectedItem(matchInCat[0]);
-        setPrintPrice(matchInCat[0].priRate || 0);
+        const rate = Math.round(matchInCat[0].priRate || 0);
+        setCalcRate(rate);
+        setCalcAmount(Math.round(printQty * rate));
       }
     }
   };
@@ -201,30 +206,33 @@ export const BarcodePrint: React.FC = () => {
     setSelectedItem(prod);
     if (prod) {
       const rate = Math.round(prod.priRate || 0);
-      setPrintPrice(rate);
-      setTotalAmount(Math.round(printQty * rate));
+      setCalcRate(rate);
+      setCalcAmount(Math.round(printQty * rate));
     }
   };
 
   const handleQtyChange = (val: number | null) => {
     const q = val !== null && val !== undefined ? val : 1;
     setPrintQty(q);
-    setTotalAmount(Math.round(q * printPrice));
-  };
-
-  const handlePriceChange = (val: number | null) => {
-    const r = val !== null && val !== undefined ? Math.round(val) : 0;
-    setPrintPrice(r);
-    if (isVariableWeight) {
-      setTotalAmount(Math.round(printQty * r));
+    if (calcRate > 0) {
+      setCalcAmount(Math.round(q * calcRate));
     }
   };
 
-  const handleTotalAmountChange = (val: number | null) => {
+  const handleAmountChange = (val: number | null) => {
     const amt = val !== null && val !== undefined ? Math.round(val) : 0;
-    setTotalAmount(amt);
-    if (printPrice > 0) {
-      const calculatedQty = Math.round((amt / printPrice + Number.EPSILON) * 1000) / 1000;
+    setCalcAmount(amt);
+    if (calcRate > 0) {
+      const calculatedQty = Math.round((amt / calcRate + Number.EPSILON) * 1000) / 1000;
+      setPrintQty(calculatedQty);
+    }
+  };
+
+  const handleRateChange = (val: number | null) => {
+    const r = val !== null && val !== undefined ? Math.round(val) : 0;
+    setCalcRate(r);
+    if (r > 0 && calcAmount > 0) {
+      const calculatedQty = Math.round((calcAmount / r + Number.EPSILON) * 1000) / 1000;
       setPrintQty(calculatedQty);
     }
   };
@@ -259,14 +267,12 @@ export const BarcodePrint: React.FC = () => {
   };
 
   // Generate barcode string (uses compact all-numeric Code-128C format)
-  // If embedPrice is false: 12-digit format: 2 + IIIIII + QQQQQ (Qty Only)
-  // If embedPrice is true: 18-digit format: 2 + IIIIII + QQQQQ + AAAAAA
+  // If variableWeight is true: 12-digit format: 2 + IIIIII + QQQQQ (Qty Only)
+  // If variableWeight is false: standard item barcode
   const generateBarcodeString = (
     item: ProductOption,
     variableWeight: boolean,
-    qty: number,
-    price: number,
-    amt: number
+    qty: number
   ): string => {
     const baseCode = (item.barcode || item.id)?.replace(/[\r\n]/g, '').trim() || '000000';
     if (!variableWeight) return baseCode;
@@ -277,18 +283,12 @@ export const BarcodePrint: React.FC = () => {
 
     if (numericId && numericId.length <= 6) {
       const qtyGrams = Math.min(99999, Math.max(1, Math.round((qty || 1) * 1000))).toString().padStart(5, '0');
-      if (!embedPriceInBarcode) {
-        // 12-digit all-numeric: 2 + 6-digit Item ID + 5-digit Qty (x1000)
-        return `2${numericId}${qtyGrams}`;
-      }
-      const calcAmount = amt > 0 ? Math.round(amt) : Math.round((qty || 1) * price);
-      const amtWhole = Math.min(999999, Math.max(0, calcAmount)).toString().padStart(6, '0');
-      return `2${numericId}${qtyGrams}${amtWhole}`;
+      // 12-digit all-numeric: 2 + 6-digit Item ID + 5-digit Qty (x1000)
+      return `2${numericId}${qtyGrams}`;
     }
 
     // Fallback if ID is alphanumeric:
-    const defaultRate = Math.round(item.priRate || 0);
-    return price === defaultRate || !embedPriceInBarcode ? `${baseCode}*${qty}` : `${baseCode}*${qty}*${price}`;
+    return `${baseCode}*${qty}`;
   };
 
   // Add current item to batch queue
@@ -298,20 +298,20 @@ export const BarcodePrint: React.FC = () => {
       return;
     }
 
-    const finalBarcode = generateBarcodeString(selectedItem, isVariableWeight, printQty, printPrice, totalAmount);
+    const finalBarcode = generateBarcodeString(selectedItem, isVariableWeight, printQty);
     const subInfo = resolveSubUnit(selectedItem, printQty);
 
     const newItem: BarcodePrintItem = {
       itemId: selectedItem.id,
       title: selectedItem.title,
       barcode: finalBarcode,
-      rate: printPrice,
+      rate: calcRate,
       copies: Math.max(1, copies),
       qty: isVariableWeight ? printQty : undefined,
       unit: isVariableWeight ? primaryUnit : undefined,
       displayQty: isVariableWeight ? subInfo.displayQty : undefined,
       displayUnit: isVariableWeight ? subInfo.displayUnit : undefined,
-      totalAmount: isVariableWeight ? totalAmount : undefined,
+      totalAmount: isVariableWeight ? Math.round(printQty * calcRate) : undefined,
       isVariableWeight,
       companySubHeader: companySubHeader || undefined
     };
@@ -319,7 +319,7 @@ export const BarcodePrint: React.FC = () => {
     setBatchQueue(prev => [...prev, newItem]);
     message.success(
       isVariableWeight
-        ? `Added ${copies}x "${selectedItem.title}" (${subInfo.displayQty} ${subInfo.displayUnit} @ Rs. ${printPrice}) to queue`
+        ? `Added ${copies}x "${selectedItem.title}" (${subInfo.displayQty} ${subInfo.displayUnit}) to queue`
         : `Added ${copies}x "${selectedItem.title}" to queue`
     );
   };
@@ -341,20 +341,20 @@ export const BarcodePrint: React.FC = () => {
     if (batchQueue.length > 0) {
       itemsToPrint = [...batchQueue];
     } else if (selectedItem) {
-      const finalBarcode = generateBarcodeString(selectedItem, isVariableWeight, printQty, printPrice, totalAmount);
+      const finalBarcode = generateBarcodeString(selectedItem, isVariableWeight, printQty);
       const subInfo = resolveSubUnit(selectedItem, printQty);
 
       itemsToPrint = [{
         itemId: selectedItem.id,
         title: selectedItem.title,
         barcode: finalBarcode,
-        rate: printPrice,
+        rate: calcRate,
         copies: Math.max(1, copies),
         qty: isVariableWeight ? printQty : undefined,
         unit: isVariableWeight ? primaryUnit : undefined,
         displayQty: isVariableWeight ? subInfo.displayQty : undefined,
         displayUnit: isVariableWeight ? subInfo.displayUnit : undefined,
-        totalAmount: isVariableWeight ? totalAmount : undefined,
+        totalAmount: isVariableWeight ? Math.round(printQty * calcRate) : undefined,
         isVariableWeight,
         companySubHeader: companySubHeader || undefined
       }];
@@ -411,15 +411,16 @@ export const BarcodePrint: React.FC = () => {
   }, [
     selectedItem?.id,
     selectedItem?.barcode,
-    printPrice,
+    calcRate,
     copies,
     isVariableWeight,
     printQty,
-    totalAmount,
+    calcAmount,
     layout,
     includeCompanyName,
     includeTitle,
     includePrice,
+    includeRate,
     batchQueue.length
   ]);
 
@@ -612,7 +613,7 @@ export const BarcodePrint: React.FC = () => {
                 />
               </div>
 
-              {/* Variable Qty / Weight & Rate Mode Switch */}
+              {/* Variable Qty / Weight Mode Switch */}
               <div style={{
                 marginBottom: 12,
                 padding: '10px',
@@ -623,10 +624,10 @@ export const BarcodePrint: React.FC = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b' }}>
-                      Variable Qty & Rate
+                      Variable Weight / Qty
                     </div>
                     <div style={{ fontSize: 11, color: '#64748b' }}>
-                      Embed weight/qty & rate in barcode
+                      Put quantity in barcode
                     </div>
                   </div>
                   <Switch
@@ -635,8 +636,8 @@ export const BarcodePrint: React.FC = () => {
                     onChange={val => {
                       setIsVariableWeight(val);
                       if (val && selectedItem) {
-                        const r = printPrice || selectedItem.priRate || 0;
-                        setTotalAmount(Math.round((printQty * r + Number.EPSILON) * 100) / 100);
+                        const r = calcRate || selectedItem.priRate || 0;
+                        setCalcAmount(Math.round(printQty * r));
                       }
                     }}
                   />
@@ -652,7 +653,7 @@ export const BarcodePrint: React.FC = () => {
                     <Row gutter={8}>
                       <Col span={12}>
                         <div style={{ fontSize: 11, fontWeight: 500, marginBottom: 3, color: '#334155' }}>
-                          Qty ({primaryUnit})
+                          Qty ({primaryUnit}) <span style={{ color: '#ef4444' }}>*</span>
                         </div>
                         <InputNumber
                           min={0.001}
@@ -665,49 +666,38 @@ export const BarcodePrint: React.FC = () => {
                       </Col>
                       <Col span={12}>
                         <div style={{ fontSize: 11, fontWeight: 500, marginBottom: 3, color: '#334155' }}>
-                          Unit Rate (Rs/{primaryUnit})
+                          Amount (Rs) <span style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }}>(calc qty)</span>
                         </div>
                         <InputNumber
                           min={0}
                           precision={0}
-                          step={1}
-                          value={printPrice}
-                          onChange={handlePriceChange}
+                          step={10}
+                          value={calcAmount}
+                          onChange={handleAmountChange}
                           style={{ width: '100%' }}
-                          placeholder="Rate"
+                          placeholder="Auto-calc qty"
                         />
                       </Col>
                     </Row>
 
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 500, marginBottom: 3, color: '#334155' }}>
-                        Total Amount (Rs.)
-                      </div>
-                      <InputNumber
-                        min={0}
-                        precision={0}
-                        step={1}
-                        value={totalAmount}
-                        onChange={handleTotalAmountChange}
-                        style={{ width: '100%' }}
-                        placeholder="Total amount"
-                      />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Item Rate (for calc):</span>
+                      <Space size={4}>
+                        <span style={{ fontSize: 11, color: '#64748b' }}>Rs.</span>
+                        <InputNumber
+                          size="small"
+                          min={0}
+                          precision={0}
+                          value={calcRate}
+                          onChange={handleRateChange}
+                          style={{ width: 90 }}
+                        />
+                        <span style={{ fontSize: 11, color: '#64748b' }}>/{primaryUnit}</span>
+                      </Space>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 2 }}>
-                      <div>
-                        <div style={{ fontSize: 11, fontWeight: 500, color: '#334155' }}>
-                          Embed Price in Barcode
-                        </div>
-                        <div style={{ fontSize: 10, color: '#64748b' }}>
-                          {embedPriceInBarcode ? '18-digit (Fixed Price)' : '12-digit (Qty Only, Live Rate at Scan)'}
-                        </div>
-                      </div>
-                      <Switch
-                        size="small"
-                        checked={embedPriceInBarcode}
-                        onChange={setEmbedPriceInBarcode}
-                      />
+                    <div style={{ fontSize: 10, color: '#64748b', fontStyle: 'italic' }}>
+                      * Enter amount to auto-calculate qty. Barcode number contains only item & qty.
                     </div>
 
                     <div style={{
@@ -719,13 +709,13 @@ export const BarcodePrint: React.FC = () => {
                       fontFamily: 'monospace',
                       wordBreak: 'break-all'
                     }}>
-                      Barcode: {selectedItem ? generateBarcodeString(selectedItem, true, printQty, printPrice, totalAmount) : '200000100250'}
+                      Barcode: {selectedItem ? generateBarcodeString(selectedItem, true, printQty) : '200000100250'}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Copies & Standard Rate */}
+              {/* Copies & Standard Price */}
               <Row gutter={10} style={{ marginBottom: 12 }}>
                 <Col span={isVariableWeight ? 24 : 12}>
                   <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4, color: '#334155' }}>
@@ -748,9 +738,10 @@ export const BarcodePrint: React.FC = () => {
                       min={0}
                       precision={0}
                       step={1}
-                      value={printPrice}
-                      onChange={handlePriceChange}
+                      value={calcRate}
+                      onChange={handleRateChange}
                       style={{ width: '100%' }}
+                      placeholder="Price"
                     />
                   </Col>
                 )}
@@ -811,11 +802,11 @@ export const BarcodePrint: React.FC = () => {
                   <Switch size="small" checked={includeTitle} onChange={setIncludeTitle} />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 12 }}>Price / Amount</Text>
+                  <Text style={{ fontSize: 12 }}>Price / Amount on Sticker</Text>
                   <Switch size="small" checked={includePrice} onChange={setIncludePrice} />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 12 }}>Unit Rate (Rs/kg)</Text>
+                  <Text style={{ fontSize: 12 }}>Unit Rate on Sticker</Text>
                   <Switch size="small" checked={includeRate} onChange={setIncludeRate} />
                 </div>
               </div>
@@ -882,7 +873,7 @@ export const BarcodePrint: React.FC = () => {
                           {item.copies}x {item.title}
                           {item.isVariableWeight && item.qty && (
                             <Tag color="cyan" style={{ fontSize: 10, marginLeft: 4, padding: '0 4px', lineHeight: '16px' }}>
-                              {item.qty} {item.unit} @ Rs. {item.rate}
+                              {item.qty} {item.unit}
                             </Tag>
                           )}
                         </span>
