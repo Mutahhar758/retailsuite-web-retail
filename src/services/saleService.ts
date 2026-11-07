@@ -1,3 +1,4 @@
+import dayjs from 'dayjs';
 import api from './api';
 import {
   getNextOfflineVoucherNo,
@@ -204,7 +205,7 @@ export const saleService = {
       tempVoucherNo,
       request,
       tenantIdentifier: currentTenantIdentifier || '',
-      createdAt: new Date().toISOString(),
+      createdAt: dayjs().format('YYYY-MM-DDTHH:mm:ss'),
       retryCount: 0,
       status: 'pending',
     });
