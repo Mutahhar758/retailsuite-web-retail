@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Layout, Menu, Button, Avatar, Dropdown, Space, theme, Breadcrumb, Tooltip, Badge, message, Modal } from 'antd';
 import { 
   MenuFoldOutlined, 
@@ -19,6 +19,13 @@ import {
   RocketOutlined,
   ShoppingCartOutlined,
   MobileOutlined,
+  SearchOutlined,
+  PlusOutlined,
+  ThunderboltOutlined,
+  ShoppingOutlined,
+  ArrowDownOutlined,
+  ArrowUpOutlined,
+  WalletOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -30,76 +37,32 @@ import { profileService, logoutService } from '../services/profileService';
 import api from '../services/api';
 import { CURRENT_APP_VERSION } from '../utils/autoVersionRefresh';
 import { GeminiAssistantWidget } from '../components/ai/GeminiAssistantWidget';
+import { NavigationCommandModal, type SearchableNavItem } from '../components/common/NavigationCommandModal';
 
 const { Header, Sider, Content } = Layout;
 
-const permissionMap: Record<string, string> = {
-  '/': 'Permissions.Dashboard.View',
-  '/setup/chart-of-accounts': 'Permissions.ChartOfAccounts.View',
-  '/setup/detail-accounts': 'Permissions.DetailAccounts.View',
-  '/setup/fixed-assets': 'Permissions.ChartOfAccounts.View',
-  '/setup/bank-accounts': 'Permissions.BankAccounts.View',
-  '/setup/customers': 'Permissions.Customers.View',
-  '/setup/customer-categories': 'Permissions.CustomerCategories.View',
-  '/setup/vendors': 'Permissions.Vendors.View',
-  '/setup/item-details': 'Permissions.InventoryItems.View',
-  '/setup/item-categories': 'Permissions.ItemCategories.View',
-  '/setup/units': 'Permissions.Units.View',
-  '/setup/narrations': 'Permissions.Narrations.View',
-  '/setup/hr-info': 'Permissions.HRInfo.View',
-  '/setup/users': 'Permissions.Users.View',
-  '/setup/roles': 'Permissions.Roles.View',
-  '/setup/supply-order': 'Permissions.SupplyOrders.View',
-  '/setup/company-info': 'Permissions.Settings.View',
-  '/setup/settings': 'Permissions.Settings.View',
-  '/setup/printer-settings': 'Permissions.PrinterSettings.View',
-  '/setup/opening-balance': 'Permissions.OpeningBalances.View',
-  '/setup/bom': 'Permissions.BillOfMaterials.View',
-
-  '/daily-entries/expenses': 'Permissions.PaymentVouchers.View',
-  '/daily-entries/payment-voucher': 'Permissions.PaymentVouchers.View',
-  '/daily-entries/receipt-voucher': 'Permissions.ReceiptVouchers.View',
-  '/daily-entries/journal-voucher': 'Permissions.JournalVouchers.View',
-  '/daily-entries/purchase': 'Permissions.Purchases.View',
-  '/daily-entries/sale': 'Permissions.Sales.View',
-  '/daily-entries/pos-sale': 'Permissions.POSSales.View',
-  '/daily-entries/sale-supply': 'Permissions.SaleSupplies.View',
-  '/daily-entries/customer-supply': 'Permissions.SaleSupplies.View',
-  '/daily-entries/purchase-return': 'Permissions.PurchaseReturns.View',
-  '/daily-entries/sale-return': 'Permissions.SaleReturns.View',
-  '/daily-entries/stock-adjustment': 'Permissions.StockAdjustments.View',
-  '/daily-entries/daily-stock-closing': 'Permissions.Sales.View',
-  '/daily-entries/manufacturing': 'Permissions.Manufacturing.View',
-  '/daily-entries/bank-reconciliation': 'Permissions.BankReconciliations.View',
-  '/daily-entries/payroll': 'Permissions.Payrolls.View',
-  '/setup/dining-tables': 'Permissions.DiningTables.View',
-  '/daily-entries/kitchen-display': 'Permissions.KotOrders.View',
-  '/daily-entries/recurring-vouchers': 'Permissions.RecurringVouchers.View',
-
-  '/reports/account-statement': 'Permissions.AccountStatement.View',
-  '/reports/account-statement-with-due': 'Permissions.AccountStatementWithDue.View',
-  '/reports/account-balance': 'Permissions.AccountBalance.View',
-  '/reports/trial-balance': 'Permissions.TrialBalance.View',
-  '/reports/stock-balance': 'Permissions.StockBalance.View',
-  '/reports/item-ledger': 'Permissions.StockLedger.View',
-  '/reports/income-summary': 'Permissions.IncomeSummary.View',
-  '/reports/balance-sheet': 'Permissions.BalanceSheet.View',
-  '/reports/customer-bill': 'Permissions.CustomerBill.View',
-  '/reports/purchase-supply-comparison': 'Permissions.PurchaseSupplyComparison.View',
-  '/reports/milk-comparison': 'Permissions.PurchaseSupplyComparison.View',
-  '/reports/customer-balance-recovery': 'Permissions.CustomerBalanceRecovery.View',
-  '/reports/manufacturing': 'Permissions.Manufacturing.View',
-};
-
 export const MainLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, user, setUser, permissions, setPermissions } = useAuthStore();
+  const { logout, user, setUser, setPermissions } = useAuthStore();
   const { theme: appTheme, setTheme, layout, setLayout, currentTenantIdentifier, licenses, updateLicenseFeatures } = useAppStore();
   const { token } = theme.useToken();
   const { isOnline } = useNetworkStatus();
   const { pendingCount } = useOfflineStore();
+
+  // Global Ctrl+K / Cmd+K listener for quick search modal
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchModalOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
   React.useEffect(() => {
     if (!currentTenantIdentifier || !isOnline) return;
@@ -173,7 +136,6 @@ export const MainLayout: React.FC = () => {
     
     let label = labelMap[path] || path.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     
-    // Check if the current segment is an ID parameter following a list route
     const isIdSegment = index > 0 && [
       'users', 'roles', 'hr-info', 'customers', 'vendors', 'supply-order', 'item-details',
       'payment-voucher', 'receipt-voucher', 'journal-voucher', 'purchase', 'sale',
@@ -209,7 +171,7 @@ export const MainLayout: React.FC = () => {
         content: (
           <div>
             <p>You have <strong>{pendingCount}</strong> offline sale voucher{pendingCount > 1 ? 's' : ''} that {pendingCount > 1 ? 'have' : 'has'} not been synced to the server yet.</p>
-            <p style={{ color: '#d46b08', marginTop: 8 }}>â„¹ï¸ They are saved securely on this device and will automatically sync the next time you log back in to this organization.</p>
+            <p style={{ color: '#d46b08', marginTop: 8 }}>ℹ️ They are saved securely on this device and will automatically sync the next time you log back in to this organization.</p>
           </div>
         ),
         okText: 'Log Out Now',
@@ -243,7 +205,7 @@ export const MainLayout: React.FC = () => {
   const settingManufacturing = useSettingsStore(state => state.getSetting(MANUFACTURING_ENABLE_KEY, ''));
   const hasManufacturingFeature = settingManufacturing !== '' ? settingManufacturing === 'true' : true;
 
-  const baseMenuItems = [
+  const baseMenuItems = useMemo(() => [
     { 
       key: '/setup', 
       icon: <SettingOutlined />, 
@@ -330,8 +292,7 @@ export const MainLayout: React.FC = () => {
         { key: '/reports/barcode-print', label: 'Barcode Print' },
       ].filter(Boolean) as any[]
     },
-  ].filter(Boolean) as any[];
-
+  ].filter(Boolean) as any[], [hasManufacturingFeature, hasSupplyFeature, hasDineInFeature, hasKdsFeature, hasMobileShopFeature]);
 
   interface ShortcutItem {
     key: string;
@@ -405,32 +366,7 @@ export const MainLayout: React.FC = () => {
     });
   };
 
-  const filterMenuItemsByPermissions = (items: any[]): any[] => {
-    return items
-      .map(item => {
-        if (!item) return null;
-        if (item.children) {
-          const filteredChildren = filterMenuItemsByPermissions(item.children);
-          if (filteredChildren.length === 0) {
-            return null;
-          }
-          return { ...item, children: filteredChildren };
-        }
-
-        const requiredPermission = permissionMap[item.key];
-        if (requiredPermission && !user?.isOwner) {
-          const hasPerm = permissions?.includes(requiredPermission) ||
-            (requiredPermission === 'Permissions.BankAccounts.View' && (permissions?.includes('Permissions.DetailAccounts.View') || permissions?.includes('Permissions.ChartOfAccounts.View'))) ||
-            (requiredPermission === 'Permissions.PurchaseSupplyComparison.View' && permissions?.includes('Permissions.MilkComparison.View'));
-          if (!hasPerm) return null;
-        }
-
-        return item;
-      })
-      .filter(Boolean);
-  };
-
-  const baseMenuItemsWithShortcuts = [
+  const baseMenuItemsWithShortcuts = useMemo(() => [
     { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
     ...(pinnedShortcuts.filter(s => s.key !== '/' && s.label !== 'Dashboard').length > 0 ? [{
       key: '/shortcuts-group',
@@ -442,11 +378,101 @@ export const MainLayout: React.FC = () => {
       }))
     }] : []),
     ...baseMenuItems
-  ];
+  ], [pinnedShortcuts, baseMenuItems, token.colorPrimary]);
 
-  const menuItems = transformMenuItems(filterMenuItemsByPermissions(baseMenuItemsWithShortcuts));
+  const menuItems = useMemo(
+    () => transformMenuItems(baseMenuItemsWithShortcuts),
+    [baseMenuItemsWithShortcuts, pinnedShortcuts, token.colorPrimary]
+  );
 
-  // â”€â”€ Offline mode: only show Sale and POS Sale â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Flat list of items for the Search modal (only evaluated when baseMenuItems changes)
+  const searchableNavItems = useMemo<SearchableNavItem[]>(() => {
+    const result: SearchableNavItem[] = [
+      {
+        key: '/',
+        label: 'Dashboard',
+        moduleLabel: 'Dashboard',
+        icon: <DashboardOutlined />,
+        keywords: ['home', 'overview'],
+      },
+    ];
+    for (const mod of baseMenuItems) {
+      if (mod?.children) {
+        for (const child of mod.children) {
+          if (child?.key && child?.label) {
+            result.push({
+              key: child.key,
+              label: child.label,
+              moduleLabel: mod.label,
+              icon: mod.icon,
+            });
+          }
+        }
+      }
+    }
+    return result;
+  }, [baseMenuItems]);
+
+  // Quick Entry (+ New) actions for Header icon dropdown and Search modal
+  const quickEntryActions = useMemo<SearchableNavItem[]>(() => {
+    const allActions: Array<SearchableNavItem & { onlineOnly?: boolean }> = [
+      {
+        key: '/daily-entries/pos-sale',
+        label: 'POS Touch Sale',
+        moduleLabel: 'Quick Entry',
+        icon: <ThunderboltOutlined />,
+        keywords: ['new', 'pos', 'touch', 'sale'],
+        isQuickAction: true,
+      },
+      {
+        key: '/daily-entries/sale/new',
+        label: 'New Sale Invoice',
+        moduleLabel: 'Quick Entry',
+        icon: <ShoppingCartOutlined />,
+        keywords: ['new', 'sale', 'invoice'],
+        isQuickAction: true,
+      },
+      {
+        key: '/daily-entries/purchase/new',
+        label: 'New Purchase Bill',
+        moduleLabel: 'Quick Entry',
+        icon: <ShoppingOutlined />,
+        keywords: ['new', 'purchase', 'bill'],
+        isQuickAction: true,
+        onlineOnly: true,
+      },
+      {
+        key: '/daily-entries/receipt-voucher/new',
+        label: 'New Receipt Voucher',
+        moduleLabel: 'Quick Entry',
+        icon: <ArrowDownOutlined />,
+        keywords: ['new', 'receipt', 'voucher'],
+        isQuickAction: true,
+        onlineOnly: true,
+      },
+      {
+        key: '/daily-entries/payment-voucher/new',
+        label: 'New Payment Voucher',
+        moduleLabel: 'Quick Entry',
+        icon: <ArrowUpOutlined />,
+        keywords: ['new', 'payment', 'voucher'],
+        isQuickAction: true,
+        onlineOnly: true,
+      },
+      {
+        key: '/daily-entries/expenses',
+        label: 'Expenses',
+        moduleLabel: 'Quick Entry',
+        icon: <WalletOutlined />,
+        keywords: ['new', 'expense'],
+        isQuickAction: true,
+        onlineOnly: true,
+      },
+    ];
+    return allActions.filter((a) => !a.onlineOnly || isOnline);
+  }, [isOnline]);
+
+  // ── Offline mode: only show Sale and POS Sale ──────────────────────────────
   const offlineMenuItems = [
     {
       key: '/daily-entries/sale',
@@ -460,7 +486,7 @@ export const MainLayout: React.FC = () => {
     },
   ];
 
-  const activeMenuItems = isOnline ? menuItems : filterMenuItemsByPermissions(offlineMenuItems);
+  const activeMenuItems = isOnline ? menuItems : offlineMenuItems;
 
   const userMenu = {
     items: [
@@ -469,6 +495,15 @@ export const MainLayout: React.FC = () => {
       { key: 'profile', icon: <UserOutlined />, label: 'My Profile', onClick: () => navigate('/profile') },
       { key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: handleLogout, danger: true },
     ],
+  };
+
+  const quickEntryMenu = {
+    items: quickEntryActions.map((act) => ({
+      key: act.key,
+      icon: act.icon,
+      label: act.label,
+      onClick: () => navigate(act.key),
+    })),
   };
 
   const isHorizontal = layout === 'horizontal';
@@ -498,8 +533,8 @@ export const MainLayout: React.FC = () => {
           {/* Logo / brand */}
           <div className="h-16 flex items-center justify-center m-4 text-xl font-bold" style={{ color: !isOnline ? '#d46b08' : token.colorPrimary }}>
             {collapsed
-              ? (!isOnline ? 'âœ•' : 'R')
-              : (!isOnline ? 'âš¡ Offline' : 'Retail')
+              ? (!isOnline ? '✕' : 'R')
+              : (!isOnline ? '⚡ Offline' : 'Retail')
             }
           </div>
 
@@ -575,7 +610,7 @@ export const MainLayout: React.FC = () => {
             borderBottom: `1px solid ${token.colorBorderSecondary}`
           }}
         >
-          <div className="flex items-center flex-1">
+          <div className="flex items-center flex-1 min-w-0">
             {!isHorizontal && (
               <Button
                 type="text"
@@ -587,8 +622,8 @@ export const MainLayout: React.FC = () => {
             
             {isHorizontal && (
               <>
-                <div className="text-xl font-bold mr-8" style={{ color: !isOnline ? '#d46b08' : token.colorPrimary }}>
-                  {!isOnline ? 'âš¡ Offline Mode' : 'RetailSuite Portal'}
+                <div className="text-xl font-bold mr-8 shrink-0" style={{ color: !isOnline ? '#d46b08' : token.colorPrimary }}>
+                  {!isOnline ? '⚡ Offline Mode' : 'RetailSuite Portal'}
                 </div>
                 <Menu
                   theme={appTheme}
@@ -596,13 +631,68 @@ export const MainLayout: React.FC = () => {
                   selectedKeys={[location.pathname]}
                   items={activeMenuItems}
                   onClick={({ key }) => navigate(key)}
-                  style={{ flex: 1, borderBottom: 'none', lineHeight: '62px' }}
+                  style={{ flex: 1, minWidth: 0, borderBottom: 'none', lineHeight: '62px' }}
                 />
               </>
             )}
           </div>
 
           <Space align="center" size="middle">
+            {isOnline && (
+              <div
+                onClick={() => setSearchModalOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  height: 34,
+                  padding: '0 10px 0 12px',
+                  borderRadius: 8,
+                  border: `1px solid ${token.colorBorderSecondary}`,
+                  backgroundColor: token.colorFillAlter,
+                  color: token.colorTextSecondary,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  lineHeight: 1,
+                  userSelect: 'none',
+                  transition: 'all 0.15s',
+                }}
+              >
+                <SearchOutlined style={{ color: token.colorTextTertiary, fontSize: 14 }} />
+                <span className="hidden sm:inline" style={{ paddingRight: 8 }}>Search...</span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 500,
+                    padding: '3px 6px',
+                    borderRadius: 4,
+                    backgroundColor: token.colorBgContainer,
+                    border: `1px solid ${token.colorBorderSecondary}`,
+                    color: token.colorTextTertiary,
+                  }}
+                >
+                  Ctrl+K
+                </span>
+              </div>
+            )}
+
+            {quickEntryActions.length > 0 && (
+              <Dropdown menu={quickEntryMenu} placement="bottomRight" trigger={['click']}>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  style={{
+                    height: 34,
+                    borderRadius: 8,
+                    fontWeight: 500,
+                    paddingInline: 14,
+                  }}
+                >
+                  New
+                </Button>
+              </Dropdown>
+            )}
+
             <Tooltip title={`Switch to ${appTheme === 'light' ? 'Dark' : 'Light'} Mode`}>
               <Button 
                 type="text" 
@@ -656,7 +746,20 @@ export const MainLayout: React.FC = () => {
         >
           <Outlet />
         </Content>
-    </Layout>
+      </Layout>
+
+      {searchModalOpen && (
+        <NavigationCommandModal
+          open={searchModalOpen}
+          onClose={() => setSearchModalOpen(false)}
+          items={searchableNavItems}
+          quickActions={quickEntryActions}
+          pinnedKeys={pinnedShortcuts.map((s) => s.key)}
+          onTogglePin={togglePinByKey}
+          onNavigate={(path) => navigate(path)}
+        />
+      )}
+
       <GeminiAssistantWidget />
     </Layout>
   );

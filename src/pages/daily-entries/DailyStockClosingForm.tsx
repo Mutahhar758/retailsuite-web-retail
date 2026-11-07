@@ -1,10 +1,13 @@
+import KeyboardShortcutsBar from '../../components/common/KeyboardShortcutsBar';
+import useFormShortcuts from '../../hooks/useFormShortcuts';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
-  Table, Space, message, InputNumber, Tag, Switch, Statistic
+  Table, Space, message, InputNumber, Tag, Switch, Popconfirm, Divider
 } from 'antd';
 import {
-  SaveOutlined, ArrowLeftOutlined, SyncOutlined, CheckCircleOutlined, FilterOutlined
+  SaveOutlined, ArrowLeftOutlined, SyncOutlined, CheckCircleOutlined,
+  FilterOutlined, DeleteOutlined, ReconciliationOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -221,7 +224,7 @@ export const DailyStockClosingForm: React.FC = () => {
         customerAccountId: values.customerAccountId,
         vendorAccountId: values.vendorAccountId,
         cashAccountId: values.cashAccountId,
-        reconciliationMode: values.reconciliationMode || 'DiscountAddLess',
+        reconciliationMode: 'DiscountAddLess',
         enteredSaleAmount: effectiveSaleTotal,
         enteredPurchaseAmount: effectivePurchaseTotal,
         remarks: values.remarks,
@@ -249,6 +252,23 @@ export const DailyStockClosingForm: React.FC = () => {
       setSaving(false);
     }
   };
+
+  const handleDelete = async () => {
+    try {
+      setSaving(true);
+      await dailyStockClosingService.delete(selectedDate.format('YYYY-MM-DD'));
+      message.success('Daily stock closing deleted');
+      await loadSheetForDate(selectedDate);
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to delete daily stock closing');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useFormShortcuts({
+    onSave: handleSave,
+  });
 
   const stockColumns = [
     {
@@ -370,24 +390,49 @@ export const DailyStockClosingForm: React.FC = () => {
     },
   ];
 
+  const changedItemsCount = rows.filter(r => r.purchasedQty > 0 || r.soldQty > 0).length;
+
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/daily-entries/daily-stock-closing')}>
-            Back to List
-          </Button>
-          <Title level={4} style={{ margin: 0 }}>
-            Daily Stock &amp; Cash Closing
-          </Title>
+    <Card className="shadow-sm border-gray-100 rounded-xl">
+      <div className="flex justify-between items-center mb-6">
+        <Space align="center">
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate('/daily-entries/daily-stock-closing')}
+            type="text"
+          />
+          <ReconciliationOutlined style={{ fontSize: 24, color: '#0ea5e9' }} />
+          <div>
+            <Title level={4} style={{ margin: 0 }}>
+              {isExisting
+                ? `Edit Daily Closing: ${selectedDate.format('DD-MMM-YYYY')}`
+                : 'Daily Stock & Cash Closing'}
+            </Title>
+            <Text type="secondary">
+              {isExisting
+                ? 'Modify recorded physical stock count and daily summary totals'
+                : 'Enter day-end closing stock counts and summary totals'}
+            </Text>
+          </div>
           {isExisting && (
             <Tag icon={<CheckCircleOutlined />} color="processing">
-              Existing Closing ({purchaseVoucherNo ? `PU-${purchaseVoucherNo}` : 'No PU'} /{' '}
-              {saleVoucherNo ? `SL-${saleVoucherNo}` : 'No SL'})
+              {purchaseVoucherNo ? `PU-${purchaseVoucherNo}` : 'No PU'} /{' '}
+              {saleVoucherNo ? `SL-${saleVoucherNo}` : 'No SL'}
             </Tag>
           )}
         </Space>
         <Space>
+          {isExisting && (
+            <Popconfirm
+              title="Delete this daily stock closing?"
+              description="This will remove the linked Purchase and Sale vouchers for this date."
+              onConfirm={handleDelete}
+            >
+              <Button danger icon={<DeleteOutlined />} loading={saving}>
+                Delete
+              </Button>
+            </Popconfirm>
+          )}
           <Button
             icon={<SyncOutlined />}
             onClick={() => loadSheetForDate(selectedDate)}
@@ -398,118 +443,125 @@ export const DailyStockClosingForm: React.FC = () => {
           <Button
             type="primary"
             icon={<SaveOutlined />}
+            data-action="save"
+            className="pos-save-btn form-save-btn"
             loading={saving}
             onClick={handleSave}
+            style={{
+              backgroundColor: '#0ea5e9',
+              borderColor: '#0ea5e9',
+              height: 38,
+              boxShadow: '0 2px 4px rgba(14, 165, 233, 0.2)',
+            }}
           >
-            {isExisting ? 'Update Daily Closing' : 'Post Daily Closing'}
+            {isExisting ? 'Update Closing (Alt+S)' : 'Save Closing (Alt+S)'}
           </Button>
         </Space>
       </div>
 
-      <Card style={{ marginBottom: 16 }}>
-        <Form form={form} layout="vertical">
-          <Row gutter={16}>
-            <Col xs={24} sm={12} md={6}>
-              <Form.Item label="Closing Date" name="date" rules={[{ required: true }]}>
-                <DatePicker
-                  style={{ width: '100%' }}
-                  format="YYYY-MM-DD"
-                  allowClear={false}
-                  onChange={d => {
-                    if (d) setSelectedDate(d);
-                  }}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12} md={6}>
-              <Form.Item
-                label="Default Walk-In Customer"
-                name="customerAccountId"
-                rules={[{ required: true, message: 'Select default customer' }]}
-              >
-                <Select
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder="Select Walk-In Customer"
-                  options={customers.map(c => ({ value: c.account, label: `${c.title} (${c.account})` }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12} md={6}>
-              <Form.Item
-                label="Default Cash Supplier"
-                name="vendorAccountId"
-                rules={[{ required: true, message: 'Select default vendor' }]}
-              >
-                <Select
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder="Select Default Supplier"
-                  options={vendors.map(v => ({ value: v.account, label: `${v.title} (${v.account})` }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12} md={6}>
-              <Form.Item label="Cash / Bank Account" name="cashAccountId">
-                <Select
-                  showSearch
-                  allowClear
-                  optionFilterProp="label"
-                  placeholder="Default Cash Account"
-                  options={cashBanks.map(b => ({ value: b.account, label: `${b.title} (${b.account})` }))}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16} align="middle">
-            <Col xs={24} md={6}>
-              <Form.Item label="Category Filter" style={{ marginBottom: 0 }}>
-                <Select
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder="All Categories"
-                  value={categoryFilter}
-                  onChange={setCategoryFilter}
-                  options={categories.map(c => ({ value: c.code, label: c.title }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={6}>
-              <Form.Item label="Search Product" style={{ marginBottom: 0 }}>
-                <Input
-                  allowClear
-                  prefix={<FilterOutlined />}
-                  placeholder="Search by title, code, or barcode..."
-                  value={searchText}
-                  onChange={e => setSearchText(e.target.value)}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={6}>
-              <Form.Item label="Remarks / Notes" name="remarks" style={{ marginBottom: 0 }}>
-                <Input placeholder="Optional daily closing notes..." />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={6} style={{ paddingTop: 22 }}>
+      <Form form={form} layout="vertical">
+        <Row gutter={16}>
+          <Col xs={24} sm={12} md={5}>
+            <Form.Item label="Closing Date" name="date" rules={[{ required: true }]}>
+              <DatePicker
+                style={{ width: '100%' }}
+                format="DD-MMM-YYYY"
+                allowClear={false}
+                onChange={d => {
+                  if (d) setSelectedDate(d);
+                }}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Form.Item
+              label="Default Walk-In Customer"
+              name="customerAccountId"
+              rules={[{ required: true, message: 'Select default customer' }]}
+            >
+              <Select
+                showSearch
+                optionFilterProp="label"
+                placeholder="Select Walk-In Customer"
+                options={customers.map(c => ({ value: c.account, label: `${c.title} (${c.account})` }))}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Form.Item
+              label="Default Supplier"
+              name="vendorAccountId"
+              rules={[{ required: true, message: 'Select default vendor' }]}
+            >
+              <Select
+                showSearch
+                optionFilterProp="label"
+                placeholder="Select Default Supplier"
+                options={vendors.map(v => ({ value: v.account, label: `${v.title} (${v.account})` }))}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12} md={7}>
+            <Form.Item label="Cash / Bank Account" name="cashAccountId">
+              <Select
+                showSearch
+                allowClear
+                optionFilterProp="label"
+                placeholder="Default Cash Account"
+                options={cashBanks.map(b => ({ value: b.account, label: `${b.title} (${b.account})` }))}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Row gutter={16} align="middle">
+          <Col xs={24} sm={12} md={6}>
+            <Form.Item label="Category Filter">
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder="All Categories"
+                value={categoryFilter}
+                onChange={setCategoryFilter}
+                options={categories.map(c => ({ value: c.code, label: c.title }))}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Form.Item label="Search Product">
+              <Input
+                allowClear
+                prefix={<FilterOutlined />}
+                placeholder="Search by title, code, or barcode..."
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12} md={7}>
+            <Form.Item label="Description / Notes" name="remarks">
+              <Input placeholder="Optional daily closing notes..." />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12} md={5}>
+            <Form.Item label="Filter Changed">
               <Space>
                 <Switch checked={showChangedOnly} onChange={setShowChangedOnly} />
-                <Text>Show Only Changed Items</Text>
+                <Text>Changed Items Only ({changedItemsCount})</Text>
               </Space>
-            </Col>
-          </Row>
-        </Form>
-      </Card>
+            </Form.Item>
+          </Col>
+        </Row>
 
-      <Card
-        title={
-          <span id="daily-stock-closing-table-caption">
-            Physical Stock Count Sheet ({filteredRows.length} items)
-          </span>
-        }
-        style={{ marginBottom: 16 }}
-        styles={{ body: { padding: 0 } }}
-      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Space>
+            <Text strong id="daily-stock-closing-table-caption" style={{ fontSize: 16 }}>
+              Physical Stock Count Sheet ({filteredRows.length} items)
+            </Text>
+          </Space>
+        </div>
+
         <div
           tabIndex={0}
           role="region"
@@ -526,85 +578,101 @@ export const DailyStockClosingForm: React.FC = () => {
             columns={stockColumns}
             dataSource={filteredRows}
             size="small"
-            scroll={{ x: 1150, y: 460 }}
+            bordered
+            scroll={{ x: 1150, y: 420 }}
             pagination={false}
           />
         </div>
-      </Card>
 
-      <Row gutter={16}>
-        <Col xs={24} lg={12}>
-          <Card title="Daily Sales Summary" style={{ marginBottom: 16 }}>
-            <Row gutter={16} align="middle">
-              <Col span={8}>
-                <Statistic
-                  title="Calculated Sale Total"
-                  value={calculatedSaleTotal}
-                  precision={2}
-                />
-              </Col>
-              <Col span={9}>
-                <Text strong>Actual Total Sale Amount</Text>
-                <InputNumber
-                  style={{ width: '100%', marginTop: 4 }}
-                  min={0}
-                  value={effectiveSaleTotal}
-                  onChange={v => setManualSaleTotal(v)}
-                />
-              </Col>
-              <Col span={7}>
-                <Statistic
-                  title="Discount / Variance"
-                  value={saleDiscountVariance}
-                  precision={2}
-                  valueStyle={{ color: saleDiscountVariance !== 0 ? '#d46b08' : undefined, fontSize: 16 }}
-                />
-                {manualSaleTotal !== null && (
-                  <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setManualSaleTotal(null)}>
-                    Reset to Calculated
-                  </Button>
-                )}
-              </Col>
-            </Row>
-          </Card>
-        </Col>
+        <KeyboardShortcutsBar
+          shortcuts={[
+            { key: 'Alt+S / F5', label: 'Save Closing' },
+            { key: 'Enter / ↓', label: 'Next Item Count' },
+            { key: '↑', label: 'Previous Item Count' },
+          ]}
+        />
 
-        <Col xs={24} lg={12}>
-          <Card title="Daily Buying Summary" style={{ marginBottom: 16 }}>
-            <Row gutter={16} align="middle">
-              <Col span={8}>
-                <Statistic
-                  title="Calculated Buying Total"
-                  value={calculatedPurchaseTotal}
-                  precision={2}
-                />
-              </Col>
-              <Col span={9}>
-                <Text strong>Actual Total Buying Amount</Text>
-                <InputNumber
-                  style={{ width: '100%', marginTop: 4 }}
-                  min={0}
-                  value={effectivePurchaseTotal}
-                  onChange={v => setManualPurchaseTotal(v)}
-                />
-              </Col>
-              <Col span={7}>
-                <Statistic
-                  title="Add / Less Variance"
-                  value={purchaseVariance}
-                  precision={2}
-                  valueStyle={{ color: purchaseVariance !== 0 ? '#1677ff' : undefined, fontSize: 16 }}
-                />
-                {manualPurchaseTotal !== null && (
-                  <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setManualPurchaseTotal(null)}>
-                    Reset to Calculated
-                  </Button>
-                )}
-              </Col>
-            </Row>
-          </Card>
-        </Col>
-      </Row>
-    </div>
+        <div
+          style={{
+            marginTop: 16,
+            padding: '16px 20px',
+            backgroundColor: '#f8fafc',
+            borderRadius: 8,
+            border: '1px solid #e2e8f0',
+          }}
+        >
+          <Row gutter={24} align="middle">
+            {/* Left Side: Daily Sales Summary */}
+            <Col xs={24} lg={12}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+                <div>
+                  <Text type="secondary">Calculated Sale Total</Text>
+                  <Title level={4} style={{ margin: 0 }}>
+                    Rs. {calculatedSaleTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </Title>
+                  {saleDiscountVariance !== 0 && (
+                    <Text type="warning" style={{ fontSize: 12, fontWeight: 600 }}>
+                      Discount / Variance: Rs. {saleDiscountVariance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </Text>
+                  )}
+                </div>
+                <div style={{ minWidth: 220 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text strong>Actual Sale Total (Cash Received)</Text>
+                    {manualSaleTotal !== null && (
+                      <Button type="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => setManualSaleTotal(null)}>
+                        Reset
+                      </Button>
+                    )}
+                  </div>
+                  <InputNumber
+                    size="large"
+                    style={{ width: '100%', marginTop: 4, fontWeight: 700 }}
+                    min={0}
+                    value={effectiveSaleTotal}
+                    onChange={v => setManualSaleTotal(v)}
+                  />
+                </div>
+              </div>
+            </Col>
+
+            {/* Right Side: Daily Buying Summary */}
+            <Col xs={24} lg={12}>
+              <Divider type="vertical" style={{ display: 'none' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+                <div>
+                  <Text type="secondary">Calculated Buying Total</Text>
+                  <Title level={4} style={{ margin: 0 }}>
+                    Rs. {calculatedPurchaseTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </Title>
+                  {purchaseVariance !== 0 && (
+                    <Text style={{ fontSize: 12, fontWeight: 600, color: '#0ea5e9' }}>
+                      Add / Less Variance: Rs. {purchaseVariance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </Text>
+                  )}
+                </div>
+                <div style={{ minWidth: 220 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text strong>Actual Buying Total (Cash Paid)</Text>
+                    {manualPurchaseTotal !== null && (
+                      <Button type="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => setManualPurchaseTotal(null)}>
+                        Reset
+                      </Button>
+                    )}
+                  </div>
+                  <InputNumber
+                    size="large"
+                    style={{ width: '100%', marginTop: 4, fontWeight: 700 }}
+                    min={0}
+                    value={effectivePurchaseTotal}
+                    onChange={v => setManualPurchaseTotal(v)}
+                  />
+                </div>
+              </div>
+            </Col>
+          </Row>
+        </div>
+      </Form>
+    </Card>
   );
 };
