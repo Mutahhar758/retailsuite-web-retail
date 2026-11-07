@@ -89,6 +89,8 @@ import { BomList } from './pages/setup/BomList';
 import { BomForm } from './pages/setup/BomForm';
 import { ManufacturingList } from './pages/daily-entries/ManufacturingList';
 import { ManufacturingForm } from './pages/daily-entries/ManufacturingForm';
+import { DailyStockClosingList } from './pages/daily-entries/DailyStockClosingList';
+import { DailyStockClosingForm } from './pages/daily-entries/DailyStockClosingForm';
 import { ManufacturingReport } from './pages/reports/ManufacturingReport';
 import { useAppStore } from './stores/useAppStore';
 import { useAuthStore } from './stores/useAuthStore';
@@ -202,6 +204,9 @@ function App() {
             <Route path="daily-entries/manufacturing" element={<ManufacturingList />} />
             <Route path="daily-entries/manufacturing/new" element={<ManufacturingForm />} />
             <Route path="daily-entries/manufacturing/:voucherNo" element={<ManufacturingForm />} />
+            <Route path="daily-entries/daily-stock-closing" element={<DailyStockClosingList />} />
+            <Route path="daily-entries/daily-stock-closing/new" element={<DailyStockClosingForm />} />
+            <Route path="daily-entries/daily-stock-closing/:closingDate" element={<DailyStockClosingForm />} />
             
             {/* Reports */}
             <Route path="reports/account-statement" element={<AccountStatement />} />
