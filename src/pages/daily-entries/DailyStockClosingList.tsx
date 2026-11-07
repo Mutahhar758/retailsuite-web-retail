@@ -8,7 +8,8 @@ import {
   SearchOutlined,
   EditOutlined,
   DeleteOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  ReconciliationOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
@@ -17,7 +18,7 @@ import {
   type DailyStockClosingListItem
 } from '../../services/dailyStockClosingService';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
 export const DailyStockClosingList: React.FC = () => {
@@ -84,14 +85,12 @@ export const DailyStockClosingList: React.FC = () => {
       title: 'Date',
       dataIndex: 'date',
       key: 'date',
-      width: 140,
       render: (date: string) => <strong>{dayjs(date).format('DD-MMM-YYYY')}</strong>,
     },
     {
       title: 'Purchase Voucher',
       dataIndex: 'purchaseVoucherNo',
       key: 'purchaseVoucherNo',
-      width: 150,
       render: (vno: string | null) =>
         vno ? (
           <Tag
@@ -109,7 +108,6 @@ export const DailyStockClosingList: React.FC = () => {
       title: 'Total Buying',
       dataIndex: 'purchaseAmount',
       key: 'purchaseAmount',
-      width: 150,
       align: 'right' as const,
       render: (amt: number) =>
         (amt || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
@@ -118,7 +116,6 @@ export const DailyStockClosingList: React.FC = () => {
       title: 'Sale Voucher',
       dataIndex: 'saleVoucherNo',
       key: 'saleVoucherNo',
-      width: 150,
       render: (vno: string | null) =>
         vno ? (
           <Tag
@@ -136,7 +133,6 @@ export const DailyStockClosingList: React.FC = () => {
       title: 'Total Sales',
       dataIndex: 'saleAmount',
       key: 'saleAmount',
-      width: 150,
       align: 'right' as const,
       render: (amt: number) =>
         (amt || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
@@ -145,17 +141,19 @@ export const DailyStockClosingList: React.FC = () => {
       title: 'Remarks',
       dataIndex: 'remarks',
       key: 'remarks',
-      ellipsis: true,
+      render: (remarks: string | null) => remarks || <Text type="secondary">—</Text>,
     },
     {
       title: 'Actions',
       key: 'actions',
-      width: 160,
+      width: 180,
       render: (_: any, record: DailyStockClosingListItem) => (
-        <Space>
+        <Space size="small">
           <Button
-            type="link"
+            type="primary"
+            size="small"
             icon={<EditOutlined />}
+            style={{ backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' }}
             onClick={() => navigate(`/daily-entries/daily-stock-closing/${record.closingKey}`)}
           >
             Edit
@@ -167,7 +165,7 @@ export const DailyStockClosingList: React.FC = () => {
             okText="Delete"
             cancelText="Cancel"
           >
-            <Button type="link" danger icon={<DeleteOutlined />}>
+            <Button danger size="small" icon={<DeleteOutlined />}>
               Delete
             </Button>
           </Popconfirm>
@@ -177,47 +175,64 @@ export const DailyStockClosingList: React.FC = () => {
   ];
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>
-          Daily Stock &amp; Cash Closing
-        </Title>
+    <Card className="shadow-sm border-gray-100 rounded-xl">
+      <div className="flex justify-between items-center mb-6">
+        <Space align="center">
+          <ReconciliationOutlined style={{ fontSize: 24, color: '#0ea5e9' }} />
+          <div>
+            <Title level={4} style={{ margin: 0 }}>
+              Daily Stock &amp; Cash Closing
+            </Title>
+            <Text type="secondary">Manage day-end physical stock counts and summary closings</Text>
+          </div>
+        </Space>
         <Button
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => navigate('/daily-entries/daily-stock-closing/new')}
+          style={{ backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' }}
         >
           New Daily Closing (Alt+N)
         </Button>
       </div>
 
-      <Card style={{ marginBottom: 16 }} styles={{ body: { padding: '16px 24px' } }}>
-        <Form form={form} layout="inline" onFinish={handleSearch}>
-          <Form.Item name="dateRange" label="Date Range">
-            <RangePicker format="YYYY-MM-DD" />
-          </Form.Item>
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" icon={<SearchOutlined />}>
-                Search
-              </Button>
-              <Button icon={<ReloadOutlined />} onClick={handleReset}>
-                Reset
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Card>
+      <Form
+        form={form}
+        layout="inline"
+        className="mb-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
+        onFinish={handleSearch}
+      >
+        <Form.Item name="dateRange" label="Date Range">
+          <RangePicker format="DD-MMM-YYYY" />
+        </Form.Item>
+        <Form.Item>
+          <Space>
+            <Button
+              type="primary"
+              htmlType="submit"
+              icon={<SearchOutlined />}
+              style={{ backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' }}
+            >
+              Search
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={handleReset}>
+              Reset
+            </Button>
+          </Space>
+        </Form.Item>
+      </Form>
 
-      <Card styles={{ body: { padding: 0 } }}>
-        <Table
-          rowKey="closingKey"
-          loading={loading}
-          columns={columns}
-          dataSource={data}
-          pagination={{ pageSize: 20, showSizeChanger: true }}
-        />
-      </Card>
-    </div>
+      <Table
+        rowKey="closingKey"
+        loading={loading}
+        columns={columns}
+        dataSource={data}
+        pagination={{ pageSize: 20, showSizeChanger: true }}
+        onRow={(record) => ({
+          onDoubleClick: () => navigate(`/daily-entries/daily-stock-closing/${record.closingKey}`),
+        })}
+        className="border border-gray-100 rounded-lg overflow-hidden"
+      />
+    </Card>
   );
 };

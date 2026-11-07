@@ -409,7 +409,7 @@ export const DailyStockClosingForm: React.FC = () => {
       <Card style={{ marginBottom: 16 }}>
         <Form form={form} layout="vertical">
           <Row gutter={16}>
-            <Col xs={24} sm={12} md={4}>
+            <Col xs={24} sm={12} md={6}>
               <Form.Item label="Closing Date" name="date" rules={[{ required: true }]}>
                 <DatePicker
                   style={{ width: '100%' }}
@@ -421,7 +421,7 @@ export const DailyStockClosingForm: React.FC = () => {
                 />
               </Form.Item>
             </Col>
-            <Col xs={24} sm={12} md={5}>
+            <Col xs={24} sm={12} md={6}>
               <Form.Item
                 label="Default Walk-In Customer"
                 name="customerAccountId"
@@ -435,7 +435,7 @@ export const DailyStockClosingForm: React.FC = () => {
                 />
               </Form.Item>
             </Col>
-            <Col xs={24} sm={12} md={5}>
+            <Col xs={24} sm={12} md={6}>
               <Form.Item
                 label="Default Cash Supplier"
                 name="vendorAccountId"
@@ -449,7 +449,7 @@ export const DailyStockClosingForm: React.FC = () => {
                 />
               </Form.Item>
             </Col>
-            <Col xs={24} sm={12} md={5}>
+            <Col xs={24} sm={12} md={6}>
               <Form.Item label="Cash / Bank Account" name="cashAccountId">
                 <Select
                   showSearch
@@ -457,16 +457,6 @@ export const DailyStockClosingForm: React.FC = () => {
                   optionFilterProp="label"
                   placeholder="Default Cash Account"
                   options={cashBanks.map(b => ({ value: b.account, label: `${b.title} (${b.account})` }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12} md={5}>
-              <Form.Item label="Amount Reconciliation Mode" name="reconciliationMode">
-                <Select
-                  options={[
-                    { value: 'DiscountAddLess', label: 'Adjust Discount / Add-Less (Keep Rates)' },
-                    { value: 'ProRate', label: 'Pro-Rate Item Unit Rates' },
-                  ]}
                 />
               </Form.Item>
             </Col>
