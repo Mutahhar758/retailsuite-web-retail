@@ -143,7 +143,10 @@ export const NormalSaleReturnForm: React.FC = () => {
         return;
       }
     }
-    setSaleLines(saleLines.filter(l => l.key !== key));
+    setSaleLines(prev => {
+      const remaining = prev.filter(l => l.key !== key);
+      return remaining.map((line, idx) => ({ ...line, seq: idx + 1 }));
+    });
   };
 
   const updateLine = (key: number, field: string, value: any) => {
@@ -183,11 +186,12 @@ export const NormalSaleReturnForm: React.FC = () => {
   const handleBarcodeScanned = (
     scannedItem: Item,
     scanQty: number = 1,
+    customRate?: number,
     customAmount?: number,
-    customRate?: number
+    _isVariableWeight?: boolean
   ) => {
     setSaleLines(prev => {
-      const existingIndex = prev.findIndex(l => l.itemId === scannedItem.id);
+      const existingIndex = prev.findIndex(l => String(l.itemId) === String(scannedItem.id));
       const effectiveRate = customRate !== undefined
         ? customRate
         : (scannedItem.priRate !== undefined && scannedItem.priRate !== null ? scannedItem.priRate : 0);
@@ -200,7 +204,7 @@ export const NormalSaleReturnForm: React.FC = () => {
         const rate = effectiveRate;
         const secRate = scannedItem.secRate || (rate * (pSize > 0 ? pSize : 1));
         const amount = customAmount !== undefined
-          ? (existingLine.amount || 0) + customAmount
+          ? round((existingLine.amount || 0) + customAmount, 2)
           : round(((newQty * rate) - (existingLine.discount || 0)) + ((existingLine.secQty || 0) * (existingLine.secRate || secRate)), 2);
 
         updatedLines[existingIndex] = {
@@ -303,10 +307,10 @@ export const NormalSaleReturnForm: React.FC = () => {
       const request = {
         ...values,
         date: values.date.format('YYYY-MM-DD'),
-        lines: validLines.map(l => {
+        lines: validLines.map((l, idx) => {
           const item = items.find(i => i.id === l.itemId);
           return {
-            seq: l.seq,
+            seq: idx + 1,
             itemId: l.itemId,
             unit: item?.itemType === 'Service' ? null : (l.unit || null),
             qty: l.qty,

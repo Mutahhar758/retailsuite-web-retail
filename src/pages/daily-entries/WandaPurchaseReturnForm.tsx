@@ -181,7 +181,10 @@ export const WandaPurchaseReturnForm: React.FC = () => {
         return;
       }
     }
-    setPurchaseLines(purchaseLines.filter(row => row.key !== record.key));
+    setPurchaseLines(prev => {
+      const remaining = prev.filter(row => row.key !== record.key);
+      return remaining.map((line, idx) => ({ ...line, seq: idx + 1 }));
+    });
   };
 
   const updateRow = (key: any, field: string, value: any) => {
@@ -285,8 +288,8 @@ export const WandaPurchaseReturnForm: React.FC = () => {
       const request = {
         ...values,
         date: values.date.format('YYYY-MM-DD'),
-        lines: validLines.map(l => ({
-          seq: l.seq,
+        lines: validLines.map((l, idx) => ({
+          seq: idx + 1,
           itemId: l.itemId,
           unit: l.unit || null,
           qty: l.qty,
@@ -352,6 +355,7 @@ export const WandaPurchaseReturnForm: React.FC = () => {
       title: 'Seq',
       dataIndex: 'seq',
       width: 60,
+      render: (_val: any, _record: any, index: number) => index + 1,
     },
     {
       title: 'Item Description',

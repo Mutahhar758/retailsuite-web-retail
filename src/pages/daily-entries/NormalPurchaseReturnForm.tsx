@@ -199,7 +199,10 @@ export const NormalPurchaseReturnForm: React.FC = () => {
         return;
       }
     }
-    setPurchaseLines(purchaseLines.filter(row => row.key !== record.key));
+    setPurchaseLines(prev => {
+      const remaining = prev.filter(row => row.key !== record.key);
+      return remaining.map((line, idx) => ({ ...line, seq: idx + 1 }));
+    });
   };
 
   const updateRow = (key: any, field: string, value: any) => {
@@ -238,11 +241,12 @@ export const NormalPurchaseReturnForm: React.FC = () => {
   const handleBarcodeScanned = (
     scannedItem: Item,
     scanQty: number = 1,
+    customRate?: number,
     customAmount?: number,
-    customRate?: number
+    _isVariableWeight?: boolean
   ) => {
     setPurchaseLines(prev => {
-      const existingIndex = prev.findIndex(l => l.itemId === scannedItem.id);
+      const existingIndex = prev.findIndex(l => String(l.itemId) === String(scannedItem.id));
       const effectiveRate = customRate !== undefined
         ? customRate
         : (scannedItem.costRate !== undefined && scannedItem.costRate !== null ? scannedItem.costRate : 0);
@@ -374,8 +378,8 @@ export const NormalPurchaseReturnForm: React.FC = () => {
       const request = {
         ...values,
         date: values.date.format('YYYY-MM-DD'),
-        lines: validLines.map(l => ({
-          seq: l.seq,
+        lines: validLines.map((l, idx) => ({
+          seq: idx + 1,
           itemId: l.itemId,
           unit: l.unit || null,
           qty: l.qty,
@@ -443,6 +447,7 @@ export const NormalPurchaseReturnForm: React.FC = () => {
       title: 'Seq',
       dataIndex: 'seq',
       width: 60,
+      render: (_val: any, _record: any, index: number) => index + 1,
     },
     {
       title: 'Item Description',

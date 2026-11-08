@@ -307,7 +307,10 @@ export const WandaPurchaseForm: React.FC = () => {
         return;
       }
     }
-    setPurchaseLines(purchaseLines.filter(row => row.key !== record.key));
+    setPurchaseLines(prev => {
+      const remaining = prev.filter(row => row.key !== record.key);
+      return remaining.map((line, idx) => ({ ...line, seq: idx + 1 }));
+    });
   };
 
   const updateRow = (key: any, field: string, value: any) => {
@@ -423,8 +426,8 @@ export const WandaPurchaseForm: React.FC = () => {
         date: values.date.format('YYYY-MM-DD'),
         cashPaid: values.cashPaid || 0,
         cashBack: values.cashBack || 0,
-        lines: validLines.map(l => ({
-          seq: l.seq,
+        lines: validLines.map((l, idx) => ({
+          seq: idx + 1,
           itemId: l.itemId,
           unit: l.unit || null,
           qty: l.qty,
@@ -491,6 +494,7 @@ export const WandaPurchaseForm: React.FC = () => {
       title: 'Seq',
       dataIndex: 'seq',
       width: 60,
+      render: (_val: any, _record: any, index: number) => index + 1,
     },
     {
       title: 'Item Description',

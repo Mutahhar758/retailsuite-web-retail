@@ -782,9 +782,10 @@ export const NormalSaleForm: React.FC = () => {
           cashBack: first.cashBack
         });
 
-        setSaleLines(details.map(d => ({
+        setSaleLines(details.map((d, idx) => ({
           ...d,
-          key: d.seq,
+          key: d.seq || (idx + 1),
+          seq: idx + 1,
           rate: d.rate,
           savedRate: d.rate,
           discount: d.discount,
@@ -938,7 +939,10 @@ export const NormalSaleForm: React.FC = () => {
         return;
       }
     }
-    setSaleLines(prev => prev.filter(l => l.key !== key));
+    setSaleLines(prev => {
+      const remaining = prev.filter(l => l.key !== key);
+      return remaining.map((line, idx) => ({ ...line, seq: idx + 1 }));
+    });
   };
 
   const updateLine = (key: number, field: string, value: any) => {
@@ -1097,13 +1101,19 @@ export const NormalSaleForm: React.FC = () => {
     const autoIncrement = getSetting(BARCODE_FAST_SCAN_INCREMENT_KEY, 'true') !== 'false';
     const currentCust = form.getFieldValue('account');
     const { rate: resolvedRate, secRate: resolvedSecRate } = resolveItemRates(scannedItem.id, currentCust);
-    const effectiveRate = customRate !== undefined ? customRate : resolvedRate;
+    const effectiveRate = (_isVariableWeight && customRate !== undefined)
+      ? customRate
+      : (customRate !== undefined ? customRate : resolvedRate);
 
     setSaleLines(prev => {
       // If same record with SAME price exists, increment quantity; otherwise add new row
-      const existingIndex = prev.findIndex(
+      let existingIndex = prev.findIndex(
         l => String(l.itemId) === String(scannedItem.id) && Math.abs((l.rate || 0) - effectiveRate) < 0.001
       );
+      if (existingIndex < 0 && !_isVariableWeight) {
+        // Fallback: if user manually added this item (even if custom/edited rate exists), still increment that row
+        existingIndex = prev.findIndex(l => String(l.itemId) === String(scannedItem.id));
+      }
 
       if (autoIncrement && existingIndex >= 0) {
         const updatedLines = [...prev];
@@ -1114,11 +1124,19 @@ export const NormalSaleForm: React.FC = () => {
         const carriage = existing.carriage || 0;
         const secQty = existing.secQty || 0;
         const secRate = existing.secRate || 0;
-        const amount = round(((newQty * rate) + (secQty * secRate)) - disc + carriage, 2);
+        const amount = customAmount !== undefined
+          ? round((existing.amount || 0) + customAmount, 2)
+          : round(((newQty * rate) + (secQty * secRate)) - disc + carriage, 2);
+
+        const factor = existing.selectedUnitFactor || 1;
+        const newDisplayQty = Number((newQty * factor).toFixed(4));
 
         updatedLines[existingIndex] = {
           ...existing,
           qty: newQty,
+          displayQty: newDisplayQty,
+          selectedUnitId: existing.selectedUnitId || scannedItem.primaryUnit,
+          selectedUnitFactor: factor,
           amount
         };
         return updatedLines;
@@ -1128,13 +1146,17 @@ export const NormalSaleForm: React.FC = () => {
       const rate = effectiveRate;
       const secRate = resolvedSecRate;
       const amount = customAmount !== undefined ? customAmount : round(scanQty * rate, 2);
+      const resolvedUnit = resolveDisplayQtyAndUnit(scanQty, scannedItem, units as any);
 
       if (emptyRowIndex >= 0) {
         const updatedLines = [...prev];
         updatedLines[emptyRowIndex] = {
           ...updatedLines[emptyRowIndex],
           itemId: scannedItem.id,
-          unit: scannedItem.defaultUnit || scannedItem.primaryUnit,
+          unit: resolvedUnit.unitLabel || scannedItem.defaultUnit || scannedItem.primaryUnit,
+          selectedUnitId: resolvedUnit.selectedUnitId,
+          selectedUnitFactor: resolvedUnit.factor,
+          displayQty: resolvedUnit.displayQty,
           rate,
           secUnit: scannedItem.secondaryUnit,
           secRate,
@@ -1168,7 +1190,10 @@ export const NormalSaleForm: React.FC = () => {
             key: Date.now(),
             seq: nextSeq,
             itemId: scannedItem.id,
-            unit: scannedItem.defaultUnit || scannedItem.primaryUnit,
+            unit: resolvedUnit.unitLabel || scannedItem.defaultUnit || scannedItem.primaryUnit,
+            selectedUnitId: resolvedUnit.selectedUnitId,
+            selectedUnitFactor: resolvedUnit.factor,
+            displayQty: resolvedUnit.displayQty,
             rate,
             secUnit: scannedItem.secondaryUnit,
             secRate,
@@ -1262,10 +1287,10 @@ export const NormalSaleForm: React.FC = () => {
           checkNum: p.checkNum,
           checkDate: p.checkDate
         })),
-        lines: validLines.map(l => {
+        lines: validLines.map((l, idx) => {
           const item = items.find(i => i.id === l.itemId);
           return {
-            seq: l.seq,
+            seq: idx + 1,
             itemId: l.itemId,
             unit: item?.itemType === 'Service' ? null : (l.unit || null),
             qty: l.qty,
@@ -1343,6 +1368,7 @@ export const NormalSaleForm: React.FC = () => {
       dataIndex: 'seq',
       key: 'seq',
       width: 50,
+      render: (_val: any, _record: any, index: number) => index + 1,
     },
     {
       title: 'Item Description',
@@ -1468,11 +1494,18 @@ export const NormalSaleForm: React.FC = () => {
       render: (val: number, record: any, rowIdx: number) => {
         const item = items.find(i => String(i.id) === String(record.itemId));
         const selectableUnits = getSelectablePrimaryUnits(item, units as any);
+        const factor = record.selectedUnitFactor || 1;
+        const isDisplayQtySynced = record.displayQty !== undefined &&
+          record.displayQty !== null &&
+          Math.abs(toBasePrimaryQty(record.displayQty, factor) - (val || 0)) < 0.0001;
+
         const resolved = record.selectedUnitId
           ? {
-              displayQty: record.displayQty ?? val,
+              displayQty: isDisplayQtySynced
+                ? record.displayQty
+                : (factor > 1 ? Number(((val || 0) * factor).toFixed(4)) : (val || 0)),
               selectedUnitId: record.selectedUnitId,
-              factor: record.selectedUnitFactor || 1
+              factor
             }
           : resolveDisplayQtyAndUnit(val || 0, item, units as any);
 

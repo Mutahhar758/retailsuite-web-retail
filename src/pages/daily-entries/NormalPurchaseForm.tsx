@@ -423,7 +423,10 @@ export const NormalPurchaseForm: React.FC = () => {
         return;
       }
     }
-    setPurchaseLines(prev => prev.filter(row => row.key !== record.key));
+    setPurchaseLines(prev => {
+      const remaining = prev.filter(row => row.key !== record.key);
+      return remaining.map((line, idx) => ({ ...line, seq: idx + 1 }));
+    });
   };
 
   const updateRow = (key: any, field: string, value: any) => {
@@ -491,11 +494,12 @@ export const NormalPurchaseForm: React.FC = () => {
   const handleBarcodeScanned = (
     scannedItem: Item,
     scanQty: number = 1,
+    customRate?: number,
     customAmount?: number,
-    customRate?: number
+    _isVariableWeight?: boolean
   ) => {
     setPurchaseLines(prev => {
-      const existingIndex = prev.findIndex(l => l.itemId === scannedItem.id);
+      const existingIndex = prev.findIndex(l => String(l.itemId) === String(scannedItem.id));
       const effectiveRate = customRate !== undefined
         ? customRate
         : (scannedItem.lastPurchaseRate ?? (scannedItem.costRate !== undefined && scannedItem.costRate !== null ? scannedItem.costRate : 0));
@@ -508,12 +512,18 @@ export const NormalPurchaseForm: React.FC = () => {
         const rate = effectiveRate;
         const secRate = scannedItem.secRate || (rate * (pSize > 0 ? pSize : 1));
         const amount = customAmount !== undefined
-          ? (existingLine.amount || 0) + customAmount
+          ? round((existingLine.amount || 0) + customAmount, 2)
           : round((newQty * rate) + ((existingLine.secQty || 0) * (existingLine.secRate || secRate)) + (existingLine.addLess || 0), 2);
+
+        const factor = existingLine.selectedUnitFactor || 1;
+        const newDisplayQty = Number((newQty * factor).toFixed(4));
 
         updatedLines[existingIndex] = {
           ...existingLine,
           qty: newQty,
+          displayQty: newDisplayQty,
+          selectedUnitId: existingLine.selectedUnitId || scannedItem.primaryUnit,
+          selectedUnitFactor: factor,
           rate,
           secRate: existingLine.secRate || secRate,
           amount
@@ -526,13 +536,17 @@ export const NormalPurchaseForm: React.FC = () => {
       const rate = effectiveRate;
       const secRate = scannedItem.secRate || (rate * (pSize > 0 ? pSize : 1));
       const amount = customAmount !== undefined ? customAmount : round(scanQty * rate, 2);
+      const resolvedUnit = resolveDisplayQtyAndUnit(scanQty, scannedItem);
 
       if (emptyRowIndex >= 0) {
         const updatedLines = [...prev];
         updatedLines[emptyRowIndex] = {
           ...updatedLines[emptyRowIndex],
           itemId: scannedItem.id,
-          unit: scannedItem.defaultUnit || scannedItem.primaryUnit,
+          unit: resolvedUnit.unitLabel || scannedItem.defaultUnit || scannedItem.primaryUnit,
+          selectedUnitId: resolvedUnit.selectedUnitId,
+          selectedUnitFactor: resolvedUnit.factor,
+          displayQty: resolvedUnit.displayQty,
           rate,
           secUnit: scannedItem.secondaryUnit,
           secRate,
@@ -566,7 +580,10 @@ export const NormalPurchaseForm: React.FC = () => {
             key: Date.now(),
             seq: maxSeq + 1,
             itemId: scannedItem.id,
-            unit: scannedItem.defaultUnit || scannedItem.primaryUnit,
+            unit: resolvedUnit.unitLabel || scannedItem.defaultUnit || scannedItem.primaryUnit,
+            selectedUnitId: resolvedUnit.selectedUnitId,
+            selectedUnitFactor: resolvedUnit.factor,
+            displayQty: resolvedUnit.displayQty,
             rate,
             secUnit: scannedItem.secondaryUnit,
             secRate,
@@ -644,8 +661,8 @@ export const NormalPurchaseForm: React.FC = () => {
           checkNum: p.checkNum,
           checkDate: p.checkDate
         })),
-        lines: validLines.map(l => ({
-          seq: l.seq,
+        lines: validLines.map((l, idx) => ({
+          seq: idx + 1,
           itemId: l.itemId,
           unit: l.unit || null,
           qty: l.qty,
@@ -715,6 +732,7 @@ export const NormalPurchaseForm: React.FC = () => {
       title: 'Seq',
       dataIndex: 'seq',
       width: 60,
+      render: (_val: any, _record: any, index: number) => index + 1,
     },
     {
       title: 'Item Description',
@@ -815,11 +833,18 @@ export const NormalPurchaseForm: React.FC = () => {
       render: (text: number, record: any, rowIdx: number) => {
         const item = items.find(i => String(i.id) === String(record.itemId));
         const selectableUnits = getSelectablePrimaryUnits(item);
+        const factor = record.selectedUnitFactor || 1;
+        const isDisplayQtySynced = record.displayQty !== undefined &&
+          record.displayQty !== null &&
+          Math.abs(toBasePrimaryQty(record.displayQty, factor) - (text || 0)) < 0.0001;
+
         const resolved = record.selectedUnitId
           ? {
-              displayQty: record.displayQty ?? text,
+              displayQty: isDisplayQtySynced
+                ? record.displayQty
+                : (factor > 1 ? Number(((text || 0) * factor).toFixed(4)) : (text || 0)),
               selectedUnitId: record.selectedUnitId,
-              factor: record.selectedUnitFactor || 1
+              factor
             }
           : resolveDisplayQtyAndUnit(text || 0, item);
 

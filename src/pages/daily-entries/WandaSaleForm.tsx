@@ -742,7 +742,10 @@ export const WandaSaleForm: React.FC = () => {
         return;
       }
     }
-    setSaleLines(prev => prev.filter(l => l.key !== key));
+    setSaleLines(prev => {
+      const remaining = prev.filter(l => l.key !== key);
+      return remaining.map((line, idx) => ({ ...line, seq: idx + 1 }));
+    });
   };
 
   const updateLine = (key: number, field: string, value: any) => {
@@ -942,10 +945,10 @@ export const WandaSaleForm: React.FC = () => {
         date: values.date.format('YYYY-MM-DD'),
         cashReceipt: values.cashReceipt || 0,
         cashBack: values.cashBack || 0,
-        lines: validLines.map(l => {
+        lines: validLines.map((l, idx) => {
           const item = items.find(i => i.id === l.itemId);
           return {
-            seq: l.seq,
+            seq: idx + 1,
             itemId: l.itemId,
             unit: item?.itemType === 'Service' ? null : (l.unit || null),
             qty: l.qty,
@@ -1019,6 +1022,7 @@ export const WandaSaleForm: React.FC = () => {
       dataIndex: 'seq',
       key: 'seq',
       width: 50,
+      render: (_val: any, _record: any, index: number) => index + 1,
     },
     {
       title: 'Item Description',

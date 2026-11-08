@@ -125,7 +125,13 @@ export const BarcodeFastScanBar: React.FC<BarcodeFastScanBarProps> = ({
           playScanSuccessTone();
         }
 
-        onScanItem(matchedItem, qty, rate, amount, isVariableWeight);
+        onScanItem(
+          matchedItem,
+          qty,
+          isVariableWeight ? rate : undefined,
+          isVariableWeight ? amount : undefined,
+          isVariableWeight
+        );
 
         setLastScanned({
           item: matchedItem,
