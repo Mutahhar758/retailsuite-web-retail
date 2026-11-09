@@ -216,9 +216,12 @@ export const reportService = {
     return response.data.body as AccountStatementLine[];
   },
 
-  async getAccountStatementPdf(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }): Promise<Blob> {
+  async getAccountStatementPdf(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate'; baseUrl?: string }): Promise<Blob> {
     const response = await api.get('/api/reports/account-statement/pdf', {
-      params,
+      params: {
+        ...params,
+        baseUrl: params.baseUrl || (typeof window !== 'undefined' ? window.location.origin : undefined)
+      },
       responseType: 'blob'
     });
     return response.data as Blob;
@@ -229,9 +232,12 @@ export const reportService = {
     return response.data.body as AccountStatementWithDueLine[];
   },
 
-  async getAccountStatementWithDuePdf(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate' }): Promise<Blob> {
+  async getAccountStatementWithDuePdf(params: { fromDate: string; toDate: string; account: string; dateBasis?: 'VoucherDate' | 'ClearingDate'; baseUrl?: string }): Promise<Blob> {
     const response = await api.get('/api/reports/account-statement-with-due/pdf', {
-      params,
+      params: {
+        ...params,
+        baseUrl: params.baseUrl || (typeof window !== 'undefined' ? window.location.origin : undefined)
+      },
       responseType: 'blob'
     });
     return response.data as Blob;
