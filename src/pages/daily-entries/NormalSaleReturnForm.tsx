@@ -446,7 +446,6 @@ export const NormalSaleReturnForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={2}
           controls={false}
           keyboard={false}
           onChange={(v) => updateLine(record.key, 'qty', v)}

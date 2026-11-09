@@ -509,7 +509,6 @@ export const NormalPurchaseReturnForm: React.FC = () => {
           onChange={(val) => updateRow(record.key, 'qty', val)}
           onKeyDown={(e) => handleCellKeyDown(rowIdx, 'qty', e)}
           min={0}
-          precision={2}
         />
       )
     },

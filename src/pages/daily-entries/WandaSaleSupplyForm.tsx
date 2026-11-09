@@ -785,7 +785,6 @@ export const WandaSaleSupplyForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={2}
           keyboard={false}
           controls={false}
           onChange={(v) => updateLine(record.key, 'qty', v)}
@@ -804,7 +803,6 @@ export const WandaSaleSupplyForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={2}
           keyboard={false}
           controls={false}
           onChange={(v) => updateLine(record.key, 'secQty', v)}
@@ -823,7 +821,6 @@ export const WandaSaleSupplyForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={2}
           keyboard={false}
           controls={false}
           onChange={(v) => updateLine(record.key, 'packQty', v)}
@@ -842,7 +839,6 @@ export const WandaSaleSupplyForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={2}
           keyboard={false}
           controls={false}
           onChange={(v) => updateLine(record.key, 'packing', v)}

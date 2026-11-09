@@ -331,7 +331,6 @@ export const WandaSaleReturnForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={2}
           controls={false}
           keyboard={false}
           onChange={(v) => updateLine(record.key, 'qty', v)}
@@ -350,7 +349,6 @@ export const WandaSaleReturnForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={2}
           controls={false}
           keyboard={false}
           onChange={(v) => updateLine(record.key, 'secQty', v)}
@@ -369,7 +367,6 @@ export const WandaSaleReturnForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={2}
           controls={false}
           keyboard={false}
           onChange={(v) => updateLine(record.key, 'packQty', v)}
@@ -388,7 +385,6 @@ export const WandaSaleReturnForm: React.FC = () => {
           style={{ width: '100%' }}
           value={val}
           min={0}
-          precision={2}
           controls={false}
           keyboard={false}
           onChange={(v) => updateLine(record.key, 'packing', v)}

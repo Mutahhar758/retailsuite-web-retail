@@ -378,7 +378,6 @@ export const NormalSupplyRegister: React.FC = () => {
         <InputNumber
           size="middle"
           min={0}
-          precision={2}
           value={val}
           style={{ width: '100%', fontWeight: 700, fontSize: '15px' }}
           onChange={(newVal) => handleCellChange(`${record.voucherNo}-${record.seq}`, 'qty', newVal)}
@@ -788,7 +787,7 @@ export const NormalSupplyRegister: React.FC = () => {
                 label="Quantity"
                 rules={[{ required: true, message: 'Quantity is required' }]}
               >
-                <InputNumber min={0.01} precision={2} style={{ width: '100%' }} />
+                <InputNumber min={0.001} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
             <Col span={10}>

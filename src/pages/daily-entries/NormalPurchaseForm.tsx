@@ -863,7 +863,6 @@ export const NormalPurchaseForm: React.FC = () => {
             min={0}
             controls={false}
             keyboard={false}
-            precision={resolved.factor > 1 ? 0 : 2}
             addonAfter={
               selectableUnits.length > 1 ? (
                 <Select

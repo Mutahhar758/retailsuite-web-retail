@@ -456,7 +456,6 @@ export const WandaSupplyRegister: React.FC = () => {
         <InputNumber
           size="middle"
           min={0}
-          precision={2}
           value={val}
           style={{ width: '100%', fontWeight: 700, fontSize: '14px' }}
           onChange={(newVal) => handleCellChange(`${record.voucherNo}-${record.seq}`, 'qty', newVal)}
@@ -920,8 +919,7 @@ export const WandaSupplyRegister: React.FC = () => {
                 rules={[{ required: true, message: 'Bags required' }]}
               >
                 <InputNumber
-                  min={0.01}
-                  precision={2}
+                  min={0.001}
                   style={{ width: '100%' }}
                   onChange={(val) => {
                     const pack = addForm.getFieldValue('packQty') || 50;
@@ -952,8 +950,7 @@ export const WandaSupplyRegister: React.FC = () => {
                 rules={[{ required: true, message: 'Weight required' }]}
               >
                 <InputNumber
-                  min={0.01}
-                  precision={2}
+                  min={0.001}
                   style={{ width: '100%' }}
                   onChange={(val) => {
                     const pack = addForm.getFieldValue('packQty') || 50;

@@ -1064,7 +1064,6 @@ export const WandaSaleForm: React.FC = () => {
           min={0}
           controls={false}
           keyboard={false}
-          precision={2}
           onChange={(v) => updateLine(record.key, 'qty', v)}
           onKeyDown={(e) => handleCellKeyDown(rowIdx, 'qty', e)}
         />

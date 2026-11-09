@@ -1517,7 +1517,6 @@ export const NormalSaleForm: React.FC = () => {
             min={0}
             controls={false}
             keyboard={false}
-            precision={resolved.factor > 1 ? 0 : 2}
             onFocus={(e) => {
               const input = e.target as HTMLInputElement;
               input?.select?.();

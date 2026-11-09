@@ -743,7 +743,6 @@ export const NormalSaleSupplyForm: React.FC = () => {
             style={{ width: '100%' }}
             value={resolved.displayQty}
             min={0}
-            precision={resolved.factor > 1 ? 0 : 2}
             keyboard={false}
             controls={false}
             onChange={(v) => updateLine(record.key, 'qty', v)}
