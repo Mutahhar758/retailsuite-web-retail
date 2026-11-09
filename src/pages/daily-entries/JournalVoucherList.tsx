@@ -134,26 +134,30 @@ export const JournalVoucherList: React.FC = () => {
       title: 'Date',
       dataIndex: 'date',
       key: 'date',
-      render: (text: string) => dayjs(text).format('DD-MMM-YYYY'),
+      width: 130,
+      render: (text: string) => <span style={{ whiteSpace: 'nowrap' }}>{dayjs(text).format('DD-MMM-YYYY')}</span>,
     },
     {
       title: 'Voucher #',
       dataIndex: 'voucherNo',
       key: 'voucherNo',
-      render: (text: string) => <Tag color="green">JV-{text}</Tag>,
+      width: 120,
+      render: (text: string) => <Tag color="green" style={{ whiteSpace: 'nowrap' }}>JV-{text}</Tag>,
     },
     {
       title: 'Narration',
       dataIndex: 'narration',
       key: 'narration',
+      ellipsis: true,
     },
     {
       title: 'Amount',
       dataIndex: 'amount',
       key: 'amount',
       align: 'right' as const,
+      width: 130,
       render: (val: number) => (
-        <Text strong style={{ color: '#16a34a' }}>
+        <Text strong style={{ color: '#16a34a', whiteSpace: 'nowrap' }}>
           {val.toLocaleString(undefined, { minimumFractionDigits: 2 })}
         </Text>
       ),
@@ -162,8 +166,9 @@ export const JournalVoucherList: React.FC = () => {
       title: 'Created By',
       dataIndex: 'createdBy',
       key: 'createdBy',
+      width: 180,
       render: (text: string, record: any) => (
-        <Space direction="vertical" size={0}>
+        <Space direction="vertical" size={0} style={{ whiteSpace: 'nowrap' }}>
           <Text strong style={{ fontSize: '13px' }}>{text}</Text>
           <Text type="secondary" style={{ fontSize: '11px', fontWeight: 500 }}>
             {dayjs(record.createdOn).format('DD-MMM-YYYY hh:mm A')}
@@ -174,6 +179,8 @@ export const JournalVoucherList: React.FC = () => {
     {
       title: 'Actions',
       key: 'action',
+      width: 110,
+      align: 'center' as const,
       render: (_: any, record: JournalVoucherDto) => (
         <Button 
           type="primary" 
@@ -233,6 +240,7 @@ export const JournalVoucherList: React.FC = () => {
         dataSource={data} 
         loading={loading}
         rowKey="voucherNo"
+        scroll={{ x: 'max-content' }}
         pagination={{
           current: query.page,
           pageSize: query.size,

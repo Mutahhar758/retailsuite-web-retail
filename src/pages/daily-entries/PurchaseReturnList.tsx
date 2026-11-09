@@ -152,26 +152,30 @@ export const PurchaseReturnList: React.FC = () => {
       title: 'Date',
       dataIndex: 'date',
       key: 'date',
-      render: (text: string) => dayjs(text).format('DD-MMM-YYYY'),
+      width: 130,
+      render: (text: string) => <span style={{ whiteSpace: 'nowrap' }}>{dayjs(text).format('DD-MMM-YYYY')}</span>,
     },
     {
       title: 'Voucher #',
       dataIndex: 'voucherNo',
       key: 'voucherNo',
-      render: (text: string) => <Tag color="error">PR-{text}</Tag>,
+      width: 120,
+      render: (text: string) => <Tag color="error" style={{ whiteSpace: 'nowrap' }}>PR-{text}</Tag>,
     },
     {
       title: 'Vendor',
       dataIndex: 'account',
       key: 'account',
+      width: 200,
       render: (text: string) => <Text strong>{text}</Text>,
     },
     {
       title: 'Created By',
       dataIndex: 'createdBy',
       key: 'createdBy',
+      width: 180,
       render: (text: string, record: any) => (
-        <Space direction="vertical" size={0}>
+        <Space direction="vertical" size={0} style={{ whiteSpace: 'nowrap' }}>
           <Text strong style={{ fontSize: '13px' }}>{text}</Text>
           <Text type="secondary" style={{ fontSize: '11px', fontWeight: 500 }}>
             {dayjs(record.createdOn).format('DD-MMM-YYYY hh:mm A')}
@@ -182,6 +186,8 @@ export const PurchaseReturnList: React.FC = () => {
     {
       title: 'Actions',
       key: 'action',
+      width: 110,
+      align: 'center' as const,
       render: (_: any, record: PurchaseReturn) => (
         <Button 
           type="primary" 
@@ -254,6 +260,7 @@ export const PurchaseReturnList: React.FC = () => {
         dataSource={data} 
         loading={loading}
         rowKey="voucherNo"
+        scroll={{ x: 'max-content' }}
         pagination={{
           current: query.page,
           pageSize: query.size,

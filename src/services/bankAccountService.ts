@@ -14,6 +14,7 @@ export interface BankAccountResponse {
   notes?: string;
   active: boolean;
   openingBalance?: number;
+  currentBalance?: number;
   createdBy?: string;
   createdOn?: string;
   lastModifiedBy?: string;

@@ -5,7 +5,8 @@ import {
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, ReloadOutlined, 
-  UserOutlined, PhoneOutlined, MailOutlined, FileExcelOutlined
+  UserOutlined, PhoneOutlined, MailOutlined, FileExcelOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { customerService, type CustomerResponse } from '../../services/customerService';
@@ -182,18 +183,28 @@ export const CustomerList: React.FC = () => {
     {
       title: 'Actions',
       key: 'action',
-      width: '100px',
+      width: '110px',
       fixed: 'right' as const,
       render: (_: any, record: CustomerResponse) => (
-        <Tooltip title="Edit Customer Details">
-          <Button 
-            type="primary" 
-            ghost
-            icon={<EditOutlined />} 
-            size="small"
-            onClick={() => handleEdit(record)}
-          />
-        </Tooltip>
+        <Space size={4}>
+          <Tooltip title="Edit Customer Details">
+            <Button 
+              type="primary" 
+              ghost
+              icon={<EditOutlined />} 
+              size="small"
+              onClick={() => handleEdit(record)}
+            />
+          </Tooltip>
+          <Tooltip title="View Detailed Account Statement / Ledger">
+            <Button
+              type="text"
+              icon={<FileTextOutlined style={{ color: '#52c41a' }} />}
+              size="small"
+              onClick={() => navigate(`/reports/account-statement?account=${encodeURIComponent(record.account)}`)}
+            />
+          </Tooltip>
+        </Space>
       ),
     },
   ];

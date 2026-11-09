@@ -71,6 +71,10 @@ export const ReceiptVoucherForm: React.FC = () => {
   });
 
   const handleNew = useCallback(() => {
+    if (isEdit) {
+      navigate('/daily-entries/receipt-voucher/new');
+      return;
+    }
     form.resetFields();
     form.setFieldsValue({ date: dayjs() });
     setVoucherLines([{
@@ -82,8 +86,9 @@ export const ReceiptVoucherForm: React.FC = () => {
       checkDate: null,
       remarks: ''
     }]);
+    setBalances({});
     setTimeout(() => datePickerRef.current?.focus(), 50);
-  }, [form]);
+  }, [form, isEdit, navigate]);
 
   useEffect(() => {
     const fetchLookups = async () => {
@@ -214,7 +219,7 @@ export const ReceiptVoucherForm: React.FC = () => {
       } else {
         const newVNo = await receiptService.create(request);
         message.success('Voucher created successfully: ' + newVNo);
-        navigate(`/daily-entries/receipt-voucher/${newVNo}`);
+        handleNew();
       }
     } catch (error: any) {
       message.error(error.response?.data?.message || 'Failed to save voucher');

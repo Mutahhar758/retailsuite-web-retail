@@ -51,6 +51,16 @@ export const WandaStockAdjustmentForm: React.FC = () => {
     }
   }, [isEdit, voucherNo]);
 
+  const handleNew = () => {
+    if (isEdit) {
+      navigate('/daily-entries/stock-adjustment/new');
+      return;
+    }
+    form.resetFields();
+    form.setFieldsValue({ date: dayjs() });
+    setAdjustmentLines([{ key: Date.now(), seq: 1, qtyIn: 0, qtyOut: 0, rate: 0, amount: 0, secQtyIn: 0, secQtyOut: 0, secRate: 0, packQty: 0, packing: 0 }]);
+  };
+
   const fetchDetail = async () => {
     setLoading(true);
     try {
@@ -241,8 +251,8 @@ export const WandaStockAdjustmentForm: React.FC = () => {
         message.success('Stock adjustment updated successfully');
       } else {
         const newVno = await stockAdjustmentService.create(request);
-        message.success('Stock adjustment created successfully');
-        navigate(`/daily-entries/stock-adjustment/${newVno}`);
+        message.success('Stock adjustment created successfully: ' + newVno);
+        handleNew();
       }
     } catch {
       message.error('Failed to save stock adjustment');

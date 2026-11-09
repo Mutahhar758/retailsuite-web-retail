@@ -1,5 +1,13 @@
 import api from './api';
 
+export interface ReceiptAccountSummaryDto {
+  accountId: string;
+  accountTitle: string;
+  amount: number;
+  checkNum?: string;
+  remarks?: string;
+}
+
 export interface ReceiptDto {
   date: string;
   clearingDate?: string;
@@ -11,6 +19,9 @@ export interface ReceiptDto {
   createdOn: string;
   lastModifiedBy?: string;
   lastModifiedOn?: string;
+  cashBankAccountId?: string;
+  cashBankAccountTitle?: string;
+  accounts?: ReceiptAccountSummaryDto[];
 }
 
 export interface ReceiptLineDto {

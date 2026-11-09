@@ -1,5 +1,13 @@
 import api from './api';
 
+export interface PaymentAccountSummaryDto {
+  accountId: string;
+  accountTitle: string;
+  amount: number;
+  checkNum?: string;
+  remarks?: string;
+}
+
 export interface PaymentDto {
   date: string;
   clearingDate?: string;
@@ -11,6 +19,9 @@ export interface PaymentDto {
   createdOn: string;
   lastModifiedBy?: string;
   lastModifiedOn?: string;
+  cashBankAccountId?: string;
+  cashBankAccountTitle?: string;
+  accounts?: PaymentAccountSummaryDto[];
 }
 
 export interface PaymentLineDto {

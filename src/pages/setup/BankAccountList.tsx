@@ -315,16 +315,25 @@ export const BankAccountList: React.FC = () => {
       },
     },
     {
-      title: 'Opening Balance',
-      dataIndex: 'openingBalance',
-      key: 'openingBalance',
+      title: 'Current Balance',
+      dataIndex: 'currentBalance',
+      key: 'currentBalance',
       align: 'right' as const,
-      sorter: (a: BankAccountResponse, b: BankAccountResponse) => (a.openingBalance || 0) - (b.openingBalance || 0),
-      render: (val?: number) => (
-        <Text strong style={{ fontFamily: 'monospace', color: val ? '#0958d9' : '#8c8c8c' }}>
-          {val ? `Rs. ${Number(val).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Rs. 0.00'}
-        </Text>
-      ),
+      sorter: (a: BankAccountResponse, b: BankAccountResponse) => (a.currentBalance || 0) - (b.currentBalance || 0),
+      render: (val?: number) => {
+        const bal = val ?? 0;
+        return (
+          <Text
+            strong
+            style={{
+              fontFamily: 'monospace',
+              color: bal < 0 ? '#cf1322' : bal > 0 ? '#0958d9' : '#8c8c8c',
+            }}
+          >
+            {`Rs. ${Number(bal).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          </Text>
+        );
+      },
     },
     {
       title: 'Status',

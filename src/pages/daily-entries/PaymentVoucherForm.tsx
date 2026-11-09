@@ -71,6 +71,10 @@ export const PaymentVoucherForm: React.FC = () => {
   });
 
   const handleNew = useCallback(() => {
+    if (isEdit) {
+      navigate('/daily-entries/payment-voucher/new');
+      return;
+    }
     form.resetFields();
     form.setFieldsValue({ date: dayjs() });
     setVoucherLines([{
@@ -82,8 +86,9 @@ export const PaymentVoucherForm: React.FC = () => {
       checkDate: null,
       remarks: ''
     }]);
+    setBalances({});
     setTimeout(() => datePickerRef.current?.focus(), 50);
-  }, [form]);
+  }, [form, isEdit, navigate]);
 
   useEffect(() => {
     const fetchLookups = async () => {
@@ -214,7 +219,7 @@ export const PaymentVoucherForm: React.FC = () => {
       } else {
         const newVNo = await paymentService.create(request);
         message.success('Voucher created successfully: ' + newVNo);
-        navigate(`/daily-entries/payment-voucher/${newVNo}`);
+        handleNew();
       }
     } catch (error: any) {
       message.error(error.response?.data?.message || 'Failed to save voucher');

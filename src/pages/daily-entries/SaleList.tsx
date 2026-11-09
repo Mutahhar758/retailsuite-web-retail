@@ -297,21 +297,21 @@ export const SaleList: React.FC = () => {
     {
       title: 'Date',
       key: 'date',
+      width: 130,
       render: (_: any, record: DisplayRow) => {
-        if (record.isOffline) {
-          return dayjs(record.offlineEntry!.createdAt).format('DD-MMM-YYYY');
-        }
-        return dayjs(record.date).format('DD-MMM-YYYY');
+        const val = record.isOffline ? record.offlineEntry!.createdAt : record.date;
+        return <span style={{ whiteSpace: 'nowrap' }}>{dayjs(val).format('DD-MMM-YYYY')}</span>;
       },
     },
     {
       title: 'Voucher #',
       key: 'voucherNo',
+      width: 140,
       render: (_: any, record: DisplayRow) => {
         if (record.isOffline) {
           const entry = record.offlineEntry!;
           return (
-            <Space size={4}>
+            <Space size={4} style={{ whiteSpace: 'nowrap' }}>
               <Tooltip title={entry.status === 'failed' ? 'Sync failed — click Sync Now to retry' : 'Not synced yet — will sync when online'}>
                 <Tag
                   icon={entry.status === 'failed' ? <WarningOutlined /> : <CloudServerOutlined />}
@@ -326,12 +326,13 @@ export const SaleList: React.FC = () => {
             </Space>
           );
         }
-        return <Tag color="blue">SL-{record.voucherNo}</Tag>;
+        return <Tag color="blue" style={{ whiteSpace: 'nowrap' }}>SL-{record.voucherNo}</Tag>;
       },
     },
     {
       title: 'Customer',
       key: 'account',
+      width: 200,
       render: (_: any, record: DisplayRow) => {
         if (record.isOffline) {
           const acct = record.offlineEntry!.request.account;
@@ -344,10 +345,11 @@ export const SaleList: React.FC = () => {
     {
       title: 'Created By',
       key: 'createdBy',
+      width: 180,
       render: (_: any, record: DisplayRow) => {
         if (record.isOffline) {
           return (
-            <Space direction="vertical" size={0}>
+            <Space direction="vertical" size={0} style={{ whiteSpace: 'nowrap' }}>
               <Text strong style={{ fontSize: '13px', opacity: 0.7 }}>Offline (Device: {record.offlineEntry!.deviceId})</Text>
               <Text type="secondary" style={{ fontSize: '11px' }}>
                 {dayjs(record.offlineEntry!.createdAt).format('DD-MMM-YYYY hh:mm A')}
@@ -356,7 +358,7 @@ export const SaleList: React.FC = () => {
           );
         }
         return (
-          <Space direction="vertical" size={0}>
+          <Space direction="vertical" size={0} style={{ whiteSpace: 'nowrap' }}>
             <Text strong style={{ fontSize: '13px' }}>{record.createdBy}</Text>
             <Text type="secondary" style={{ fontSize: '11px', fontWeight: 500 }}>
               {dayjs(record.createdOn).format('DD-MMM-YYYY hh:mm A')}
@@ -368,6 +370,8 @@ export const SaleList: React.FC = () => {
     {
       title: 'Actions',
       key: 'action',
+      width: 240,
+      align: 'center' as const,
       render: (_: any, record: DisplayRow) => {
         if (record.isOffline) {
           return (
@@ -380,7 +384,7 @@ export const SaleList: React.FC = () => {
           );
         }
         return (
-          <Space>
+          <Space style={{ whiteSpace: 'nowrap' }}>
             <Button
               type="primary"
               icon={<EditOutlined />}
@@ -544,6 +548,7 @@ export const SaleList: React.FC = () => {
         loading={loading}
         rowKey={(row) => row.isOffline ? `offline-${row.offlineEntry!.localId}` : `server-${row.voucherNo}`}
         rowClassName={(row) => row.isOffline ? 'bg-amber-50 dark:bg-amber-900/10' : ''}
+        scroll={{ x: 'max-content' }}
         pagination={{
           current: query.page,
           pageSize: query.size,

@@ -685,8 +685,8 @@ export const NormalPurchaseForm: React.FC = () => {
       } else {
         const res = await purchaseService.create(request);
         const newVNo = (typeof res === 'object' && res !== null) ? ((res as any).body || (res as any).voucherNo || String(res)) : String(res);
-        message.success('Purchase created successfully');
-        navigate(`/daily-entries/purchase/${newVNo}`);
+        message.success('Purchase created successfully: ' + newVNo);
+        handleNew();
       }
     } catch {
       message.error('Failed to save purchase');

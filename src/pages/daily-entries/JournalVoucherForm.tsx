@@ -66,6 +66,10 @@ export const JournalVoucherForm: React.FC = () => {
   });
 
   const handleNew = useCallback(() => {
+    if (isEdit) {
+      navigate('/daily-entries/journal-voucher/new');
+      return;
+    }
     form.resetFields();
     form.setFieldsValue({ date: dayjs() });
     setVoucherLines([{
@@ -76,8 +80,9 @@ export const JournalVoucherForm: React.FC = () => {
       amount: 0,
       remarks: ''
     }]);
+    setBalances({});
     setTimeout(() => datePickerRef.current?.focus(), 50);
-  }, [form]);
+  }, [form, isEdit, navigate]);
 
   useEffect(() => {
     const fetchLookups = async () => {
@@ -201,7 +206,7 @@ export const JournalVoucherForm: React.FC = () => {
       } else {
         const newVNo = await journalVoucherService.create(request);
         message.success('Voucher created successfully: ' + newVNo);
-        navigate(`/daily-entries/journal-voucher/${newVNo}`);
+        handleNew();
       }
     } catch (error: any) {
       message.error(error.response?.data?.message || 'Failed to save voucher');

@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, FileTextOutlined, 
-  SearchOutlined, ReloadOutlined 
+  SearchOutlined, ReloadOutlined, BankOutlined 
 } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -151,26 +151,72 @@ export const ReceiptVoucherList: React.FC = () => {
       title: 'Date',
       dataIndex: 'date',
       key: 'date',
-      render: (text: string) => dayjs(text).format('DD-MMM-YYYY'),
+      width: 130,
+      render: (text: string) => <span style={{ whiteSpace: 'nowrap' }}>{dayjs(text).format('DD-MMM-YYYY')}</span>,
     },
     {
       title: 'Voucher #',
       dataIndex: 'voucherNo',
       key: 'voucherNo',
-      render: (text: string) => <Tag color="green">RV-{text}</Tag>,
+      width: 120,
+      render: (text: string) => <Tag color="green" style={{ whiteSpace: 'nowrap' }}>RV-{text}</Tag>,
+    },
+    {
+      title: 'Received Into (Cash/Bank)',
+      dataIndex: 'cashBankAccountTitle',
+      key: 'cashBankAccountTitle',
+      width: 190,
+      render: (text: string, record: ReceiptDto) => {
+        const title = text || record.cashBankAccountId;
+        if (!title) return <Text type="secondary">—</Text>;
+        return (
+          <Space size={4} style={{ whiteSpace: 'nowrap' }}>
+            <BankOutlined style={{ color: '#16a34a' }} />
+            <Text strong style={{ fontSize: '13px' }}>{title}</Text>
+          </Space>
+        );
+      },
+    },
+    {
+      title: 'Received From (Account)',
+      key: 'accounts',
+      render: (_: any, record: ReceiptDto) => {
+        const lines = record.accounts || [];
+        if (lines.length === 0) {
+          return <Text type="secondary">—</Text>;
+        }
+
+        const names = Array.from(new Set(lines.map(l => l.accountTitle || l.accountId).filter(Boolean)));
+        if (names.length === 1) {
+          return <Text strong style={{ fontSize: '13px' }}>{names[0]}</Text>;
+        }
+
+        return (
+          <Space direction="vertical" size={1}>
+            {names.map((name, i) => (
+              <Text strong key={i} style={{ fontSize: '13px' }}>
+                {name}
+              </Text>
+            ))}
+          </Space>
+        );
+      },
     },
     {
       title: 'Narration',
       dataIndex: 'narration',
       key: 'narration',
+      ellipsis: true,
+      render: (text: string) => text || <Text type="secondary">—</Text>,
     },
     {
       title: 'Amount',
       dataIndex: 'amount',
       key: 'amount',
       align: 'right' as const,
+      width: 130,
       render: (val: number) => (
-        <Text strong type="success">
+        <Text strong type="success" style={{ whiteSpace: 'nowrap' }}>
           {val.toLocaleString(undefined, { minimumFractionDigits: 2 })}
         </Text>
       ),
@@ -179,8 +225,9 @@ export const ReceiptVoucherList: React.FC = () => {
       title: 'Created By',
       dataIndex: 'createdBy',
       key: 'createdBy',
+      width: 180,
       render: (text: string, record: any) => (
-        <Space direction="vertical" size={0}>
+        <Space direction="vertical" size={0} style={{ whiteSpace: 'nowrap' }}>
           <Text strong style={{ fontSize: '13px' }}>{text}</Text>
           <Text type="secondary" style={{ fontSize: '11px', fontWeight: 500 }}>
             {dayjs(record.createdOn).format('DD-MMM-YYYY hh:mm A')}
@@ -191,6 +238,8 @@ export const ReceiptVoucherList: React.FC = () => {
     {
       title: 'Actions',
       key: 'action',
+      width: 110,
+      align: 'center' as const,
       render: (_: any, record: ReceiptDto) => (
         <Button 
           type="primary" 
@@ -257,6 +306,7 @@ export const ReceiptVoucherList: React.FC = () => {
         dataSource={data} 
         loading={loading}
         rowKey="voucherNo"
+        scroll={{ x: 'max-content' }}
         pagination={{
           current: query.page,
           pageSize: query.size,

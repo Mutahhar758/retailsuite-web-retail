@@ -61,11 +61,15 @@ export const WandaSaleReturnForm: React.FC = () => {
   });
 
   const handleNew = useCallback(() => {
+    if (isEdit) {
+      navigate('/daily-entries/sale-return/new');
+      return;
+    }
     form.resetFields();
     form.setFieldsValue({ date: dayjs() });
     setSaleLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, amount: 0, secQty: 0, secRate: 0, packQty: 0, packing: 0 }]);
     setTimeout(() => datePickerRef.current?.focus(), 50);
-  }, [form]);
+  }, [form, isEdit, navigate]);
 
   useEffect(() => {
     chartOfAccountService.getCustomerAccounts().then(setCustomers);
@@ -243,8 +247,8 @@ export const WandaSaleReturnForm: React.FC = () => {
         message.success('Sale return updated successfully');
       } else {
         const newVno = await saleReturnService.create(request);
-        message.success('Sale return created successfully');
-        navigate(`/daily-entries/sale-return/${newVno}`);
+        message.success('Sale return created successfully: ' + newVno);
+        handleNew();
       }
     } catch {
       message.error('Failed to save sale return');

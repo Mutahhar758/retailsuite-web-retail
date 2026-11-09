@@ -5,7 +5,8 @@ import {
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, ReloadOutlined, 
-  PhoneOutlined, MailOutlined, ShopOutlined, FileExcelOutlined
+  PhoneOutlined, MailOutlined, ShopOutlined, FileExcelOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { vendorService, type VendorResponse } from '../../services/vendorService';
@@ -169,19 +170,29 @@ export const VendorList: React.FC = () => {
     {
       title: 'Actions',
       key: 'action',
-      width: '100px',
+      width: '110px',
       fixed: 'right' as const,
       render: (_: any, record: VendorResponse) => (
-        <Tooltip title="Edit Vendor Details">
-          <Button 
-            type="primary" 
-            ghost
-            icon={<EditOutlined />} 
-            size="small"
-            style={{ color: '#d46b08', borderColor: '#ffd591' }}
-            onClick={() => handleEdit(record)}
-          />
-        </Tooltip>
+        <Space size={4}>
+          <Tooltip title="Edit Vendor Details">
+            <Button 
+              type="primary" 
+              ghost
+              icon={<EditOutlined />} 
+              size="small"
+              style={{ color: '#d46b08', borderColor: '#ffd591' }}
+              onClick={() => handleEdit(record)}
+            />
+          </Tooltip>
+          <Tooltip title="View Detailed Account Statement / Ledger">
+            <Button
+              type="text"
+              icon={<FileTextOutlined style={{ color: '#52c41a' }} />}
+              size="small"
+              onClick={() => navigate(`/reports/account-statement?account=${encodeURIComponent(record.account)}`)}
+            />
+          </Tooltip>
+        </Space>
       ),
     },
   ];

@@ -129,11 +129,15 @@ export const NormalSaleSupplyForm: React.FC = () => {
   const formWrapperRef = useRef<HTMLDivElement>(null);
 
   const handleNew = useCallback(() => {
+    if (isEdit) {
+      navigate('/daily-entries/sale-supply/new');
+      return;
+    }
     form.resetFields();
     form.setFieldsValue({ date: dayjs() });
     setSupplyLines([{ key: Date.now(), seq: 1, qty: 1, rate: 0, discount: 0, addLess: 0, amount: 0, secQty: 0, secRate: 0 }]);
     setTimeout(() => datePickerRef.current?.focus(), 50);
-  }, [form]);
+  }, [form, isEdit, navigate]);
 
   useEffect(() => {
     fetchSettings('Inventory');
@@ -608,8 +612,8 @@ export const NormalSaleSupplyForm: React.FC = () => {
         message.success('Sale supply updated successfully');
       } else {
         const newVno = await saleSupplyService.create(request);
-        message.success('Sale supply created successfully');
-        navigate(`/daily-entries/sale-supply/${newVno}`);
+        message.success('Sale supply created successfully: ' + newVno);
+        handleNew();
       }
     } catch {
       message.error('Failed to save sale supply');

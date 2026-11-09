@@ -98,6 +98,10 @@ export const NormalPurchaseReturnForm: React.FC = () => {
   });
 
   const handleNew = useCallback(() => {
+    if (isEdit) {
+      navigate('/daily-entries/purchase-return/new');
+      return;
+    }
     form.resetFields();
     form.setFieldsValue({ date: dayjs() });
     setPurchaseLines([{
@@ -113,7 +117,7 @@ export const NormalPurchaseReturnForm: React.FC = () => {
       secRate: 0
     }]);
     setTimeout(() => datePickerRef.current?.focus(), 50);
-  }, [form]);
+  }, [form, isEdit, navigate]);
 
   useEffect(() => {
     const fetchLookups = async () => {
@@ -398,8 +402,8 @@ export const NormalPurchaseReturnForm: React.FC = () => {
         message.success('Purchase return updated successfully');
       } else {
         const newVNo = await purchaseReturnService.create(request);
-        message.success('Purchase return created successfully');
-        navigate(`/daily-entries/purchase-return/${newVNo}`);
+        message.success('Purchase return created successfully: ' + newVNo);
+        handleNew();
       }
     } catch {
       message.error('Failed to save purchase return');

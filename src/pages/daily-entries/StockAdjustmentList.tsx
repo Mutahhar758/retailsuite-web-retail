@@ -132,14 +132,14 @@ export const StockAdjustmentList: React.FC = () => {
       dataIndex: 'voucherNo',
       key: 'voucherNo',
       width: 120,
-      render: (text: string) => <Tag color="purple">ADJ-{text}</Tag>
+      render: (text: string) => <Tag color="purple" style={{ whiteSpace: 'nowrap' }}>ADJ-{text}</Tag>
     },
     {
       title: 'Date',
       dataIndex: 'date',
       key: 'date',
-      width: 120,
-      render: (date: string) => dayjs(date).format('DD-MMM-YYYY')
+      width: 130,
+      render: (date: string) => <span style={{ whiteSpace: 'nowrap' }}>{dayjs(date).format('DD-MMM-YYYY')}</span>
     },
     {
       title: 'Narration',
@@ -161,19 +161,23 @@ export const StockAdjustmentList: React.FC = () => {
       key: 'totalAmount',
       width: 150,
       align: 'right' as const,
-      render: (val: number) => <Text strong style={{ color: '#7c3aed' }}>{(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+      render: (val: number) => <Text strong style={{ color: '#7c3aed', whiteSpace: 'nowrap' }}>{(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
     },
     {
       title: 'Actions',
       key: 'actions',
-      width: 80,
-      fixed: 'right' as const,
+      width: 100,
+      align: 'center' as const,
       render: (_: any, record: StockAdjustmentMaster) => (
         <Button 
-          type="text" 
+          type="primary" 
           icon={<EditOutlined />} 
+          size="small"
+          style={{ backgroundColor: '#7c3aed', borderColor: '#7c3aed' }}
           onClick={() => navigate(`/daily-entries/stock-adjustment/${record.voucherNo}`)}
-        />
+        >
+          Edit
+        </Button>
       )
     }
   ];
@@ -237,7 +241,7 @@ export const StockAdjustmentList: React.FC = () => {
             onChange: handleTableChange,
           }}
           size="middle"
-          scroll={{ x: 800 }}
+          scroll={{ x: 'max-content' }}
         />
       </Card>
     </Space>

@@ -165,6 +165,10 @@ export const WandaPurchaseForm: React.FC = () => {
   });
 
   const handleNew = useCallback(() => {
+    if (isEdit) {
+      navigate('/daily-entries/purchase/new');
+      return;
+    }
     form.resetFields();
     form.setFieldsValue({ date: dayjs(), cashPaid: 0, cashBack: 0 });
     setPurchaseLines([{
@@ -182,7 +186,7 @@ export const WandaPurchaseForm: React.FC = () => {
       packing: 0
     }]);
     setTimeout(() => datePickerRef.current?.focus(), 50);
-  }, [form]);
+  }, [form, isEdit, navigate]);
 
   useEffect(() => {
     const fetchLookups = async () => {
@@ -447,8 +451,8 @@ export const WandaPurchaseForm: React.FC = () => {
       } else {
         const res = await purchaseService.create(request);
         const newVNo = (typeof res === 'object' && res !== null) ? ((res as any).body || (res as any).voucherNo || String(res)) : String(res);
-        message.success('Purchase created successfully');
-        navigate(`/daily-entries/purchase/${newVNo}`);
+        message.success('Purchase created successfully: ' + newVNo);
+        handleNew();
       }
     } catch {
       message.error('Failed to save purchase');
