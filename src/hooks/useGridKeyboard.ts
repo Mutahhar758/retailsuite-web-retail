@@ -213,6 +213,14 @@ export function useGridKeyboard<TColKey extends string = string>({
 
   const focusCell = useCallback((rowIdx: number, colKey: string) => {
     const doFocus = () => {
+      // 0. Direct ID check (e.g. voucher-account-0, voucher-amount-0)
+      const directIdInput = document.getElementById(`voucher-${colKey}-${rowIdx}`) as HTMLInputElement;
+      if (directIdInput) {
+        directIdInput.focus();
+        directIdInput.select?.();
+        return;
+      }
+
       // 1. Direct DOM check for Select search input (e.g. itemId, customerId, account)
       const selectSearchInput = document.querySelector<HTMLInputElement>(
         `.grid-select-row-${rowIdx} .ant-select-selection-search-input, .grid-select-row-${rowIdx} input`
@@ -221,6 +229,18 @@ export function useGridKeyboard<TColKey extends string = string>({
         selectSearchInput.focus();
         selectSearchInput.select?.();
         return;
+      }
+
+      // 1b. Direct DOM check for Amount input
+      if (colKey === 'amount') {
+        const amountInput = document.querySelector<HTMLInputElement>(
+          `.grid-amount-row-${rowIdx} input, .grid-amount-row-${rowIdx}`
+        );
+        if (amountInput) {
+          amountInput.focus();
+          amountInput.select?.();
+          return;
+        }
       }
 
       // 2. Ref-based focus

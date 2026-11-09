@@ -18,6 +18,169 @@ import { useGridKeyboard } from '../../hooks/useGridKeyboard';
 
 const { Title, Text } = Typography;
 
+interface AccountSelectOption {
+  value: string;
+  label: string;
+  title: string;
+  account: string;
+}
+
+const getAccountSelectProps = (accounts: ChartOfAccountHeadDto[]) => {
+  const options: AccountSelectOption[] = accounts.map(acc => ({
+    value: acc.account,
+    label: `${acc.title} (${acc.account})`,
+    title: acc.title,
+    account: acc.account,
+  }));
+
+  return {
+    optionFilterProp: 'label' as const,
+    options,
+    filterOption: (input: string, option?: AccountSelectOption) => {
+      const q = (input || '').trim().toLowerCase();
+      if (!q) return true;
+      const haystack = `${option?.title || ''} ${option?.account || ''} ${option?.label || ''}`.toLowerCase();
+      return q.split(/\s+/).every(token => haystack.includes(token));
+    },
+    optionRender: (oriOption: any) => {
+      const data = oriOption.data as AccountSelectOption | undefined;
+      if (!data?.account) {
+        return oriOption.label;
+      }
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%' }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+            {data.title}
+          </span>
+          <span style={{
+            fontSize: 11,
+            lineHeight: '16px',
+            color: '#64748b',
+            background: '#f1f5f9',
+            border: '1px solid #e2e8f0',
+            padding: '1px 6px',
+            borderRadius: 4,
+            fontFamily: 'monospace',
+            flexShrink: 0
+          }}>
+            {data.account}
+          </span>
+        </div>
+      );
+    }
+  };
+};
+
+interface AccountSelectCellProps {
+  rowIdx: number;
+  record: any;
+  value: string;
+  accounts: ChartOfAccountHeadDto[];
+  getCellRef: (rowIdx: number, colKey: string) => React.RefObject<any>;
+  handleCellKeyDown: (rowIdx: number, colKey: string, e: React.KeyboardEvent) => void;
+  updateRow: (key: any, field: string, value: any) => void;
+  handleAccountChange: (accountId: string) => void;
+  focusCell: (rowIdx: number, colKey: string) => void;
+}
+
+const AccountSelectCell: React.FC<AccountSelectCellProps> = ({
+  rowIdx,
+  record,
+  value,
+  accounts,
+  getCellRef,
+  handleCellKeyDown,
+  updateRow,
+  handleAccountChange,
+  focusCell,
+}) => {
+  const [open, setOpen] = useState(false);
+  const selectRef = useRef<any>(null);
+
+  const focusAmount = useCallback(() => {
+    setOpen(false);
+
+    try {
+      selectRef.current?.blur?.();
+      const searchInput = document.getElementById(`voucher-account-${rowIdx}`) as HTMLInputElement;
+      searchInput?.blur?.();
+    } catch {}
+
+    const doFocus = () => {
+      const amtInput = (document.getElementById(`voucher-amount-${rowIdx}`) ||
+        document.querySelector(`.grid-amount-row-${rowIdx} input, .grid-amount-row-${rowIdx}`)) as HTMLInputElement;
+      if (amtInput) {
+        amtInput.focus();
+        amtInput.select?.();
+      } else {
+        focusCell(rowIdx, 'amount');
+      }
+    };
+
+    doFocus();
+    requestAnimationFrame(doFocus);
+    setTimeout(doFocus, 30);
+    setTimeout(doFocus, 80);
+  }, [rowIdx, focusCell]);
+
+  return (
+    <Select
+      id={`voucher-account-${rowIdx}`}
+      ref={(inst) => {
+        selectRef.current = inst;
+        const r = getCellRef(rowIdx, 'account');
+        if (r) (r as any).current = inst;
+      }}
+      className={`grid-select-account grid-select-row-${rowIdx}`}
+      showSearch
+      defaultActiveFirstOption
+      open={open}
+      onOpenChange={setOpen}
+      style={{ width: '100%' }}
+      placeholder="Select Account"
+      value={value || undefined}
+      onSelect={(val) => {
+        updateRow(record.key, 'account', val);
+        handleAccountChange(val);
+        setTimeout(focusAmount, 20);
+      }}
+      onChange={(val) => {
+        if (val) {
+          updateRow(record.key, 'account', val);
+          handleAccountChange(val);
+        }
+      }}
+      onBlur={() => {
+        setOpen(false);
+      }}
+      {...getAccountSelectProps(accounts)}
+      onInputKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          // Do NOT preventDefault: let Ant Design select the active option from dropdown!
+          setTimeout(focusAmount, 40);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          if (!open) {
+            e.preventDefault();
+            e.stopPropagation();
+            focusAmount();
+            return;
+          }
+        }
+
+        if (e.key === 'Tab') {
+          setOpen(false);
+          return;
+        }
+
+        handleCellKeyDown(rowIdx, 'account', e);
+      }}
+    />
+  );
+};
+
 export const ReceiptVoucherForm: React.FC = () => {
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const navigate = useNavigate();
@@ -57,7 +220,7 @@ export const ReceiptVoucherForm: React.FC = () => {
     });
   }, []);
 
-  const gridCols = ['account', 'amount', 'checkNum', 'remarks'];
+  const gridCols = ['account', 'amount'];
 
   const { getCellRef, handleCellKeyDown, focusCell } = useGridKeyboard({
     rowCount: voucherLines.length,
@@ -262,7 +425,7 @@ export const ReceiptVoucherForm: React.FC = () => {
   const handleCashBankKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      setTimeout(() => narrationSelectRef.current?.focus(), 50);
+      setTimeout(() => focusCell(0, 'account'), 50);
     }
   };
 
@@ -278,25 +441,17 @@ export const ReceiptVoucherForm: React.FC = () => {
       title: 'Account',
       dataIndex: 'account',
       render: (text: string, record: any, rowIdx: number) => (
-        <Select
-          ref={getCellRef(rowIdx, 'account')}
-          showSearch
-          placeholder="Select Account"
+        <AccountSelectCell
+          rowIdx={rowIdx}
+          record={record}
           value={text}
-          style={{ width: '100%' }}
-          onChange={(val) => {
-            updateRow(record.key, 'account', val);
-            handleAccountChange(val);
-          }}
-          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'account', e)}
-          optionFilterProp="children"
-        >
-          {detailAccounts.map(acc => (
-            <Select.Option key={acc.account} value={acc.account}>
-              {acc.title}
-            </Select.Option>
-          ))}
-        </Select>
+          accounts={detailAccounts}
+          getCellRef={getCellRef}
+          handleCellKeyDown={handleCellKeyDown}
+          updateRow={updateRow}
+          handleAccountChange={handleAccountChange}
+          focusCell={focusCell}
+        />
       )
     },
     {
@@ -305,13 +460,21 @@ export const ReceiptVoucherForm: React.FC = () => {
       width: 170,
       render: (text: number, record: any, rowIdx: number) => (
         <InputNumber
+          id={`voucher-amount-${rowIdx}`}
           ref={getCellRef(rowIdx, 'amount')}
+          className={`col-amount grid-amount-row-${rowIdx}`}
+          data-col="amount"
           value={text}
           style={{ width: '100%' }}
           controls={false}
           keyboard={false}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           parser={value => Number(value!.replace(/Rs\.?\s?|(,*)/g, ''))}
+          onFocus={(e) => {
+            const input = e.target as HTMLInputElement;
+            input?.select?.();
+            setTimeout(() => input?.select?.(), 20);
+          }}
           onChange={(val) => updateRow(record.key, 'amount', val)}
           onKeyDown={(e) => handleCellKeyDown(rowIdx, 'amount', e)}
         />
@@ -321,12 +484,11 @@ export const ReceiptVoucherForm: React.FC = () => {
       title: 'Check #',
       dataIndex: 'checkNum',
       width: 130,
-      render: (text: string, record: any, rowIdx: number) => (
+      render: (text: string, record: any) => (
         <Input
-          ref={getCellRef(rowIdx, 'checkNum')}
+          tabIndex={-1}
           value={text}
           onChange={(e) => updateRow(record.key, 'checkNum', e.target.value)}
-          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'checkNum', e)}
         />
       )
     },
@@ -335,18 +497,17 @@ export const ReceiptVoucherForm: React.FC = () => {
       dataIndex: 'checkDate',
       width: 150,
       render: (text: any, record: any) => (
-        <DatePicker value={text} onChange={(date) => updateRow(record.key, 'checkDate', date)} />
+        <DatePicker tabIndex={-1} value={text} onChange={(date) => updateRow(record.key, 'checkDate', date)} />
       )
     },
     {
       title: 'Remarks',
       dataIndex: 'remarks',
-      render: (text: string, record: any, rowIdx: number) => (
+      render: (text: string, record: any) => (
         <Input
-          ref={getCellRef(rowIdx, 'remarks')}
+          tabIndex={-1}
           value={text}
           onChange={(e) => updateRow(record.key, 'remarks', e.target.value)}
-          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'remarks', e)}
         />
       )
     },
@@ -426,7 +587,7 @@ export const ReceiptVoucherForm: React.FC = () => {
             </Col>
             <Col xs={24} sm={8} lg={4}>
               <Form.Item label="Clearing Date" name="clearingDate">
-                <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" />
+                <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" tabIndex={-1} />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} lg={6}>
@@ -452,6 +613,7 @@ export const ReceiptVoucherForm: React.FC = () => {
                   ref={narrationSelectRef}
                   showSearch
                   placeholder="Select or enter narration"
+                  tabIndex={-1}
                   onKeyDown={handleNarrationKeyDown}
                 >
                   {narrations.map(n => (
