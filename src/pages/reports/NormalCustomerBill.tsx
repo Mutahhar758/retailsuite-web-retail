@@ -1022,7 +1022,7 @@ export const NormalCustomerBill: React.FC = () => {
               }}>
                 <ThunderboltOutlined spin style={{ fontSize: 32, color: '#4f46e5', marginBottom: 12 }} />
                 <Text strong style={{ fontSize: 15, color: '#1e293b' }}>
-                  {mode === 'single' ? 'Rendering High-Resolution Vector Bill...' : 'Compiling High-Speed Vector Batch Bills...'}
+                  {mode === 'single' ? 'Rendering Customer Bill...' : 'Compiling Batch Bills...'}
                 </Text>
                 <Text type="secondary" style={{ fontSize: 12, marginTop: 4 }}>
                   Formatting pixel-perfect print layout with native barcode / QR payload

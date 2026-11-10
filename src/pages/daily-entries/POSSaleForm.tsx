@@ -26,6 +26,7 @@ import {
 import dayjs from 'dayjs';
 
 import { saleService } from '../../services/saleService';
+import { reportService } from '../../services/reportService';
 import { offlineCacheService, OfflineCacheMissError } from '../../services/offlineCacheService';
 import type { ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { inventoryService, type Item, type ItemCustomerCategoryPriceDto } from '../../services/inventoryService';
@@ -35,6 +36,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { kotService, type DiningTableDto, type KotOrderResponse } from '../../services/kotService';
 import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT, RESTAURANT_ENABLE_KOT_KEY, RESTAURANT_ENABLE_DINE_IN_KEY, RESTAURANT_ENABLE_KDS_KEY, RESTAURANT_ENABLE_VOICE_CALLOUT_KEY, RESTAURANT_VOICE_CALLOUT_SPEED_KEY, RESTAURANT_VOICE_CALLOUT_ACCENT_KEY, BARCODE_FAST_SCAN_SOUND_KEY } from '../../stores/useSettingsStore';
 import { printKotSlip } from '../../utils/kotPrint';
+import { printSaleReceiptPdf } from '../../utils/saleReceiptPrint';
 import { speakKotOrder, type VoiceAccentType } from '../../utils/kotSpeech';
 import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
 import { parseBarcodePayload } from '../../utils/barcodeParser';
@@ -637,22 +639,22 @@ export const POSSaleForm: React.FC = () => {
       const itemTitle = line.item.title;
       const resolved = resolveDisplayQtyAndUnit(line.qty, line.item, units as any);
       const qtyStr = resolved.factor > 1 ? `${resolved.displayQty}${resolved.unitLabel}` : line.qty.toString();
-      const priceStr = line.rate.toString();
-      const amountStr = (line.qty * line.rate).toFixed(2);
+      const priceStr = Math.round(line.rate).toLocaleString();
+      const amountStr = Math.round(line.qty * line.rate).toLocaleString();
       lines.push(format4Columns(itemTitle, qtyStr, priceStr, amountStr));
     });
     lines.push(divider('-', width));
 
-    lines.push(padLine('Gross Total:', `Rs. ${grossTotal.toFixed(2)}`, width));
+    lines.push(padLine('Gross Total:', `Rs. ${Math.round(grossTotal).toLocaleString()}`, width));
     if (totalDiscount > 0) {
-      lines.push(padLine('Discount:', `-Rs. ${totalDiscount.toFixed(2)}`, width));
+      lines.push(padLine('Discount:', `-Rs. ${Math.round(totalDiscount).toLocaleString()}`, width));
     }
     lines.push(divider('=', width));
 
     // Bold Net Amount
-    lines.push(ESC_BOLD_ON + padLine('Net Amount:', `Rs. ${netAmount.toFixed(2)}`, width));
-    lines.push(ESC_BOLD_OFF + padLine('Cash Received:', `Rs. ${cashReceived.toFixed(2)}`, width));
-    lines.push(padLine('Cash Back / Change:', `Rs. ${cashBack.toFixed(2)}`, width));
+    lines.push(ESC_BOLD_ON + padLine('Net Amount:', `Rs. ${Math.round(netAmount).toLocaleString()}`, width));
+    lines.push(ESC_BOLD_OFF + padLine('Cash Received:', `Rs. ${Math.round(cashReceived).toLocaleString()}`, width));
+    lines.push(padLine('Cash Back / Change:', `Rs. ${Math.round(cashBack).toLocaleString()}`, width));
     lines.push(divider('-', width));
 
     const thankYouMsg = getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT);
@@ -878,8 +880,14 @@ export const POSSaleForm: React.FC = () => {
       // Customer bill receipt on sale creation
       if (shouldPrintReceipt) {
         try {
-          const billLines = generateReceiptTextLines(finalVoucherNo, tokenNumber, orderType || 'Takeaway');
-          await printDirect(billLines, connectionMethod, { printerName, openDrawer, cutPaper });
+          let printed = false;
+          if (!finalVoucherNo.includes('-') && navigator.onLine) {
+            printed = await printSaleReceiptPdf(finalVoucherNo, 'Thermal80mm', { printerName, openDrawer, cutPaper });
+          }
+          if (!printed) {
+            const billLines = generateReceiptTextLines(finalVoucherNo, tokenNumber, orderType || 'Takeaway');
+            await printDirect(billLines, connectionMethod, { printerName, openDrawer, cutPaper });
+          }
         } catch (billPrintErr) {
           console.warn('Failed to auto-print bill receipt', billPrintErr);
         }
@@ -1122,8 +1130,14 @@ export const POSSaleForm: React.FC = () => {
 
   const handlePrintReceipt = async () => {
     try {
-      await printThermal();
-      message.success('Print job submitted successfully');
+      let printed = false;
+      if (savedVoucherNo && !savedVoucherNo.includes('-') && navigator.onLine) {
+        printed = await printSaleReceiptPdf(savedVoucherNo, 'Thermal80mm', { printerName, openDrawer, cutPaper });
+      }
+      if (!printed) {
+        await printThermal();
+        message.success('Print job submitted successfully');
+      }
     } catch (err: any) {
       message.error(err.message || 'Printing failed');
     }
@@ -2460,8 +2474,8 @@ export const POSSaleForm: React.FC = () => {
                   <tr key={line.item.id}>
                     <td style={{ textAlign: 'left', padding: '6px 0' }}>{line.item.title}</td>
                     <td style={{ textAlign: 'center', padding: '6px 0' }}>{qtyDisplay}</td>
-                    <td style={{ textAlign: 'right', padding: '6px 0' }}>{line.rate}</td>
-                    <td style={{ textAlign: 'right', padding: '6px 0' }}>{(line.qty * line.rate).toFixed(2)}</td>
+                    <td style={{ textAlign: 'right', padding: '6px 0' }}>{Math.round(line.rate).toLocaleString()}</td>
+                    <td style={{ textAlign: 'right', padding: '6px 0' }}>{Math.round(line.qty * line.rate).toLocaleString()}</td>
                   </tr>
                 );
               })}
@@ -2471,25 +2485,25 @@ export const POSSaleForm: React.FC = () => {
           <div style={{ borderTop: '1px dashed #000', paddingTop: 8, fontSize: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <span>Gross Total:</span>
-              <strong>Rs. {grossTotal.toFixed(2)}</strong>
+              <strong>Rs. {Math.round(grossTotal).toLocaleString()}</strong>
             </div>
             {totalDiscount > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span>Discount:</span>
-                <strong>-Rs. {totalDiscount.toFixed(2)}</strong>
+                <strong>-Rs. {Math.round(totalDiscount).toLocaleString()}</strong>
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px double #000', paddingTop: 6, marginBottom: 6, fontSize: 14 }}>
               <strong>Net Amount:</strong>
-              <strong>Rs. {netAmount.toFixed(2)}</strong>
+              <strong>Rs. {Math.round(netAmount).toLocaleString()}</strong>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <span>Cash Received:</span>
-              <strong>Rs. {cashReceived.toFixed(2)}</strong>
+              <strong>Rs. {Math.round(cashReceived).toLocaleString()}</strong>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <span>Cash Back / Change:</span>
-              <strong>Rs. {cashBack.toFixed(2)}</strong>
+              <strong>Rs. {Math.round(cashBack).toLocaleString()}</strong>
             </div>
           </div>
 
@@ -2519,6 +2533,29 @@ export const POSSaleForm: React.FC = () => {
           >
             Print Receipt
           </Button>
+          {savedVoucherNo && !savedVoucherNo.includes('-') && (
+            <Button
+              type="dashed"
+              size="middle"
+              block
+              icon={<FileTextOutlined />}
+              onClick={async () => {
+                try {
+                  const blob = await reportService.getSaleBillPdf({
+                    voucherNo: savedVoucherNo,
+                    layout: 'Thermal80mm'
+                  });
+                  const url = URL.createObjectURL(blob);
+                  window.open(url, '_blank');
+                } catch (err: any) {
+                  message.error('Failed to open PDF Receipt: ' + (err?.message || 'Error'));
+                }
+              }}
+              style={{ borderRadius: 10, fontWeight: 700 }}
+            >
+              Open PDF Receipt
+            </Button>
+          )}
           <Button
             type="default"
             size="large"

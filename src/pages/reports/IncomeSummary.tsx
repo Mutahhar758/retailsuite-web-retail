@@ -469,7 +469,7 @@ export const IncomeSummary: React.FC = () => {
               }}>
                 <Spin size="large" />
                 <Text type="secondary" style={{ marginTop: 16 }}>
-                  Generating vector PDF report...
+                  Generating PDF report...
                 </Text>
               </div>
             ) : pdfUrl ? (

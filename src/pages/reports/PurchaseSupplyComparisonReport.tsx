@@ -664,7 +664,7 @@ export const PurchaseSupplyComparisonReport: React.FC = () => {
               color: '#ffffff'
             }}>
               <Spin size="large" />
-              <Text style={{ color: '#ffffff', fontSize: 14 }}>Generating Vector PDF Comparison...</Text>
+              <Text style={{ color: '#ffffff', fontSize: 14 }}>Generating PDF Comparison...</Text>
             </div>
           ) : pdfBlobUrl ? (
             <iframe

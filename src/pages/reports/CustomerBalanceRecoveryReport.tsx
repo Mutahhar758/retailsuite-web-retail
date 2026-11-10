@@ -713,7 +713,7 @@ export const CustomerBalanceRecoveryReport: React.FC = () => {
               color: '#ffffff'
             }}>
               <Spin size="large" />
-              <Text style={{ color: '#ffffff', fontSize: 14 }}>Generating Vector PDF...</Text>
+              <Text style={{ color: '#ffffff', fontSize: 14 }}>Generating PDF...</Text>
             </div>
           ) : pdfBlobUrl ? (
             <iframe

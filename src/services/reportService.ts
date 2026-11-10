@@ -184,6 +184,40 @@ export interface WandaCustomerBillResponse {
   };
 }
 
+export interface SaleBillLineDto {
+  itemName: string;
+  qty: number;
+  unitId: string;
+  unitTitle: string;
+  rate: number;
+  grossRate: number;
+  disc: number;
+  carriage: number;
+  tAmount: number;
+  imei?: string | null;
+}
+
+export interface SaleBillHeaderDto {
+  vDate: string;
+  vTime?: string | null;
+  title: string;
+  amount: number;
+  discount: number;
+  netAmount: number;
+  cashReceipt: number;
+  cashBack: number;
+  descr: string;
+  narration?: string | null;
+  counter?: string | null;
+  balance: number;
+}
+
+export interface SaleBillResponseDto {
+  lines: SaleBillLineDto[];
+  header: SaleBillHeaderDto;
+  accAddress?: string;
+}
+
 export const reportService = {
   async getTrialBalance(params: { fromDate: string; toDate: string }) {
     const response = await api.get('/api/reports/trial-balance', { params });
@@ -362,6 +396,24 @@ export const reportService = {
     onlyWithActivity?: boolean;
   }): Promise<Blob> {
     const response = await api.post('/api/reports/wanda-customer-bill/batch/pdf', data, {
+      responseType: 'blob'
+    });
+    return response.data as Blob;
+  },
+
+  async getSaleBill(voucherNo: string) {
+    const response = await api.get('/api/reports/sale-bill', { params: { voucherNo } });
+    return response.data.body as SaleBillResponseDto;
+  },
+
+  async getSaleBillPdf(params: {
+    voucherNo: string;
+    layout?: 'Thermal80mm' | 'A5Sheet' | 'A4Sheet';
+    isDuplicate?: boolean;
+    qrEnabled?: boolean;
+  }): Promise<Blob> {
+    const response = await api.get('/api/reports/sale-bill/pdf', {
+      params,
       responseType: 'blob'
     });
     return response.data as Blob;

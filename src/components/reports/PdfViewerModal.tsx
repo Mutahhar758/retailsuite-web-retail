@@ -106,7 +106,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
                 Open in Tab
               </Button>
             </Tooltip>
-            <Tooltip title="Print pixel-perfect vector PDF">
+            <Tooltip title="Print PDF Document">
               <Button icon={<PrinterOutlined />} type="default" onClick={handlePrint}>
                 Print
               </Button>

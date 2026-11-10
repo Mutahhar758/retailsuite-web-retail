@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import { message } from 'antd';
+import { reportService } from '../services/reportService';
 import {
   printDirect,
   divider,
@@ -51,6 +52,8 @@ export interface SalePrintOptions {
   openDrawer?: boolean;
   connectionMethod?: ConnectionMethod;
   format?: 'thermal' | 'a5' | 'a4';
+  isDuplicate?: boolean;
+  fallbackToBrowser?: boolean;
 }
 
 /**
@@ -117,31 +120,31 @@ export const generateSaleReceiptEscPosLines = (data: SaleReceiptData): string[] 
     lines.push(format4Columns(
       line.itemTitle,
       qtyText,
-      line.rate.toFixed(2),
-      line.amount.toFixed(2)
+      Math.round(line.rate).toString(),
+      Math.round(line.amount).toString()
     ));
     if (line.imei) {
       lines.push(`  IMEI/SN: ${line.imei}`);
     }
     if (line.discount && line.discount > 0) {
-      lines.push(`  (Disc: Rs. ${line.discount.toFixed(2)})`);
+      lines.push(`  (Disc: Rs. ${Math.round(line.discount).toString()})`);
     }
   });
 
   lines.push(divider('-', width));
-  lines.push(padLine('Gross Total:', `Rs. ${data.grossTotal.toFixed(2)}`, width));
+  lines.push(padLine('Gross Total:', `Rs. ${Math.round(data.grossTotal).toLocaleString()}`, width));
   if (data.totalDiscount > 0) {
-    lines.push(padLine('Discount:', `-Rs. ${data.totalDiscount.toFixed(2)}`, width));
+    lines.push(padLine('Discount:', `-Rs. ${Math.round(data.totalDiscount).toLocaleString()}`, width));
   }
   lines.push(divider('=', width));
 
-  lines.push(ESC_BOLD_ON + padLine('Net Amount:', `Rs. ${data.netAmount.toFixed(2)}`, width));
-  lines.push(ESC_BOLD_OFF + padLine('Cash Received:', `Rs. ${data.cashReceived.toFixed(2)}`, width));
+  lines.push(ESC_BOLD_ON + padLine('Net Amount:', `Rs. ${Math.round(data.netAmount).toLocaleString()}`, width));
+  lines.push(ESC_BOLD_OFF + padLine('Cash Received:', `Rs. ${Math.round(data.cashReceived).toLocaleString()}`, width));
   if (data.cashBack > 0) {
-    lines.push(padLine('Change Return:', `Rs. ${data.cashBack.toFixed(2)}`, width));
+    lines.push(padLine('Change Return:', `Rs. ${Math.round(data.cashBack).toLocaleString()}`, width));
   }
   if (data.balance !== undefined && data.balance > 0) {
-    lines.push(ESC_BOLD_ON + padLine('Remaining Due:', `Rs. ${data.balance.toFixed(2)}`, width) + ESC_BOLD_OFF);
+    lines.push(ESC_BOLD_ON + padLine('Remaining Due:', `Rs. ${Math.round(data.balance).toLocaleString()}`, width) + ESC_BOLD_OFF);
   }
   lines.push(divider('-', width));
 
@@ -152,9 +155,90 @@ export const generateSaleReceiptEscPosLines = (data: SaleReceiptData): string[] 
   return lines;
 };
 
+export const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const res = reader.result as string;
+      const base64 = res.split(',')[1] || '';
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
+/**
+ * Print a QuestPDF generated sale receipt directly to thermal/laser printer via printer-bridge
+ * or open browser PDF print dialog if explicitly requested.
+ */
+export const printSaleReceiptPdf = async (
+  voucherNo: string,
+  layout: 'Thermal80mm' | 'A5Sheet' | 'A4Sheet' = 'Thermal80mm',
+  options: SalePrintOptions = {}
+): Promise<boolean> => {
+  const method: ConnectionMethod = options.connectionMethod || 
+    ((localStorage.getItem('pos_printer_method') as ConnectionMethod) || 'LOCAL_RELAY');
+  const printerName = options.printerName || localStorage.getItem('pos_printer_name') || 'XP-80';
+  const cutPaper = options.cutPaper ?? (localStorage.getItem('pos_printer_cut_paper') !== 'false');
+  const openDrawer = options.openDrawer ?? (localStorage.getItem('pos_printer_open_drawer') === 'true');
+
+  try {
+    const blob = await reportService.getSaleBillPdf({
+      voucherNo,
+      layout,
+      isDuplicate: options.isDuplicate
+    });
+
+    if (method === 'LOCAL_RELAY') {
+      try {
+        const base64 = await blobToBase64(blob);
+        const bridgeUrl = (localStorage.getItem('pos_printer_bridge_url') || 'http://localhost:5000') + '/print-pdf';
+        const res = await fetch(bridgeUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            printerName,
+            pdfBase64: base64,
+            isThermal: layout === 'Thermal80mm',
+            cutPaper,
+            openDrawer
+          })
+        });
+
+        if (res.ok) {
+          message.success(`Receipt printed to ${printerName}`);
+          return true;
+        }
+      } catch (bridgeErr) {
+        console.warn('Printer bridge PDF spool failed:', bridgeErr);
+      }
+
+      // When configured for printer bridge, do not open a new tab on print failure.
+      // Return false so caller falls back to ESC/POS direct printing.
+      return false;
+    }
+
+    // Only open vector PDF in browser window if explicitly requested as fallback
+    if (options.fallbackToBrowser) {
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (win) {
+        win.focus();
+      }
+      return true;
+    }
+
+    return false;
+  } catch (err: any) {
+    console.warn('QuestPDF receipt print failed:', err);
+    return false;
+  }
+};
+
 /**
  * Print via silent Direct Thermal Printer (Bridge / WebUSB).
- * If bridge fails or is offline, automatically falls back to browser print preview.
+ * Prefers server-side QuestPDF when voucher is saved, with fallback to ESC/POS on printer bridge.
  */
 export const printSaleReceiptDirect = async (
   data: SaleReceiptData,
@@ -166,14 +250,33 @@ export const printSaleReceiptDirect = async (
   const cutPaper = options.cutPaper ?? (localStorage.getItem('pos_printer_cut_paper') !== 'false');
   const openDrawer = options.openDrawer ?? (localStorage.getItem('pos_printer_open_drawer') === 'true');
 
+  // If we have a saved voucher on the server, attempt QuestPDF high-fidelity printing first
+  if (data.voucherNo && !data.voucherNo.startsWith('TEMP-') && navigator.onLine) {
+    const layout = options.format === 'a4' ? 'A4Sheet' : (options.format === 'a5' ? 'A5Sheet' : 'Thermal80mm');
+    try {
+      const pdfPrinted = await printSaleReceiptPdf(data.voucherNo, layout, {
+        ...options,
+        connectionMethod: method,
+        printerName,
+        cutPaper,
+        openDrawer,
+        isDuplicate: data.isDuplicate,
+        fallbackToBrowser: false
+      });
+      if (pdfPrinted) return true;
+    } catch {
+      // Fall through to ESC/POS direct print
+    }
+  }
+
   try {
     const lines = generateSaleReceiptEscPosLines(data);
     await printDirect(lines, method, { printerName, cutPaper, openDrawer });
     message.success(`Receipt printed to ${printerName}`);
     return true;
-  } catch (err) {
-    console.warn('Direct thermal print failed, opening browser print dialog:', err);
-    printSaleReceiptViaBrowser(data, options.format || 'thermal');
+  } catch (err: any) {
+    console.error('Direct thermal print to printer bridge failed:', err);
+    message.error(err?.message || 'Failed to print receipt to printer bridge. Please check that printer bridge is running.');
     return false;
   }
 };
@@ -267,11 +370,11 @@ export const printSaleReceiptViaBrowser = (
               <td>
                 <div class="bold">${line.itemTitle}</div>
                 ${line.imei ? `<div class="item-imei">SN: ${line.imei}</div>` : ''}
-                ${line.discount && line.discount > 0 ? `<div class="item-imei">Disc: Rs. ${line.discount.toFixed(2)}</div>` : ''}
+                ${line.discount && line.discount > 0 ? `<div class="item-imei">Disc: Rs. ${Math.round(line.discount).toLocaleString()}</div>` : ''}
               </td>
               <td class="text-right">${line.qty} ${line.unit || ''}</td>
-              <td class="text-right">${line.rate.toFixed(2)}</td>
-              <td class="text-right bold">${line.amount.toFixed(2)}</td>
+              <td class="text-right">${Math.round(line.rate).toLocaleString()}</td>
+              <td class="text-right bold">${Math.round(line.amount).toLocaleString()}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -282,32 +385,32 @@ export const printSaleReceiptViaBrowser = (
       <table class="totals-table">
         <tr>
           <td>Gross Total:</td>
-          <td class="text-right">Rs. ${data.grossTotal.toFixed(2)}</td>
+          <td class="text-right">Rs. ${Math.round(data.grossTotal).toLocaleString()}</td>
         </tr>
         ${data.totalDiscount > 0 ? `
           <tr>
             <td>Discount:</td>
-            <td class="text-right">-Rs. ${data.totalDiscount.toFixed(2)}</td>
+            <td class="text-right">-Rs. ${Math.round(data.totalDiscount).toLocaleString()}</td>
           </tr>
         ` : ''}
         <tr class="grand-total">
           <td style="padding: 4px 0;">Net Amount:</td>
-          <td class="text-right" style="padding: 4px 0;">Rs. ${data.netAmount.toFixed(2)}</td>
+          <td class="text-right" style="padding: 4px 0;">Rs. ${Math.round(data.netAmount).toLocaleString()}</td>
         </tr>
         <tr>
           <td>Cash Received:</td>
-          <td class="text-right">Rs. ${data.cashReceived.toFixed(2)}</td>
+          <td class="text-right">Rs. ${Math.round(data.cashReceived).toLocaleString()}</td>
         </tr>
         ${data.cashBack > 0 ? `
           <tr>
             <td>Change Return:</td>
-            <td class="text-right">Rs. ${data.cashBack.toFixed(2)}</td>
+            <td class="text-right">Rs. ${Math.round(data.cashBack).toLocaleString()}</td>
           </tr>
         ` : ''}
         ${data.balance !== undefined && data.balance > 0 ? `
           <tr style="font-weight: bold; color: #b91c1c;">
             <td>Remaining Due:</td>
-            <td class="text-right">Rs. ${data.balance.toFixed(2)}</td>
+            <td class="text-right">Rs. ${Math.round(data.balance).toLocaleString()}</td>
           </tr>
         ` : ''}
       </table>
