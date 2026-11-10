@@ -12,6 +12,11 @@ import { bomService, type BomCreateOrUpdateRequest } from '../../services/bomSer
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { getItemSelectProps } from '../../utils/itemSelectOptions';
 import { unitService, type UnitDto } from '../../services/unitService';
+import { 
+  getSelectablePrimaryUnits, 
+  toBasePrimaryQty, 
+  resolveDisplayQtyAndUnit 
+} from '../../utils/unitConversion';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -22,6 +27,9 @@ interface IngredientRow {
   seq: number;
   rawItemId: string;
   primaryQty: number;
+  displayPrimaryQty?: number;
+  selectedUnitId?: string;
+  selectedUnitFactor?: number;
   secQty: number;
   qty: number;
   unitId?: string;
@@ -53,13 +61,18 @@ export const BomForm: React.FC = () => {
   const [outputQty, setOutputQty] = useState<number>(1);
   const watchedUnitId = Form.useWatch('unitId', form);
 
-  const getUnitTitle = useCallback((code?: string) => {
+  const getUnitTitle = useCallback((code?: string, preferShort = true) => {
     if (!code) return '';
     const matched = units.find(u => 
       u.code?.toLowerCase() === code?.toLowerCase() || 
       u.title?.toLowerCase() === code?.toLowerCase()
     );
-    if (matched) return matched.title;
+    if (matched) {
+      if (preferShort && matched.shortTitle && matched.shortTitle.trim()) {
+        return matched.shortTitle.trim();
+      }
+      return matched.title;
+    }
     return isNaN(Number(code)) ? code : '';
   }, [units]);
 
@@ -128,13 +141,18 @@ export const BomForm: React.FC = () => {
         const secUnit = item?.secondaryUnit;
         const hasSec = Boolean(secUnit && secUnit !== priUnit && pSize > 1);
         const secQty = hasSec && pSize > 0 ? Math.floor(l.qty / pSize) : 0;
-        const primaryQty = hasSec && pSize > 0 ? Math.round((l.qty - (secQty * pSize)) * 1000) / 1000 : l.qty;
+        const rawBasePrimaryQty = hasSec && pSize > 0 ? Math.round((l.qty - (secQty * pSize)) * 10000) / 10000 : l.qty;
+
+        const resolved = resolveDisplayQtyAndUnit(rawBasePrimaryQty, item, units as any);
 
         return {
           key: `row-${index}`,
           seq: l.seq,
           rawItemId: l.rawItemId,
-          primaryQty,
+          primaryQty: rawBasePrimaryQty,
+          displayPrimaryQty: resolved.displayQty,
+          selectedUnitId: resolved.selectedUnitId,
+          selectedUnitFactor: resolved.factor,
           secQty,
           qty: l.qty,
           unitId: l.unitId || item?.defaultUnit || item?.primaryUnit,
@@ -152,7 +170,7 @@ export const BomForm: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [id, isEdit, form]);
+  }, [id, isEdit, form, units]);
 
   // Load items and units
   useEffect(() => {
@@ -187,18 +205,49 @@ export const BomForm: React.FC = () => {
     const pSize = Number(found?.qtyInPack || 0);
     const rate = found ? (found.priRate || found.opnRate || 0) : 0;
 
+    const selectable = getSelectablePrimaryUnits(found, units as any);
+    const primaryOpt = selectable[0];
+    const selectedUnitId = primaryOpt?.unitId || unitId;
+    const selectedUnitFactor = primaryOpt?.factor || 1;
+
     setIngredients(prev => prev.map(row => {
       if (row.key === key) {
         const updated: IngredientRow = {
           ...row,
           rawItemId,
           primaryQty: 1,
+          displayPrimaryQty: 1,
+          selectedUnitId,
+          selectedUnitFactor,
           secQty: 0,
           qty: 1,
           rate,
           unitId,
           secUnit: found?.secondaryUnit,
           qtyInPack: pSize
+        };
+        return updateRowCost(updated);
+      }
+      return row;
+    }));
+  };
+
+  const handleRowUnitChange = (key: string, newUnitId: string) => {
+    setIngredients(prev => prev.map(row => {
+      if (row.key === key) {
+        const item = items.find(i => i.id === row.rawItemId);
+        const selectable = getSelectablePrimaryUnits(item, units as any);
+        const newOpt = selectable.find(u => u.unitId === newUnitId);
+        const newFactor = newOpt?.factor || 1;
+
+        const currentBasePrimaryQty = row.primaryQty ?? 0;
+        const newDisplayQty = Number((currentBasePrimaryQty * newFactor).toFixed(4));
+
+        const updated: IngredientRow = {
+          ...row,
+          selectedUnitId: newUnitId,
+          selectedUnitFactor: newFactor,
+          displayPrimaryQty: newDisplayQty
         };
         return updateRowCost(updated);
       }
@@ -215,13 +264,16 @@ export const BomForm: React.FC = () => {
         const secCode = item?.secondaryUnit || row.secUnit;
         const hasSec = Boolean(secCode && secCode !== priCode && pSize > 1);
 
+        const factor = row.selectedUnitFactor || 1;
         let primaryQty = row.primaryQty ?? 0;
+        let displayPrimaryQty = row.displayPrimaryQty ?? (primaryQty * factor);
         let secQty = row.secQty ?? 0;
         let qty = row.qty ?? 0;
 
         if (field === 'primaryQty') {
-          primaryQty = val;
-          qty = hasSec && pSize > 0 ? (val + (secQty * pSize)) : val;
+          displayPrimaryQty = val;
+          primaryQty = toBasePrimaryQty(val, factor);
+          qty = hasSec && pSize > 0 ? (primaryQty + (secQty * pSize)) : primaryQty;
         } else if (field === 'secQty') {
           secQty = val;
           qty = hasSec && pSize > 0 ? (primaryQty + (val * pSize)) : (primaryQty || val);
@@ -229,16 +281,18 @@ export const BomForm: React.FC = () => {
           qty = val;
           if (hasSec && pSize > 0) {
             secQty = Math.floor(val / pSize);
-            primaryQty = Math.round((val - (secQty * pSize)) * 1000) / 1000;
+            primaryQty = Math.round((val - (secQty * pSize)) * 10000) / 10000;
           } else {
             primaryQty = val;
             secQty = 0;
           }
+          displayPrimaryQty = Number((primaryQty * factor).toFixed(4));
         }
 
         const updated = {
           ...row,
           primaryQty,
+          displayPrimaryQty,
           secQty,
           qty
         };
@@ -265,6 +319,8 @@ export const BomForm: React.FC = () => {
       seq: newSeq,
       rawItemId: '',
       primaryQty: 1,
+      displayPrimaryQty: 1,
+      selectedUnitFactor: 1,
       secQty: 0,
       qty: 1,
       scrapPercentage: 0,
@@ -341,13 +397,13 @@ export const BomForm: React.FC = () => {
       title: '#',
       dataIndex: 'seq',
       key: 'seq',
-      width: 50,
+      width: 45,
       render: (_: any, __: any, index: number) => index + 1
     },
     {
       title: 'Raw Material / Ingredient',
       key: 'rawItemId',
-      width: 290,
+      width: 250,
       render: (_: any, record: IngredientRow) => (
         <Select
           showSearch
@@ -362,19 +418,48 @@ export const BomForm: React.FC = () => {
     {
       title: 'Primary Qty',
       key: 'primaryQty',
-      width: 140,
+      width: 175,
       render: (_: any, record: IngredientRow) => {
         const item = items.find(i => i.id === record.rawItemId);
+        const selectableUnits = getSelectablePrimaryUnits(item, units as any);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
         const priUnit = getUnitTitle(priCode);
+
+        const currentUnitId = record.selectedUnitId || selectableUnits[0]?.unitId || priCode;
+        const displayValue = record.displayPrimaryQty !== undefined 
+          ? record.displayPrimaryQty 
+          : (record.selectedUnitFactor && record.selectedUnitFactor > 1 
+              ? Number((record.primaryQty * record.selectedUnitFactor).toFixed(4)) 
+              : record.primaryQty);
+
         return (
           <InputNumber
             min={0}
-            step={1}
-            value={record.primaryQty}
-            addonAfter={priUnit ? <span style={{ fontSize: '11px' }}>{priUnit}</span> : undefined}
+            step={record.selectedUnitFactor && record.selectedUnitFactor > 1 ? 1 : 0.01}
+            controls={false}
+            value={displayValue}
+            placeholder="0"
             onChange={(val) => handleRowQtyChange(record.key, 'primaryQty', val || 0)}
             style={{ width: '100%' }}
+            addonAfter={
+              selectableUnits.length > 1 ? (
+                <Select
+                  value={currentUnitId}
+                  onChange={(uId) => handleRowUnitChange(record.key, uId)}
+                  style={{ minWidth: 62 }}
+                  popupMatchSelectWidth={false}
+                  size="small"
+                >
+                  {selectableUnits.map(u => (
+                    <Option key={u.unitId} value={u.unitId}>
+                      {u.label}
+                    </Option>
+                  ))}
+                </Select>
+              ) : (
+                priUnit ? <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{priUnit}</span> : undefined
+              )
+            }
           />
         );
       }
@@ -382,7 +467,7 @@ export const BomForm: React.FC = () => {
     {
       title: 'Sec Qty',
       key: 'secQty',
-      width: 140,
+      width: 130,
       render: (_: any, record: IngredientRow) => {
         const item = items.find(i => i.id === record.rawItemId);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
@@ -394,10 +479,11 @@ export const BomForm: React.FC = () => {
           <InputNumber
             min={0}
             step={1}
+            controls={false}
             disabled={!hasSecUnit}
             value={hasSecUnit ? record.secQty : undefined}
             placeholder={hasSecUnit ? '0' : '—'}
-            addonAfter={secUnit ? <span style={{ fontSize: '11px' }}>{secUnit}</span> : undefined}
+            addonAfter={secUnit ? <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{secUnit}</span> : undefined}
             onChange={(val) => handleRowQtyChange(record.key, 'secQty', val || 0)}
             style={{ width: '100%' }}
           />
@@ -407,7 +493,7 @@ export const BomForm: React.FC = () => {
     {
       title: 'Total Qty',
       key: 'qty',
-      width: 140,
+      width: 150,
       render: (_: any, record: IngredientRow) => {
         const item = items.find(i => i.id === record.rawItemId);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
@@ -416,8 +502,10 @@ export const BomForm: React.FC = () => {
           <InputNumber
             min={0.0001}
             step={0.1}
+            controls={false}
             value={record.qty}
-            addonAfter={priUnit ? <span style={{ fontSize: '11px' }}>{priUnit}</span> : undefined}
+            placeholder="0"
+            addonAfter={priUnit ? <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{priUnit}</span> : undefined}
             onChange={(val) => handleRowQtyChange(record.key, 'qty', val || 0)}
             style={{ width: '100%' }}
           />
@@ -427,11 +515,12 @@ export const BomForm: React.FC = () => {
     {
       title: 'Scrap / Wastage %',
       key: 'scrapPercentage',
-      width: 130,
+      width: 110,
       render: (_: any, record: IngredientRow) => (
         <InputNumber
           min={0}
           max={100}
+          controls={false}
           value={record.scrapPercentage}
           formatter={v => `${v}%`}
           parser={v => Number(v?.replace('%', '') || 0)}
@@ -443,11 +532,12 @@ export const BomForm: React.FC = () => {
     {
       title: 'Est. Rate',
       key: 'rate',
-      width: 120,
+      width: 110,
       align: 'right' as const,
       render: (_: any, record: IngredientRow) => (
         <InputNumber
           min={0}
+          controls={false}
           value={record.rate}
           onChange={(val) => handleRowChange(record.key, 'rate', val || 0)}
           style={{ width: '100%' }}
@@ -457,7 +547,7 @@ export const BomForm: React.FC = () => {
     {
       title: 'Total Cost',
       key: 'totalCost',
-      width: 130,
+      width: 120,
       align: 'right' as const,
       render: (_: any, record: IngredientRow) => (
         <Text strong>{record.totalCost.toFixed(2)}</Text>
@@ -466,7 +556,7 @@ export const BomForm: React.FC = () => {
     {
       title: '',
       key: 'action',
-      width: 50,
+      width: 45,
       render: (_: any, record: IngredientRow) => (
         <Popconfirm
           title="Remove ingredient?"
@@ -508,7 +598,7 @@ export const BomForm: React.FC = () => {
 
         <Row gutter={16}>
           {/* Main Info */}
-          <Col span={16}>
+          <Col xs={24} lg={17} xl={18}>
             <Card title="Product & Formula Specification" loading={loading} style={{ marginBottom: 16 }}>
               <Row gutter={16}>
                 <Col span={8}>
@@ -563,6 +653,7 @@ export const BomForm: React.FC = () => {
                     <InputNumber
                       min={0.0001}
                       step={1}
+                      controls={false}
                       style={{ width: '100%' }}
                       onChange={(v) => setOutputQty(v || 1)}
                     />
@@ -642,18 +733,19 @@ export const BomForm: React.FC = () => {
                 pagination={false}
                 bordered
                 size="small"
+                scroll={{ x: 1040 }}
                 locale={{ emptyText: 'No ingredients added yet. Click "Add Ingredient" above.' }}
               />
             </Card>
           </Col>
 
           {/* Costing & Overheads Side Card */}
-          <Col span={8}>
+          <Col xs={24} lg={7} xl={6}>
             <Card
               title={
                 <Space>
                   <CalculatorOutlined />
-                  <span>Cost Breakdown & Absorption</span>
+                  <span style={{ fontSize: 15 }}>Cost Breakdown & Absorption</span>
                 </Space>
               }
               loading={loading}
@@ -663,6 +755,7 @@ export const BomForm: React.FC = () => {
                 <InputNumber
                   min={0}
                   step={10}
+                  controls={false}
                   style={{ width: '100%' }}
                   onChange={(v) => setLaborCost(v || 0)}
                   prefix="Rs."
@@ -673,6 +766,7 @@ export const BomForm: React.FC = () => {
                 <InputNumber
                   min={0}
                   step={10}
+                  controls={false}
                   style={{ width: '100%' }}
                   onChange={(v) => setOverheadCost(v || 0)}
                   prefix="Rs."
@@ -683,21 +777,22 @@ export const BomForm: React.FC = () => {
                 <InputNumber
                   min={0}
                   step={10}
+                  controls={false}
                   style={{ width: '100%' }}
                   onChange={(v) => setPackagingCost(v || 0)}
                   prefix="Rs."
                 />
               </Form.Item>
 
-              <Divider style={{ margin: '16px 0' }} />
+              <Divider style={{ margin: '14px 0' }} />
 
-              <Row gutter={[16, 16]}>
+              <Row gutter={[12, 12]}>
                 <Col span={12}>
                   <Statistic
                     title="Raw Materials"
                     value={totalMaterialCost}
                     precision={2}
-                    valueStyle={{ fontSize: 16 }}
+                    valueStyle={{ fontSize: 15 }}
                   />
                 </Col>
                 <Col span={12}>
@@ -705,7 +800,7 @@ export const BomForm: React.FC = () => {
                     title="Total Overheads"
                     value={totalOverheadCost}
                     precision={2}
-                    valueStyle={{ fontSize: 16 }}
+                    valueStyle={{ fontSize: 15 }}
                   />
                 </Col>
                 <Col span={24}>
@@ -714,18 +809,18 @@ export const BomForm: React.FC = () => {
                       title="Estimated Batch Cost"
                       value={grandTotalCost}
                       precision={2}
-                      valueStyle={{ color: '#1677ff', fontSize: 20, fontWeight: 'bold' }}
+                      valueStyle={{ color: '#1677ff', fontSize: 18, fontWeight: 'bold' }}
                     />
-                    <div style={{ marginTop: 8 }}>
+                    <div style={{ marginTop: 6 }}>
                       <Text type="secondary">Yield: </Text>
-                      <Text strong>{outputQty} {getUnitTitle(watchedUnitId) || 'units'}</Text>
+                      <Text strong>{outputQty} {getUnitTitle(watchedUnitId, false) || 'units'}</Text>
                     </div>
                     <Divider style={{ margin: '8px 0' }} />
                     <Statistic
-                      title={`Est. Cost per ${getUnitTitle(watchedUnitId) || 'Unit'}`}
+                      title={`Est. Cost per ${getUnitTitle(watchedUnitId, false) || 'Unit'}`}
                       value={unitProductionCost}
                       precision={2}
-                      valueStyle={{ color: '#52c41a', fontSize: 22, fontWeight: 'bold' }}
+                      valueStyle={{ color: '#52c41a', fontSize: 20, fontWeight: 'bold' }}
                     />
                   </Card>
                 </Col>

@@ -22,6 +22,11 @@ import { inventoryService, type Item } from '../../services/inventoryService';
 import { getItemSelectProps } from '../../utils/itemSelectOptions';
 import { unitService, type UnitDto } from '../../services/unitService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
+import { 
+  getSelectablePrimaryUnits, 
+  toBasePrimaryQty, 
+  resolveDisplayQtyAndUnit 
+} from '../../utils/unitConversion';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -33,6 +38,9 @@ interface ProductionLineRow {
   rawItemTitle?: string;
   plannedQty: number;
   primaryQty: number;
+  displayPrimaryQty?: number;
+  selectedUnitId?: string;
+  selectedUnitFactor?: number;
   secQty: number;
   actualQty: number;
   unitId?: string;
@@ -68,13 +76,18 @@ export const ManufacturingForm: React.FC = () => {
   const [currentStatus, setCurrentStatus] = useState<ProductionStatus>(ProductionStatusEnum.Completed);
   const watchedUnitId = Form.useWatch('unitId', form);
 
-  const getUnitTitle = useCallback((code?: string) => {
+  const getUnitTitle = useCallback((code?: string, preferShort = true) => {
     if (!code) return '';
     const matched = units.find(u => 
       u.code?.toLowerCase() === code?.toLowerCase() || 
       u.title?.toLowerCase() === code?.toLowerCase()
     );
-    if (matched) return matched.title;
+    if (matched) {
+      if (preferShort && matched.shortTitle && matched.shortTitle.trim()) {
+        return matched.shortTitle.trim();
+      }
+      return matched.title;
+    }
     return isNaN(Number(code)) ? code : '';
   }, [units]);
 
@@ -153,7 +166,9 @@ export const ManufacturingForm: React.FC = () => {
         const secUnit = item?.secondaryUnit;
         const hasSec = Boolean(secUnit && secUnit !== priUnit && pSize > 1);
         const secQty = hasSec && pSize > 0 ? Math.floor(l.actualQty / pSize) : 0;
-        const primaryQty = hasSec && pSize > 0 ? Math.round((l.actualQty - (secQty * pSize)) * 1000) / 1000 : l.actualQty;
+        const rawBasePrimaryQty = hasSec && pSize > 0 ? Math.round((l.actualQty - (secQty * pSize)) * 10000) / 10000 : l.actualQty;
+
+        const resolved = resolveDisplayQtyAndUnit(rawBasePrimaryQty, item, units as any);
 
         return {
           key: `row-${index}`,
@@ -161,7 +176,10 @@ export const ManufacturingForm: React.FC = () => {
           rawItemId: l.rawItemId,
           rawItemTitle: l.rawItemTitle,
           plannedQty: l.plannedQty,
-          primaryQty,
+          primaryQty: rawBasePrimaryQty,
+          displayPrimaryQty: resolved.displayQty,
+          selectedUnitId: resolved.selectedUnitId,
+          selectedUnitFactor: resolved.factor,
           secQty,
           actualQty: l.actualQty,
           unitId: l.unitId || item?.defaultUnit || item?.primaryUnit,
@@ -179,7 +197,7 @@ export const ManufacturingForm: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [isEdit, voucherNo, form]);
+  }, [isEdit, voucherNo, form, units]);
 
   // Lookups
   useEffect(() => {
@@ -254,7 +272,9 @@ export const ManufacturingForm: React.FC = () => {
         const secUnit = item?.secondaryUnit;
         const hasSec = Boolean(secUnit && secUnit !== priUnit && pSize > 1);
         const secQty = hasSec && pSize > 0 ? Math.floor(l.requiredQty / pSize) : 0;
-        const primaryQty = hasSec && pSize > 0 ? Math.round((l.requiredQty - (secQty * pSize)) * 1000) / 1000 : l.requiredQty;
+        const rawBasePrimaryQty = hasSec && pSize > 0 ? Math.round((l.requiredQty - (secQty * pSize)) * 10000) / 10000 : l.requiredQty;
+
+        const resolved = resolveDisplayQtyAndUnit(rawBasePrimaryQty, item, units as any);
 
         return {
           key: `est-${index}`,
@@ -262,7 +282,10 @@ export const ManufacturingForm: React.FC = () => {
           rawItemId: l.rawItemId,
           rawItemTitle: l.rawItemTitle,
           plannedQty: l.requiredQty,
-          primaryQty,
+          primaryQty: rawBasePrimaryQty,
+          displayPrimaryQty: resolved.displayQty,
+          selectedUnitId: resolved.selectedUnitId,
+          selectedUnitFactor: resolved.factor,
           secQty,
           actualQty: l.requiredQty,
           unitId: l.unitId || item?.defaultUnit || item?.primaryUnit,
@@ -293,6 +316,28 @@ export const ManufacturingForm: React.FC = () => {
     }
   };
 
+  const handleRowUnitChange = (key: string, newUnitId: string) => {
+    setLines(prev => prev.map(row => {
+      if (row.key === key) {
+        const item = items.find(i => i.id === row.rawItemId);
+        const selectable = getSelectablePrimaryUnits(item, units as any);
+        const newOpt = selectable.find(u => u.unitId === newUnitId);
+        const newFactor = newOpt?.factor || 1;
+
+        const currentBasePrimaryQty = row.primaryQty ?? 0;
+        const newDisplayQty = Number((currentBasePrimaryQty * newFactor).toFixed(4));
+
+        return {
+          ...row,
+          selectedUnitId: newUnitId,
+          selectedUnitFactor: newFactor,
+          displayPrimaryQty: newDisplayQty
+        };
+      }
+      return row;
+    }));
+  };
+
   const handleRowQtyChange = (key: string, field: 'primaryQty' | 'secQty' | 'actualQty', val: number) => {
     setLines(prev => prev.map(row => {
       if (row.key === key) {
@@ -302,13 +347,16 @@ export const ManufacturingForm: React.FC = () => {
         const secCode = item?.secondaryUnit || row.secUnit;
         const hasSec = Boolean(secCode && secCode !== priCode && pSize > 1);
 
+        const factor = row.selectedUnitFactor || 1;
         let primaryQty = row.primaryQty ?? 0;
+        let displayPrimaryQty = row.displayPrimaryQty ?? (primaryQty * factor);
         let secQty = row.secQty ?? 0;
         let actualQty = row.actualQty ?? 0;
 
         if (field === 'primaryQty') {
-          primaryQty = val;
-          actualQty = hasSec && pSize > 0 ? (val + (secQty * pSize)) : val;
+          displayPrimaryQty = val;
+          primaryQty = toBasePrimaryQty(val, factor);
+          actualQty = hasSec && pSize > 0 ? (primaryQty + (secQty * pSize)) : primaryQty;
         } else if (field === 'secQty') {
           secQty = val;
           actualQty = hasSec && pSize > 0 ? (primaryQty + (val * pSize)) : (primaryQty || val);
@@ -316,17 +364,19 @@ export const ManufacturingForm: React.FC = () => {
           actualQty = val;
           if (hasSec && pSize > 0) {
             secQty = Math.floor(val / pSize);
-            primaryQty = Math.round((val - (secQty * pSize)) * 1000) / 1000;
+            primaryQty = Math.round((val - (secQty * pSize)) * 10000) / 10000;
           } else {
             primaryQty = val;
             secQty = 0;
           }
+          displayPrimaryQty = Number((primaryQty * factor).toFixed(4));
         }
 
         const totalCost = Math.round(actualQty * (row.unitCost || 0) * 100) / 100;
         return {
           ...row,
           primaryQty,
+          displayPrimaryQty,
           secQty,
           actualQty,
           totalCost
@@ -501,19 +551,48 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Primary Qty',
       key: 'primaryQty',
-      width: 140,
+      width: 175,
       render: (_: any, record: ProductionLineRow) => {
         const item = items.find(i => i.id === record.rawItemId);
+        const selectableUnits = getSelectablePrimaryUnits(item, units as any);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
         const priUnit = getUnitTitle(priCode);
+
+        const currentUnitId = record.selectedUnitId || selectableUnits[0]?.unitId || priCode;
+        const displayValue = record.displayPrimaryQty !== undefined 
+          ? record.displayPrimaryQty 
+          : (record.selectedUnitFactor && record.selectedUnitFactor > 1 
+              ? Number((record.primaryQty * record.selectedUnitFactor).toFixed(4)) 
+              : record.primaryQty);
+
         return (
           <InputNumber
             min={0}
-            step={1}
-            value={record.primaryQty}
-            addonAfter={priUnit ? <span style={{ fontSize: '11px' }}>{priUnit}</span> : undefined}
+            step={record.selectedUnitFactor && record.selectedUnitFactor > 1 ? 1 : 0.01}
+            controls={false}
+            value={displayValue}
+            placeholder="0"
             onChange={(val) => handleRowQtyChange(record.key, 'primaryQty', val || 0)}
             style={{ width: '100%' }}
+            addonAfter={
+              selectableUnits.length > 1 ? (
+                <Select
+                  value={currentUnitId}
+                  onChange={(uId) => handleRowUnitChange(record.key, uId)}
+                  style={{ minWidth: 62 }}
+                  popupMatchSelectWidth={false}
+                  size="small"
+                >
+                  {selectableUnits.map(u => (
+                    <Option key={u.unitId} value={u.unitId}>
+                      {u.label}
+                    </Option>
+                  ))}
+                </Select>
+              ) : (
+                priUnit ? <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{priUnit}</span> : undefined
+              )
+            }
           />
         );
       }
@@ -521,7 +600,7 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Sec Qty',
       key: 'secQty',
-      width: 140,
+      width: 130,
       render: (_: any, record: ProductionLineRow) => {
         const item = items.find(i => i.id === record.rawItemId);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
@@ -533,10 +612,11 @@ export const ManufacturingForm: React.FC = () => {
           <InputNumber
             min={0}
             step={1}
+            controls={false}
             disabled={!hasSecUnit}
             value={hasSecUnit ? record.secQty : undefined}
             placeholder={hasSecUnit ? '0' : '—'}
-            addonAfter={secUnit ? <span style={{ fontSize: '11px' }}>{secUnit}</span> : undefined}
+            addonAfter={secUnit ? <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{secUnit}</span> : undefined}
             onChange={(val) => handleRowQtyChange(record.key, 'secQty', val || 0)}
             style={{ width: '100%' }}
           />
@@ -546,7 +626,7 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Actual Consumed',
       key: 'actualQty',
-      width: 140,
+      width: 150,
       render: (_: any, record: ProductionLineRow) => {
         const item = items.find(i => i.id === record.rawItemId);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
@@ -554,8 +634,11 @@ export const ManufacturingForm: React.FC = () => {
         return (
           <InputNumber
             min={0.0001}
+            step={0.1}
+            controls={false}
             value={record.actualQty}
-            addonAfter={priUnit ? <span style={{ fontSize: '11px' }}>{priUnit}</span> : undefined}
+            placeholder="0"
+            addonAfter={priUnit ? <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{priUnit}</span> : undefined}
             onChange={(val) => handleRowQtyChange(record.key, 'actualQty', val || 0)}
             style={{ width: '100%' }}
           />
@@ -580,11 +663,12 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Unit Cost',
       key: 'unitCost',
-      width: 125,
+      width: 115,
       align: 'right' as const,
       render: (_: any, record: ProductionLineRow) => (
         <InputNumber
           min={0}
+          controls={false}
           value={record.unitCost}
           onChange={(val) => handleRowChange(record.key, 'unitCost', val || 0)}
           style={{ width: '100%' }}
@@ -594,7 +678,7 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: 'Total Cost',
       key: 'totalCost',
-      width: 125,
+      width: 120,
       align: 'right' as const,
       render: (_: any, record: ProductionLineRow) => (
         <Text strong>{(record.totalCost || 0).toFixed(2)}</Text>
@@ -603,7 +687,7 @@ export const ManufacturingForm: React.FC = () => {
     {
       title: '',
       key: 'action',
-      width: 50,
+      width: 45,
       render: (_: any, record: ProductionLineRow) => (
         <Popconfirm
           title="Remove component?"
@@ -682,7 +766,7 @@ export const ManufacturingForm: React.FC = () => {
 
         <Row gutter={16}>
           {/* Main Form Fields */}
-          <Col span={16}>
+          <Col xs={24} lg={17} xl={18}>
             <Card title="Production Specification" loading={loading} style={{ marginBottom: 16 }}>
               <Row gutter={16}>
                 <Col span={6}>
@@ -857,13 +941,14 @@ export const ManufacturingForm: React.FC = () => {
                 pagination={false}
                 bordered
                 size="small"
+                scroll={{ x: 1060 }}
                 locale={{ emptyText: 'No materials added. Select a finished product and recipe above.' }}
               />
             </Card>
           </Col>
 
           {/* Overheads & Unit Cost Side Panel */}
-          <Col span={8}>
+          <Col xs={24} lg={7} xl={6}>
             <Card
               title="Batch Costs & Valuation"
               loading={loading}
@@ -873,6 +958,7 @@ export const ManufacturingForm: React.FC = () => {
                 <InputNumber
                   min={0}
                   step={10}
+                  controls={false}
                   style={{ width: '100%' }}
                   onChange={(v) => setLaborCost(v || 0)}
                   prefix="Rs."
@@ -883,6 +969,7 @@ export const ManufacturingForm: React.FC = () => {
                 <InputNumber
                   min={0}
                   step={10}
+                  controls={false}
                   style={{ width: '100%' }}
                   onChange={(v) => setOverheadCost(v || 0)}
                   prefix="Rs."
@@ -893,6 +980,7 @@ export const ManufacturingForm: React.FC = () => {
                 <InputNumber
                   min={0}
                   step={10}
+                  controls={false}
                   style={{ width: '100%' }}
                   onChange={(v) => setPackagingCost(v || 0)}
                   prefix="Rs."
