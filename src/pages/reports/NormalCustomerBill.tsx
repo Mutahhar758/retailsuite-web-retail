@@ -74,10 +74,10 @@ export const NormalCustomerBill: React.FC = () => {
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
   const currentOrgName = currentOrg?.name || 'Retail Suite';
 
-  const [layout, setLayout] = useState<'A4' | 'Thermal'>('A4');
-  const [layoutUserSelected, setLayoutUserSelected] = useState<boolean>(false);
-  const [qrEnabled, setQrEnabled] = useState<boolean>(true);
   const { settings, initialized, getSetting, fetchSettings } = useSettingsStore();
+  const defaultFmt = getSetting(BILL_DEFAULT_FORMAT_KEY, 'A4');
+  const layout: 'A4' | 'Thermal' = defaultFmt.toLowerCase().includes('thermal') ? 'Thermal' : 'A4';
+  const [qrEnabled, setQrEnabled] = useState<boolean>(true);
 
   const [bridgePrinting, setBridgePrinting] = useState<boolean>(false);
   const [bulkBridgePrinting, setBulkBridgePrinting] = useState<boolean>(false);
@@ -86,18 +86,6 @@ export const NormalCustomerBill: React.FC = () => {
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
-
-  useEffect(() => {
-    if (!layoutUserSelected) {
-      const defaultFmt = getSetting(BILL_DEFAULT_FORMAT_KEY, '');
-      if (defaultFmt) {
-        const isThermal = defaultFmt.toLowerCase().includes('thermal');
-        const resolved = isThermal ? 'Thermal' : 'A4';
-        setLayout(resolved);
-        form.setFieldsValue({ layout: resolved });
-      }
-    }
-  }, [initialized, settings, getSetting, layoutUserSelected, form]);
 
   useEffect(() => {
     if (!initialized) return;
@@ -253,17 +241,6 @@ export const NormalCustomerBill: React.FC = () => {
       message.error(err.message || 'Failed to generate batch customer bills');
     } finally {
       setPdfLoading(false);
-    }
-  };
-
-  const handleLayoutChange = (newLayout: 'A4' | 'Thermal') => {
-    setLayoutUserSelected(true);
-    setLayout(newLayout);
-    form.setFieldsValue({ layout: newLayout });
-    if (mode === 'single' && form.getFieldValue('account')) {
-      fetchBillDataAndPdf({ ...form.getFieldsValue(), layout: newLayout });
-    } else if (mode === 'batch' && selectedBulkAccounts.length > 0) {
-      handleGenerateBatchBills();
     }
   };
 
@@ -724,24 +701,6 @@ export const NormalCustomerBill: React.FC = () => {
             </Radio.Group>
           </Form.Item>
 
-          {/* Layout Segmented */}
-          <Form.Item
-            label={<span style={{ fontSize: 12, fontWeight: 500 }}>Print Layout Format</span>}
-            name="layout"
-            style={{ marginBottom: 14 }}
-          >
-            <Segmented
-              block
-              value={layout}
-              onChange={(val) => handleLayoutChange(val as 'A4' | 'Thermal')}
-              options={[
-                { label: 'A4 Sheet', value: 'A4', icon: <FilePdfOutlined /> },
-                { label: '80mm Thermal', value: 'Thermal', icon: <ThunderboltOutlined /> }
-              ]}
-              style={{ fontWeight: 500 }}
-            />
-          </Form.Item>
-
           {/* QR Payment Toggle */}
           <div style={{
             display: 'flex',
@@ -913,16 +872,6 @@ export const NormalCustomerBill: React.FC = () => {
                 </Text>
               </div>
 
-              {/* Layout Switcher */}
-              <Segmented
-                value={layout}
-                onChange={(val) => handleLayoutChange(val as 'A4' | 'Thermal')}
-                options={[
-                  { label: 'A4 Sheet', value: 'A4', icon: <FilePdfOutlined /> },
-                  { label: '80mm Thermal', value: 'Thermal', icon: <ThunderboltOutlined /> }
-                ]}
-                style={{ backgroundColor: '#f1f5f9', fontWeight: 500 }}
-              />
             </div>
 
             <Space wrap size={8}>

@@ -178,7 +178,10 @@ export const SettingsPage: React.FC = () => {
     const currentVal = getSetting(BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT);
     setThankYouInput(currentVal);
     const formatVal = getSetting(BILL_DEFAULT_FORMAT_KEY, 'A4');
-    setDefaultBillFormat(formatVal.toLowerCase().includes('thermal') ? 'Thermal' : 'A4');
+    const lowerFormat = formatVal.toLowerCase();
+    setDefaultBillFormat(
+      lowerFormat.includes('thermal') ? 'Thermal' : lowerFormat.includes('a5') ? 'A5' : 'A4'
+    );
   }, [initialized, settings, getSetting]);
 
   // Sync QR payment state when store initialized or settings change
@@ -223,7 +226,7 @@ export const SettingsPage: React.FC = () => {
       await updateSetting(
         BILL_DEFAULT_FORMAT_KEY,
         defaultBillFormat,
-        'Default customer bill print layout (Thermal or A4)',
+        'Default customer bill print layout (Thermal, A5, or A4)',
         'Bill'
       );
       setLastSavedTime(new Date().toLocaleTimeString());
@@ -522,6 +525,7 @@ export const SettingsPage: React.FC = () => {
                           size="middle"
                         >
                           <Radio.Button value="Thermal">80mm Thermal Receipt (POS Roll)</Radio.Button>
+                          <Radio.Button value="A5">A5 Slip</Radio.Button>
                           <Radio.Button value="A4">A4 Sheet (Commercial Invoice)</Radio.Button>
                         </Radio.Group>
                         <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>

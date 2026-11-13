@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, Space, Typography, Radio, Divider, Spin } from 'antd';
+import { Modal, Button, Space, Typography, Divider, Spin } from 'antd';
 import { PrinterOutlined, FilePdfOutlined, DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
   type SaleReceiptData,
+  BILL_FORMAT_TO_PDF_LAYOUT,
   printSaleReceiptDirect,
   printSaleReceiptPdf,
-  printSaleReceiptViaBrowser
+  printSaleReceiptViaBrowser,
+  resolveBillPrintFormat
 } from '../utils/saleReceiptPrint';
 import { reportService } from '../services/reportService';
+import { useSettingsStore, BILL_DEFAULT_FORMAT_KEY } from '../stores/useSettingsStore';
 
 const { Title } = Typography;
 
@@ -25,10 +28,17 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
   onClose,
   onPrintThermal
 }) => {
-  const [printFormat, setPrintFormat] = useState<'thermal' | 'a5' | 'a4'>('thermal');
+  const { initialized, fetchSettings, getSetting } = useSettingsStore();
+  const printFormat = resolveBillPrintFormat(getSetting(BILL_DEFAULT_FORMAT_KEY, 'A4'));
   const [printing, setPrinting] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  useEffect(() => {
+    if (visible && !initialized) {
+      fetchSettings();
+    }
+  }, [visible, initialized, fetchSettings]);
 
   useEffect(() => {
     let active = true;
@@ -36,15 +46,9 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
 
     if (visible && receiptData?.voucherNo && !receiptData.voucherNo.startsWith('TEMP-') && navigator.onLine) {
       setPdfLoading(true);
-      const layoutMap: Record<string, 'Thermal80mm' | 'A5Sheet' | 'A4Sheet'> = {
-        thermal: 'Thermal80mm',
-        a5: 'A5Sheet',
-        a4: 'A4Sheet'
-      };
-
       reportService.getSaleBillPdf({
         voucherNo: receiptData.voucherNo,
-        layout: layoutMap[printFormat] || 'Thermal80mm',
+        layout: BILL_FORMAT_TO_PDF_LAYOUT[printFormat] || 'A4Sheet',
         isDuplicate: receiptData.isDuplicate
       })
       .then(blob => {
@@ -77,12 +81,7 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
       if (onPrintThermal) {
         await onPrintThermal(receiptData);
       } else {
-        const layoutMap: Record<string, 'Thermal80mm' | 'A5Sheet' | 'A4Sheet'> = {
-          thermal: 'Thermal80mm',
-          a5: 'A5Sheet',
-          a4: 'A4Sheet'
-        };
-        const printed = await printSaleReceiptPdf(receiptData.voucherNo, layoutMap[printFormat], {
+        const printed = await printSaleReceiptPdf(receiptData.voucherNo, BILL_FORMAT_TO_PDF_LAYOUT[printFormat], {
           isDuplicate: receiptData.isDuplicate
         });
         if (!printed) {
@@ -110,21 +109,10 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
       open={visible}
       onCancel={onClose}
       title={
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 24 }}>
-          <Space>
-            <PrinterOutlined style={{ color: '#0ea5e9' }} />
-            <span>Sale Receipt: {receiptData.voucherNo}</span>
-          </Space>
-          <Radio.Group
-            size="small"
-            value={printFormat}
-            onChange={(e) => setPrintFormat(e.target.value)}
-          >
-            <Radio.Button value="thermal">80mm Thermal</Radio.Button>
-            <Radio.Button value="a5">A5 Slip</Radio.Button>
-            <Radio.Button value="a4">A4 Full</Radio.Button>
-          </Radio.Group>
-        </div>
+        <Space>
+          <PrinterOutlined style={{ color: '#0ea5e9' }} />
+          <span>Sale Receipt: {receiptData.voucherNo}</span>
+        </Space>
       }
       footer={[
         <Button key="close" onClick={onClose}>

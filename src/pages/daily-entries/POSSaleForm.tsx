@@ -34,9 +34,9 @@ import { itemCategoryService, type ItemCategoryDto } from '../../services/itemCa
 import type { NarrationDto } from '../../services/narrationService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { kotService, type DiningTableDto, type KotOrderResponse } from '../../services/kotService';
-import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT, RESTAURANT_ENABLE_KOT_KEY, RESTAURANT_ENABLE_DINE_IN_KEY, RESTAURANT_ENABLE_KDS_KEY, RESTAURANT_ENABLE_VOICE_CALLOUT_KEY, RESTAURANT_VOICE_CALLOUT_SPEED_KEY, RESTAURANT_VOICE_CALLOUT_ACCENT_KEY, BARCODE_FAST_SCAN_SOUND_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT, BILL_DEFAULT_FORMAT_KEY, RESTAURANT_ENABLE_KOT_KEY, RESTAURANT_ENABLE_DINE_IN_KEY, RESTAURANT_ENABLE_KDS_KEY, RESTAURANT_ENABLE_VOICE_CALLOUT_KEY, RESTAURANT_VOICE_CALLOUT_SPEED_KEY, RESTAURANT_VOICE_CALLOUT_ACCENT_KEY, BARCODE_FAST_SCAN_SOUND_KEY } from '../../stores/useSettingsStore';
 import { printKotSlip } from '../../utils/kotPrint';
-import { printSaleReceiptPdf } from '../../utils/saleReceiptPrint';
+import { printSaleReceiptPdf, resolveSaleBillPdfLayout } from '../../utils/saleReceiptPrint';
 import { speakKotOrder, type VoiceAccentType } from '../../utils/kotSpeech';
 import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio';
 import { parseBarcodePayload } from '../../utils/barcodeParser';
@@ -882,7 +882,8 @@ export const POSSaleForm: React.FC = () => {
         try {
           let printed = false;
           if (!finalVoucherNo.includes('-') && navigator.onLine) {
-            printed = await printSaleReceiptPdf(finalVoucherNo, 'Thermal80mm', { printerName, openDrawer, cutPaper });
+            const preferredLayout = resolveSaleBillPdfLayout(getSetting(BILL_DEFAULT_FORMAT_KEY, 'Thermal'));
+            printed = await printSaleReceiptPdf(finalVoucherNo, preferredLayout, { printerName, openDrawer, cutPaper });
           }
           if (!printed) {
             const billLines = generateReceiptTextLines(finalVoucherNo, tokenNumber, orderType || 'Takeaway');
@@ -1132,7 +1133,8 @@ export const POSSaleForm: React.FC = () => {
     try {
       let printed = false;
       if (savedVoucherNo && !savedVoucherNo.includes('-') && navigator.onLine) {
-        printed = await printSaleReceiptPdf(savedVoucherNo, 'Thermal80mm', { printerName, openDrawer, cutPaper });
+        const preferredLayout = resolveSaleBillPdfLayout(getSetting(BILL_DEFAULT_FORMAT_KEY, 'Thermal'));
+        printed = await printSaleReceiptPdf(savedVoucherNo, preferredLayout, { printerName, openDrawer, cutPaper });
       }
       if (!printed) {
         await printThermal();
@@ -2541,9 +2543,10 @@ export const POSSaleForm: React.FC = () => {
               icon={<FileTextOutlined />}
               onClick={async () => {
                 try {
+                  const preferredLayout = resolveSaleBillPdfLayout(getSetting(BILL_DEFAULT_FORMAT_KEY, 'Thermal'));
                   const blob = await reportService.getSaleBillPdf({
                     voucherNo: savedVoucherNo,
-                    layout: 'Thermal80mm'
+                    layout: preferredLayout
                   });
                   const url = URL.createObjectURL(blob);
                   window.open(url, '_blank');

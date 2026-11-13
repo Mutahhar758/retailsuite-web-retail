@@ -168,6 +168,32 @@ export const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
+export type BillPrintFormat = 'thermal' | 'a5' | 'a4';
+export type SaleBillPdfLayout = 'Thermal80mm' | 'A5Sheet' | 'A4Sheet';
+
+export const BILL_FORMAT_TO_PDF_LAYOUT: Record<BillPrintFormat, SaleBillPdfLayout> = {
+  thermal: 'Thermal80mm',
+  a5: 'A5Sheet',
+  a4: 'A4Sheet',
+};
+
+/**
+ * Resolve the configured Bill.DefaultFormat setting into a normalized format key.
+ */
+export const resolveBillPrintFormat = (settingValue?: string): BillPrintFormat => {
+  const lower = (settingValue || '').toLowerCase();
+  if (lower.includes('thermal')) return 'thermal';
+  if (lower.includes('a5')) return 'a5';
+  return 'a4';
+};
+
+/**
+ * Resolve the configured Bill.DefaultFormat setting into a QuestPDF layout name.
+ */
+export const resolveSaleBillPdfLayout = (settingValue?: string): SaleBillPdfLayout => {
+  return BILL_FORMAT_TO_PDF_LAYOUT[resolveBillPrintFormat(settingValue)];
+};
+
 /**
  * Print a QuestPDF generated sale receipt directly to thermal/laser printer via printer-bridge
  * or open browser PDF print dialog if explicitly requested.
