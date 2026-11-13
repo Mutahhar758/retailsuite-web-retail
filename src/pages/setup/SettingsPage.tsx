@@ -17,7 +17,8 @@ import {
   Alert,
   Radio,
   Select,
-  Modal
+  Modal,
+  Table
 } from 'antd';
 import {
   SettingOutlined,
@@ -37,7 +38,8 @@ import {
   SoundOutlined,
   BookOutlined,
   PlusOutlined,
-  DeleteOutlined
+  DeleteOutlined,
+  EditOutlined
 } from '@ant-design/icons';
 import {
   useSettingsStore,
@@ -76,6 +78,17 @@ import {
 } from '../../utils/kotSpeech';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { parseBarcodePayload, type ParsedBarcodeResult } from '../../utils/barcodeParser';
+import { customerCategoryService, type CustomerCategoryResponse } from '../../services/customerCategoryService';
+import { PrintRuleEditor } from '../../components/PrintRuleEditor';
+import {
+  BILL_PRINT_RULE_GLOBAL_KEY,
+  DEFAULT_PRINT_RULE,
+  type PrintRuleConfig,
+  getCategoryPrintRuleKey,
+  parsePrintRule,
+  serializePrintRule,
+  formatPrintRuleSummary,
+} from '../../utils/printRuleUtils';
 import QRCode from 'qrcode';
 
 const { Title, Text, Paragraph } = Typography;
@@ -142,11 +155,29 @@ export const SettingsPage: React.FC = () => {
   const [testScanResult, setTestScanResult] = useState<ParsedBarcodeResult | null>(null);
   const [testScanError, setTestScanError] = useState<string | null>(null);
 
+  // Local state for Print Default Rules (Global + Customer Category overrides)
+  const [globalPrintRule, setGlobalPrintRule] = useState<PrintRuleConfig>({ ...DEFAULT_PRINT_RULE });
+  const [savingPrintRule, setSavingPrintRule] = useState(false);
+  const [printRuleLastSaved, setPrintRuleLastSaved] = useState<string | null>(null);
+  const [customerCategories, setCustomerCategories] = useState<CustomerCategoryResponse[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [categoryRuleModalOpen, setCategoryRuleModalOpen] = useState(false);
+  const [editingCategoryRuleTarget, setEditingCategoryRuleTarget] = useState<CustomerCategoryResponse | null>(null);
+  const [categoryRuleOverrideEnabled, setCategoryRuleOverrideEnabled] = useState(false);
+  const [categoryRuleDraft, setCategoryRuleDraft] = useState<PrintRuleConfig>({ ...DEFAULT_PRINT_RULE });
+  const [savingCategoryRule, setSavingCategoryRule] = useState(false);
+
   // Initialize and load settings from API when page mounts or tenant changes
   useEffect(() => {
     fetchSettings();
     inventoryService.getItemsLookup().then(setTestItems).catch(() => {});
     setCustomDict(getCustomVoiceDictionary());
+    setLoadingCategories(true);
+    customerCategoryService
+      .getAll()
+      .then(setCustomerCategories)
+      .catch(() => {})
+      .finally(() => setLoadingCategories(false));
   }, [fetchSettings, currentTenantIdentifier]);
 
   const handleAddCustomWord = () => {
@@ -162,6 +193,61 @@ export const SettingsPage: React.FC = () => {
     setNewDictKey('');
     setNewDictValue('');
     message.success(`Added "${k}" ➔ "${v}" to dictionary`);
+  };
+
+  const handleSaveGlobalPrintRule = async () => {
+    setSavingPrintRule(true);
+    try {
+      await updateSetting(
+        BILL_PRINT_RULE_GLOBAL_KEY,
+        serializePrintRule(globalPrintRule),
+        'Global default print option rule (Save Only vs Save & Print)',
+        'Bill'
+      );
+      setPrintRuleLastSaved(new Date().toLocaleTimeString());
+      message.success('Global print rule saved successfully');
+    } catch {
+      message.error('Failed to save global print rule');
+    } finally {
+      setSavingPrintRule(false);
+    }
+  };
+
+  const handleOpenCategoryRuleModal = (cat: CustomerCategoryResponse) => {
+    setEditingCategoryRuleTarget(cat);
+    const existing = parsePrintRule(settings[getCategoryPrintRuleKey(cat.code)]);
+    if (existing) {
+      setCategoryRuleOverrideEnabled(true);
+      setCategoryRuleDraft(existing);
+    } else {
+      setCategoryRuleOverrideEnabled(false);
+      setCategoryRuleDraft({ ...globalPrintRule });
+    }
+    setCategoryRuleModalOpen(true);
+  };
+
+  const handleSaveCategoryRuleModal = async () => {
+    if (!editingCategoryRuleTarget) return;
+    setSavingCategoryRule(true);
+    try {
+      const key = getCategoryPrintRuleKey(editingCategoryRuleTarget.code);
+      await updateSetting(
+        key,
+        categoryRuleOverrideEnabled ? serializePrintRule(categoryRuleDraft) : '',
+        `Print default rule override for customer category ${editingCategoryRuleTarget.title}`,
+        'Bill'
+      );
+      message.success(
+        categoryRuleOverrideEnabled
+          ? `Print rule override saved for "${editingCategoryRuleTarget.title}"`
+          : `"${editingCategoryRuleTarget.title}" reset to inherit Global Rule`
+      );
+      setCategoryRuleModalOpen(false);
+    } catch {
+      message.error('Failed to save category print rule');
+    } finally {
+      setSavingCategoryRule(false);
+    }
   };
 
   const handleDeleteCustomWord = (key: string) => {
@@ -182,6 +268,8 @@ export const SettingsPage: React.FC = () => {
     setDefaultBillFormat(
       lowerFormat.includes('thermal') ? 'Thermal' : lowerFormat.includes('a5') ? 'A5' : 'A4'
     );
+    const parsedGlobalPrintRule = parsePrintRule(getSetting(BILL_PRINT_RULE_GLOBAL_KEY, ''));
+    setGlobalPrintRule(parsedGlobalPrintRule ?? { ...DEFAULT_PRINT_RULE });
   }, [initialized, settings, getSetting]);
 
   // Sync QR payment state when store initialized or settings change
@@ -699,6 +787,171 @@ export const SettingsPage: React.FC = () => {
                     </Card>
                   </Col>
                 </Row>
+
+                {/* Print Default Rules (Global + Customer Category Overrides) */}
+                <Card
+                  className="shadow-sm border-gray-100 rounded-xl"
+                  style={{ marginTop: 24 }}
+                  title={
+                    <Space>
+                      <PrinterOutlined style={{ color: '#1677ff', fontSize: 18 }} />
+                      <span style={{ fontWeight: 600 }}>Print Default Rules (Save Only vs. Save &amp; Print)</span>
+                    </Space>
+                  }
+                  extra={
+                    printRuleLastSaved && (
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
+                        Saved at {printRuleLastSaved}
+                      </Text>
+                    )
+                  }
+                >
+                  <Paragraph type="secondary" style={{ marginBottom: 16 }}>
+                    Control whether Normal Sale, Wanda Sale, and POS Sale default to <strong>Save &amp; Print</strong> or <strong>Save Only</strong>. Customer category rules override the global rule.
+                  </Paragraph>
+
+                  <Row gutter={[24, 24]}>
+                    <Col xs={24} lg={11}>
+                      <div
+                        style={{
+                          padding: 16,
+                          borderRadius: 10,
+                          border: '1px solid #e2e8f0',
+                          backgroundColor: '#ffffff',
+                          height: '100%',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          gap: 16,
+                        }}
+                      >
+                        <div>
+                          <Title level={5} style={{ marginTop: 0, marginBottom: 12 }}>
+                            Global Default Rule
+                          </Title>
+                          <PrintRuleEditor value={globalPrintRule} onChange={setGlobalPrintRule} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                          <Button
+                            type="primary"
+                            icon={<SaveOutlined />}
+                            loading={savingPrintRule}
+                            onClick={handleSaveGlobalPrintRule}
+                          >
+                            Save Global Rule
+                          </Button>
+                        </div>
+                      </div>
+                    </Col>
+
+                    <Col xs={24} lg={13}>
+                      <div
+                        style={{
+                          padding: 16,
+                          borderRadius: 10,
+                          border: '1px solid #e2e8f0',
+                          backgroundColor: '#ffffff',
+                          height: '100%',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                          <Title level={5} style={{ margin: 0 }}>
+                            Customer Category Overrides
+                          </Title>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            Overrides Global Rule when a customer belongs to the category
+                          </Text>
+                        </div>
+
+                        <Table
+                          size="small"
+                          loading={loadingCategories}
+                          dataSource={customerCategories}
+                          rowKey="code"
+                          pagination={{ pageSize: 6, hideOnSinglePage: true }}
+                          columns={[
+                            {
+                              title: 'Category',
+                              dataIndex: 'title',
+                              key: 'title',
+                              render: (title: string) => <Text strong>{title}</Text>,
+                            },
+                            {
+                              title: 'Active Rule',
+                              key: 'rule',
+                              render: (_: any, record: CustomerCategoryResponse) => {
+                                const rule = parsePrintRule(settings[getCategoryPrintRuleKey(record.code)]);
+                                return rule ? (
+                                  <Tag color="geekblue">{formatPrintRuleSummary(rule)}</Tag>
+                                ) : (
+                                  <Tag color="default">Inherits Global</Tag>
+                                );
+                              },
+                            },
+                            {
+                              title: 'Action',
+                              key: 'action',
+                              width: 110,
+                              render: (_: any, record: CustomerCategoryResponse) => (
+                                <Button
+                                  type="link"
+                                  size="small"
+                                  icon={<EditOutlined />}
+                                  onClick={() => handleOpenCategoryRuleModal(record)}
+                                >
+                                  Configure
+                                </Button>
+                              ),
+                            },
+                          ]}
+                        />
+                      </div>
+                    </Col>
+                  </Row>
+                </Card>
+
+                <Modal
+                  title={`Print Rule Override — ${editingCategoryRuleTarget?.title || ''}`}
+                  open={categoryRuleModalOpen}
+                  onOk={handleSaveCategoryRuleModal}
+                  onCancel={() => setCategoryRuleModalOpen(false)}
+                  confirmLoading={savingCategoryRule}
+                  okText="Save Rule"
+                  destroyOnClose
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 12 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: 12,
+                        borderRadius: 8,
+                        backgroundColor: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                      }}
+                    >
+                      <Text strong>Override Global Print Rule</Text>
+                      <Switch
+                        checked={categoryRuleOverrideEnabled}
+                        onChange={setCategoryRuleOverrideEnabled}
+                        checkedChildren="Custom"
+                        unCheckedChildren="Inherit Global"
+                      />
+                    </div>
+                    {categoryRuleOverrideEnabled ? (
+                      <PrintRuleEditor value={categoryRuleDraft} onChange={setCategoryRuleDraft} />
+                    ) : (
+                      <Alert
+                        type="info"
+                        showIcon
+                        message="Inheriting Global Rule"
+                        description={`Customers in "${editingCategoryRuleTarget?.title}" will use the Global Default Rule: ${formatPrintRuleSummary(globalPrintRule)}.`}
+                      />
+                    )}
+                  </div>
+                </Modal>
               </Spin>
             )
           },

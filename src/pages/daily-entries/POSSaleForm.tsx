@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Row, Col, Typography, Button, Input, InputNumber, Space, message, Tag, Modal, List, Badge, Alert, Dropdown, Segmented, Select, Tooltip, Popconfirm
 } from 'antd';
@@ -21,7 +21,7 @@ import {
   PrinterOutlined, RedoOutlined, CheckCircleOutlined, UserOutlined,
   FileTextOutlined, SearchOutlined, DollarOutlined,
   DisconnectOutlined, CloudServerOutlined, DownOutlined,
-  FireOutlined, ReloadOutlined, InboxOutlined, BookOutlined, SaveOutlined
+  FireOutlined, ReloadOutlined, InboxOutlined, BookOutlined, SaveOutlined, EyeOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
@@ -42,6 +42,7 @@ import { playScanSuccessTone, playScanErrorTone } from '../../utils/scannerAudio
 import { parseBarcodePayload } from '../../utils/barcodeParser';
 import { matchesItemSearch } from '../../utils/itemSelectOptions';
 import { getEffectiveSubUnits, getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
+import { resolveDefaultPrintBehavior, type PrintAction } from '../../utils/printRuleUtils';
 
 const { Title, Text } = Typography;
 
@@ -82,7 +83,7 @@ export const POSSaleForm: React.FC = () => {
   const currentOrgName = currentOrg?.name || 'Retail Store';
   const { isOnline } = useNetworkStatus();
   const [isOfflineSaved, setIsOfflineSaved] = useState(false);
-  const { getSetting, fetchSettings, initialized: settingsInitialized } = useSettingsStore();
+  const { getSetting, fetchSettings, initialized: settingsInitialized, settings } = useSettingsStore();
   const settingKot = getSetting(RESTAURANT_ENABLE_KOT_KEY, '');
   const hasKotFeature = settingKot !== '' ? settingKot === 'true' : (currentOrg?.hasKotFeature ?? false);
   const settingDineIn = getSetting(RESTAURANT_ENABLE_DINE_IN_KEY, '');
@@ -568,6 +569,10 @@ export const POSSaleForm: React.FC = () => {
   const percentDiscountAmount = (grossTotal - totalItemDiscount) * (discountPercent / 100);
   const totalDiscount = totalItemDiscount + percentDiscountAmount + discountFlat;
   const netAmount = Math.max(0, grossTotal - totalDiscount);
+  const resolvedPrintRule = useMemo(
+    () => resolveDefaultPrintBehavior(settings, selectedCustomer?.customerCategoryId, netAmount),
+    [settings, selectedCustomer?.customerCategoryId, netAmount]
+  );
 
   const tenderedCash = rawTenderedCash !== undefined && rawTenderedCash !== null ? rawTenderedCash : netAmount;
   const cashReceived = tenderedCash;
@@ -768,7 +773,16 @@ export const POSSaleForm: React.FC = () => {
     setOrderType('Takeaway');
   };
 
-  const handleSaveSale = async (shouldPrintReceipt: boolean = true) => {
+  const handleSaveSale = async (actionOverride?: boolean | PrintAction) => {
+    const saveMode: PrintAction =
+      typeof actionOverride === 'string'
+        ? actionOverride
+        : actionOverride === true
+        ? 'save_and_print'
+        : actionOverride === false
+        ? 'save_only'
+        : resolvedPrintRule.action;
+    const shouldPrintReceipt = saveMode === 'save_and_print';
     if (cart.length === 0) {
       message.error('Cart is empty. Please add at least one item');
       return;
@@ -2377,6 +2391,7 @@ export const POSSaleForm: React.FC = () => {
       {/* Receipt Success Dialog */}
       <Modal
         open={successModalVisible}
+        onCancel={handleCloseActiveTabAfterSave}
         footer={null}
         closable={false}
         width={450}
@@ -2622,7 +2637,11 @@ export const POSSaleForm: React.FC = () => {
                 Cash Received (Type or Tap)
               </span>
               <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
-                Press Enter to Save & Print
+                {resolvedPrintRule.action === 'save_and_print'
+                  ? 'Press Enter to Save & Print'
+                  : resolvedPrintRule.action === 'save_and_preview'
+                  ? 'Press Enter to Save & Preview'
+                  : 'Press Enter to Save Only'}
               </span>
             </div>
 
@@ -2638,7 +2657,7 @@ export const POSSaleForm: React.FC = () => {
               onKeyDown={e => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  handleSaveSale(true);
+                  handleSaveSale(resolvedPrintRule.action);
                 }
               }}
               controls={false}
@@ -2806,44 +2825,113 @@ export const POSSaleForm: React.FC = () => {
               Cancel
             </Button>
             <Button
+              type={resolvedPrintRule.action === 'save_only' ? 'primary' : 'default'}
               size="large"
               icon={<SaveOutlined style={{ fontSize: 15 }} />}
               loading={loading}
-              onClick={() => handleSaveSale(false)}
-              style={{
-                flex: 1.2,
-                height: 48,
-                borderRadius: 10,
-                fontWeight: 700,
-                fontSize: 13,
-                borderColor: '#0284c7',
-                color: '#0284c7'
-              }}
+              onClick={() => handleSaveSale('save_only')}
+              style={
+                resolvedPrintRule.action === 'save_only'
+                  ? {
+                      flex: 1.7,
+                      height: 48,
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      fontSize: 13,
+                      backgroundColor: '#16a34a',
+                      borderColor: '#16a34a',
+                      boxShadow: '0 4px 10px rgba(22, 163, 74, 0.2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 5
+                    }
+                  : {
+                      flex: 1,
+                      height: 48,
+                      borderRadius: 10,
+                      fontWeight: 700,
+                      fontSize: 12,
+                      borderColor: '#0284c7',
+                      color: '#0284c7'
+                    }
+              }
             >
-              Save Only
+              {resolvedPrintRule.action === 'save_only' ? 'SAVE ONLY (DEFAULT)' : 'Save Only'}
             </Button>
             <Button
-              type="primary"
+              type={resolvedPrintRule.action === 'save_and_preview' ? 'primary' : 'default'}
+              size="large"
+              icon={<EyeOutlined style={{ fontSize: 15 }} />}
+              loading={loading}
+              onClick={() => handleSaveSale('save_and_preview')}
+              style={
+                resolvedPrintRule.action === 'save_and_preview'
+                  ? {
+                      flex: 1.7,
+                      height: 48,
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      fontSize: 13,
+                      backgroundColor: '#16a34a',
+                      borderColor: '#16a34a',
+                      boxShadow: '0 4px 10px rgba(22, 163, 74, 0.2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 5
+                    }
+                  : {
+                      flex: 1.1,
+                      height: 48,
+                      borderRadius: 10,
+                      fontWeight: 700,
+                      fontSize: 12,
+                      borderColor: '#0ea5e9',
+                      color: '#0ea5e9'
+                    }
+              }
+            >
+              {resolvedPrintRule.action === 'save_and_preview' ? 'SAVE & PREVIEW' : 'Preview'}
+            </Button>
+            <Button
+              type={resolvedPrintRule.action === 'save_and_print' ? 'primary' : 'default'}
               size="large"
               icon={<PrinterOutlined style={{ fontSize: 16 }} />}
               loading={loading}
-              onClick={() => handleSaveSale(true)}
-              style={{
-                flex: 2,
-                height: 48,
-                borderRadius: 10,
-                fontWeight: 800,
-                fontSize: 14,
-                backgroundColor: '#16a34a',
-                borderColor: '#16a34a',
-                boxShadow: '0 4px 10px rgba(22, 163, 74, 0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6
-              }}
+              onClick={() => handleSaveSale('save_and_print')}
+              style={
+                resolvedPrintRule.action === 'save_and_print'
+                  ? {
+                      flex: 1.8,
+                      height: 48,
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      fontSize: 13,
+                      backgroundColor: '#16a34a',
+                      borderColor: '#16a34a',
+                      boxShadow: '0 4px 10px rgba(22, 163, 74, 0.2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 5
+                    }
+                  : {
+                      flex: 1.2,
+                      height: 48,
+                      borderRadius: 10,
+                      fontWeight: 700,
+                      fontSize: 12,
+                      borderColor: '#0284c7',
+                      color: '#0284c7',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 5
+                    }
+              }
             >
-              {hasKotFeature && orderType === 'Takeaway' ? 'SAVE & PRINT (KOT+BILL)' : 'SAVE & PRINT RECEIPT'}
+              {hasKotFeature && orderType === 'Takeaway' ? 'SAVE & PRINT (KOT+BILL)' : 'SAVE & PRINT'}
             </Button>
           </div>
         </Space>

@@ -5,12 +5,22 @@ import {
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, 
-  ReloadOutlined, TagsOutlined 
+  ReloadOutlined, TagsOutlined, PrinterOutlined 
 } from '@ant-design/icons';
 import { 
   customerCategoryService, 
   type CustomerCategoryResponse 
 } from '../../services/customerCategoryService';
+import { useSettingsStore } from '../../stores/useSettingsStore';
+import { PrintRuleEditor } from '../../components/PrintRuleEditor';
+import {
+  DEFAULT_PRINT_RULE,
+  type PrintRuleConfig,
+  getCategoryPrintRuleKey,
+  parsePrintRule,
+  serializePrintRule,
+  formatPrintRuleSummary,
+} from '../../utils/printRuleUtils';
 
 const { Title, Text } = Typography;
 
@@ -20,6 +30,10 @@ export const CustomerCategoryList: React.FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingRecord, setEditingRecord] = useState<CustomerCategoryResponse | null>(null);
   const [form] = Form.useForm();
+  const [overridePrintRule, setOverridePrintRule] = useState(false);
+  const [printRuleConfig, setPrintRuleConfig] = useState<PrintRuleConfig>(DEFAULT_PRINT_RULE);
+
+  const { settings, initialized, fetchSettings, updateSetting } = useSettingsStore();
 
   const fetchData = useCallback(async () => {
     try {
@@ -35,12 +49,17 @@ export const CustomerCategoryList: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    if (!initialized) {
+      fetchSettings();
+    }
+  }, [fetchData, initialized, fetchSettings]);
 
   const handleAdd = () => {
     setEditingRecord(null);
     form.resetFields();
     form.setFieldsValue({ active: true });
+    setOverridePrintRule(false);
+    setPrintRuleConfig({ ...DEFAULT_PRINT_RULE });
     setIsModalVisible(true);
   };
 
@@ -51,6 +70,14 @@ export const CustomerCategoryList: React.FC = () => {
       description: record.description,
       active: record.active 
     });
+    const existingRule = parsePrintRule(settings[getCategoryPrintRuleKey(record.code)]);
+    if (existingRule) {
+      setOverridePrintRule(true);
+      setPrintRuleConfig(existingRule);
+    } else {
+      setOverridePrintRule(false);
+      setPrintRuleConfig({ ...DEFAULT_PRINT_RULE });
+    }
     setIsModalVisible(true);
   };
 
@@ -67,6 +94,7 @@ export const CustomerCategoryList: React.FC = () => {
   const handleModalOk = async () => {
     try {
       const values = await form.validateFields();
+      let targetCode = editingRecord?.code;
       if (editingRecord) {
         await customerCategoryService.update(editingRecord.code, {
           title: values.title,
@@ -75,13 +103,33 @@ export const CustomerCategoryList: React.FC = () => {
         });
         message.success('Customer category updated successfully');
       } else {
-        await customerCategoryService.create({
+        targetCode = await customerCategoryService.create({
           title: values.title,
           description: values.description,
           active: values.active !== false
         });
         message.success('Customer category created successfully');
       }
+
+      if (targetCode) {
+        const ruleKey = getCategoryPrintRuleKey(targetCode);
+        if (overridePrintRule) {
+          await updateSetting(
+            ruleKey,
+            serializePrintRule(printRuleConfig),
+            `Print default rule override for customer category ${values.title}`,
+            'Bill'
+          );
+        } else if (settings[ruleKey]) {
+          await updateSetting(
+            ruleKey,
+            '',
+            `Print default rule override for customer category ${values.title}`,
+            'Bill'
+          );
+        }
+      }
+
       setIsModalVisible(false);
       fetchData();
     } catch (error) {
@@ -109,6 +157,21 @@ export const CustomerCategoryList: React.FC = () => {
       key: 'description',
       ellipsis: true,
       render: (text?: string) => text ? <Text>{text}</Text> : <Text type="secondary" italic>-</Text>,
+    },
+    {
+      title: 'Default Print Rule',
+      key: 'printRule',
+      width: '260px',
+      render: (_: any, record: CustomerCategoryResponse) => {
+        const rule = parsePrintRule(settings[getCategoryPrintRuleKey(record.code)]);
+        return rule ? (
+          <Tag color="geekblue" icon={<PrinterOutlined />}>
+            {formatPrintRuleSummary(rule)}
+          </Tag>
+        ) : (
+          <Tag color="default">Inherits Global</Tag>
+        );
+      },
     },
     {
       title: 'Status',
@@ -222,6 +285,36 @@ export const CustomerCategoryList: React.FC = () => {
           >
             <Switch />
           </Form.Item>
+
+          <div
+            style={{
+              marginTop: 12,
+              padding: 14,
+              borderRadius: 8,
+              border: '1px solid #e2e8f0',
+              backgroundColor: '#fafafa',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: overridePrintRule ? 12 : 0 }}>
+              <Space>
+                <PrinterOutlined style={{ color: '#1677ff' }} />
+                <Text strong>Override Global Print Rule</Text>
+              </Space>
+              <Switch
+                checked={overridePrintRule}
+                onChange={setOverridePrintRule}
+                checkedChildren="Custom"
+                unCheckedChildren="Global"
+              />
+            </div>
+            {overridePrintRule ? (
+              <PrintRuleEditor value={printRuleConfig} onChange={setPrintRuleConfig} />
+            ) : (
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+                Uses the global print rule configured in Settings → Bill &amp; Receipt.
+              </Text>
+            )}
+          </div>
         </Form>
       </Modal>
     </Card>

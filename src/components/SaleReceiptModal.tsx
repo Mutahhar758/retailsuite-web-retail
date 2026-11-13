@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Modal, Button, Space, Typography, Divider, Spin } from 'antd';
 import { PrinterOutlined, FilePdfOutlined, DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -19,6 +19,7 @@ interface SaleReceiptModalProps {
   visible: boolean;
   receiptData: SaleReceiptData | null;
   onClose: () => void;
+  afterClose?: () => void;
   onPrintThermal?: (data: SaleReceiptData) => Promise<boolean>;
 }
 
@@ -26,6 +27,7 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
   visible,
   receiptData,
   onClose,
+  afterClose,
   onPrintThermal
 }) => {
   const { initialized, fetchSettings, getSetting } = useSettingsStore();
@@ -33,6 +35,7 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
   const [printing, setPrinting] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const printBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (visible && !initialized) {
@@ -73,9 +76,8 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
     };
   }, [visible, receiptData?.voucherNo, printFormat, receiptData?.isDuplicate]);
 
-  if (!receiptData) return null;
-
   const handlePrintThermal = async () => {
+    if (!receiptData) return;
     setPrinting(true);
     try {
       if (onPrintThermal) {
@@ -93,6 +95,34 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
     }
   };
 
+  useEffect(() => {
+    if (!visible || !receiptData) return;
+    const focusTimer = setTimeout(() => {
+      printBtnRef.current?.focus();
+    }, 60);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !printing) {
+        const activeEl = document.activeElement as HTMLElement | null;
+        const activeTag = (activeEl?.tagName || '').toLowerCase();
+        const isModalCloseBtn = activeEl?.classList?.contains('ant-modal-close');
+        if ((activeTag === 'button' || activeTag === 'a') && !isModalCloseBtn && activeEl !== printBtnRef.current) {
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        void handlePrintThermal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      clearTimeout(focusTimer);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  });
+
+  if (!receiptData) return null;
+
   const handlePrintBrowser = () => {
     if (pdfUrl) {
       const win = window.open(pdfUrl, '_blank');
@@ -108,6 +138,7 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
     <Modal
       open={visible}
       onCancel={onClose}
+      afterClose={afterClose}
       title={
         <Space>
           <PrinterOutlined style={{ color: '#0ea5e9' }} />
@@ -116,7 +147,7 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
       }
       footer={[
         <Button key="close" onClick={onClose}>
-          Close
+          Close (Esc)
         </Button>,
         pdfUrl ? (
           <Button
@@ -136,6 +167,7 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
           Print / PDF
         </Button>,
         <Button
+          ref={printBtnRef}
           key="thermal-print"
           type="primary"
           icon={<PrinterOutlined />}
@@ -143,7 +175,7 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
           onClick={handlePrintThermal}
           style={{ backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' }}
         >
-          Print Receipt
+          Print Receipt (Enter)
         </Button>
       ]}
       width={printFormat === 'thermal' ? 460 : 780}

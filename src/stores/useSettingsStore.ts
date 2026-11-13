@@ -22,6 +22,7 @@ interface SettingsState {
 export const BILL_THANK_YOU_KEY = 'Bill.ThankYouMessage';
 export const BILL_THANK_YOU_DEFAULT = 'Thank you for shopping with us!';
 export const BILL_DEFAULT_FORMAT_KEY = 'Bill.DefaultFormat';
+export { BILL_PRINT_RULE_GLOBAL_KEY, getCategoryPrintRuleKey } from '../utils/printRuleUtils';
 
 // QR Payment setting keys (per-tenant, stored in Settings table)
 export const BILL_QR_ENABLED_KEY    = 'Bill.QrPayment.Enabled';

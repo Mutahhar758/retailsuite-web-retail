@@ -1,5 +1,5 @@
 import KeyboardShortcutsBar from '../../components/common/KeyboardShortcutsBar';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
   Table, Space, message, InputNumber, Popconfirm, Tag, Alert, Modal, Tooltip,
@@ -35,6 +35,7 @@ import {
   type SaleReceiptData,
   type SaleReceiptLineItem
 } from '../../utils/saleReceiptPrint';
+import { resolveDefaultPrintBehavior, type PrintAction } from '../../utils/printRuleUtils';
 
 const { Title, Text } = Typography;
 
@@ -58,7 +59,7 @@ export const WandaSaleForm: React.FC = () => {
   const isEdit = !!voucherNo && voucherNo !== 'new';
   const navigate = useNavigate();
   const location = useLocation();
-  const { getSetting, fetchSettings } = useSettingsStore();
+  const { getSetting, fetchSettings, settings } = useSettingsStore();
   const enableCarriage = getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true';
   const [form] = Form.useForm();
 
@@ -894,6 +895,11 @@ export const WandaSaleForm: React.FC = () => {
   };
 
   const totalAmount = saleLines.reduce((sum, l) => sum + (l.amount || 0), 0);
+  const selectedAccount = Form.useWatch('account', form);
+  const resolvedPrintRule = useMemo(() => {
+    const cust = customers.find(c => c.account === selectedAccount);
+    return resolveDefaultPrintBehavior(settings, cust?.customerCategoryId, totalAmount);
+  }, [settings, customers, selectedAccount, totalAmount]);
   const cashReceipt = Form.useWatch('cashReceipt', form) || 0;
   const cashBack = Form.useWatch('cashBack', form) || 0;
   const balance = totalAmount - cashReceipt + cashBack;
@@ -922,8 +928,16 @@ export const WandaSaleForm: React.FC = () => {
     }
   }, [totalAmount, isEdit, loading, activeTabId]);
 
-  const handleSave = async (options: { shouldPrint?: boolean } = {}) => {
-    const shouldPrint = options.shouldPrint ?? true;
+  const handleSave = async (options: { shouldPrint?: boolean; saveMode?: PrintAction } = {}) => {
+    const saveMode: PrintAction =
+      options.saveMode ??
+      (options.shouldPrint === true
+        ? 'save_and_print'
+        : options.shouldPrint === false
+        ? 'save_only'
+        : resolvedPrintRule.action);
+    const shouldPrint = saveMode === 'save_and_print';
+    const shouldPreview = saveMode === 'save_and_preview';
     if (isEdit && !isOnline) {
       message.error('Editing existing vouchers requires an internet connection.');
       return;
@@ -971,6 +985,11 @@ export const WandaSaleForm: React.FC = () => {
           receiptDraft.voucherNo = `SL-${voucherNo}`;
           receiptDraft.isDuplicate = true;
           await printSaleReceiptDirect(receiptDraft);
+        } else if (shouldPreview && receiptDraft) {
+          receiptDraft.voucherNo = `SL-${voucherNo}`;
+          receiptDraft.isDuplicate = true;
+          setActiveReceiptData(receiptDraft);
+          setReceiptModalVisible(true);
         }
       } else {
         const newVno = await saleService.create(request, { offlineFallback: true });
@@ -987,6 +1006,10 @@ export const WandaSaleForm: React.FC = () => {
         if (shouldPrint && receiptDraft) {
           receiptDraft.voucherNo = `SL-${newVno}`;
           await printSaleReceiptDirect(receiptDraft);
+        } else if (shouldPreview && receiptDraft) {
+          receiptDraft.voucherNo = `SL-${newVno}`;
+          setActiveReceiptData(receiptDraft);
+          setReceiptModalVisible(true);
         }
 
         handleCloseActiveTabAfterSave();
@@ -1468,20 +1491,38 @@ export const WandaSaleForm: React.FC = () => {
             icon={<DownOutlined />}
             data-action="save"
             className="pos-save-btn form-save-btn"
-            onClick={() => handleSave({ shouldPrint: true })}
+            onClick={() => handleSave({ saveMode: resolvedPrintRule.action })}
             loading={loading}
             menu={{
               items: [
-                {
-                  key: 'save-only',
-                  icon: <SaveOutlined />,
-                  label: 'Save Only (Alt+S / F5)',
-                  onClick: () => handleSave({ shouldPrint: false })
-                },
+                ...(resolvedPrintRule.action !== 'save_and_print'
+                  ? [{
+                      key: 'save-and-print',
+                      icon: <PrinterOutlined />,
+                      label: isEdit ? 'Update & Print (Alt+P)' : 'Save & Print (Alt+P)',
+                      onClick: () => handleSave({ saveMode: 'save_and_print' })
+                    }]
+                  : []),
+                ...(resolvedPrintRule.action !== 'save_and_preview'
+                  ? [{
+                      key: 'save-and-preview',
+                      icon: <EyeOutlined />,
+                      label: isEdit ? 'Update & Preview' : 'Save & Preview',
+                      onClick: () => handleSave({ saveMode: 'save_and_preview' })
+                    }]
+                  : []),
+                ...(resolvedPrintRule.action !== 'save_only'
+                  ? [{
+                      key: 'save-only',
+                      icon: <SaveOutlined />,
+                      label: 'Save Only (Alt+S / F5)',
+                      onClick: () => handleSave({ saveMode: 'save_only' })
+                    }]
+                  : []),
                 {
                   key: 'preview-receipt',
                   icon: <EyeOutlined />,
-                  label: 'Preview Receipt',
+                  label: 'Preview Receipt (Before Save)',
                   onClick: handleOpenPreview
                 }
               ]
@@ -1491,8 +1532,22 @@ export const WandaSaleForm: React.FC = () => {
               boxShadow: '0 2px 4px rgba(14, 165, 233, 0.2)'
             }}
           >
-            <PrinterOutlined style={{ marginRight: 6 }} />
-            {isEdit ? 'Update & Print (Alt+P)' : 'Save & Print (Alt+P)'}
+            {resolvedPrintRule.action === 'save_and_print' ? (
+              <>
+                <PrinterOutlined style={{ marginRight: 6 }} />
+                {isEdit ? 'Update & Print (Alt+P)' : 'Save & Print (Alt+P)'}
+              </>
+            ) : resolvedPrintRule.action === 'save_and_preview' ? (
+              <>
+                <EyeOutlined style={{ marginRight: 6 }} />
+                {isEdit ? 'Update & Preview' : 'Save & Preview'}
+              </>
+            ) : (
+              <>
+                <SaveOutlined style={{ marginRight: 6 }} />
+                {isEdit ? 'Update Only (Alt+S)' : 'Save Only (Alt+S)'}
+              </>
+            )}
           </Dropdown.Button>
         </Space>
       </div>
@@ -1691,6 +1746,7 @@ export const WandaSaleForm: React.FC = () => {
         visible={receiptModalVisible}
         receiptData={activeReceiptData}
         onClose={() => setReceiptModalVisible(false)}
+        afterClose={focusCustomerSelect}
       />
     </Card>
   );
