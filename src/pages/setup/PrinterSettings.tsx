@@ -20,6 +20,7 @@ export const PrinterSettings: React.FC = () => {
   const [installedVersion, setInstalledVersion] = useState<string | null>(null);
   const [latestVersionInfo, setLatestVersionInfo] = useState<{ version: string; releaseNotes?: string; downloadUrl?: string } | null>(null);
   const [updating, setUpdating] = useState<boolean>(false);
+  const [localNetworkPerm, setLocalNetworkPerm] = useState<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown');
 
   // Load configuration states
   const [connectionMethod, setConnectionMethod] = useState<ConnectionMethod>(() => {
@@ -34,8 +35,20 @@ export const PrinterSettings: React.FC = () => {
     printerName
   });
 
+  // Query browser Local Network Access permission when supported (Chrome/Edge)
+  const queryLocalNetworkPermission = async () => {
+    try {
+      if (!navigator.permissions?.query) return;
+      const status = await navigator.permissions.query({ name: 'local-network-access' as PermissionName });
+      setLocalNetworkPerm(status.state);
+    } catch {
+      // Permission name not supported in this browser
+    }
+  };
+
   // Check Local Relay service health status and versions
   const checkRelayStatus = async () => {
+    await queryLocalNetworkPermission();
     try {
       // 1. Fetch latest version metadata from web server
       try {
@@ -293,35 +306,65 @@ export const PrinterSettings: React.FC = () => {
                   </Col>
                 )}
 
-                {/* Case 3: Relay is completely Offline */}
+                {/* Case 3: Relay is completely Offline (or blocked by browser permission) */}
                 {relayOnline === false && (
                   <Col span={24} style={{ marginBottom: 12 }}>
                     <Alert
-                      type="warning"
+                      type={localNetworkPerm === 'denied' ? 'error' : 'warning'}
                       showIcon
                       icon={<InfoCircleOutlined />}
-                      message="Printer Bridge Offline"
+                      message={
+                        localNetworkPerm === 'denied'
+                          ? 'Browser Blocked Local Printer Bridge Permission'
+                          : 'Printer Bridge Offline or Blocked by Browser'
+                      }
                       description={
-                        <span>
-                          Please make sure your PrinterBridge service is running at <code>http://localhost:5000</code> on this system.
-                          <br />
-                          If you haven't installed or started it yet, you can{' '}
-                          <a 
-                            href="/downloads/printer-bridge.exe" 
-                            download 
-                            style={{ 
-                              color: '#1677ff', 
-                              fontWeight: 600, 
-                              textDecoration: 'underline',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              marginTop: 4
-                            }}
-                          >
-                            <DownloadOutlined style={{ marginRight: 4 }} />
-                            Download Printer Bridge Helper (Windows)
-                          </a>
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {localNetworkPerm === 'denied' ? (
+                            <span>
+                              This browser has <strong>Local network access</strong> blocked for this site, so it cannot connect to{' '}
+                              <code>http://localhost:5000</code> even when Printer Bridge is running.
+                              <br />
+                              <strong>To fix:</strong> Click the <strong>site settings / tune icon</strong> on the left of the address bar → set{' '}
+                              <strong>Local network access</strong> (or <strong>Insecure content</strong>) to <strong>Allow</strong> → click{' '}
+                              <strong>Retry Connection</strong> below.
+                            </span>
+                          ) : (
+                            <span>
+                              Please make sure Printer Bridge is running at <code>http://localhost:5000</code> on this PC.
+                              <br />
+                              <strong>Already running in the system tray?</strong> Click <strong>Request Permission / Retry</strong> below and choose{' '}
+                              <strong>Allow</strong> if your browser asks for local network access, or allow <strong>Local network access</strong> in the address bar site settings.
+                            </span>
+                          )}
+                          <Space wrap size="small">
+                            <Button
+                              type="primary"
+                              size="small"
+                              icon={<ReloadOutlined />}
+                              loading={loadingPrinters}
+                              onClick={checkRelayStatus}
+                            >
+                              {localNetworkPerm === 'denied' ? 'Retry Connection' : 'Request Permission / Retry'}
+                            </Button>
+                            <Button
+                              size="small"
+                              href="http://localhost:5000/printers"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Test localhost:5000/printers
+                            </Button>
+                            <Button
+                              size="small"
+                              icon={<DownloadOutlined />}
+                              href="/downloads/printer-bridge.exe"
+                              download
+                            >
+                              Download Printer Bridge (Windows)
+                            </Button>
+                          </Space>
+                        </div>
                       }
                       style={{ fontSize: 12 }}
                     />
