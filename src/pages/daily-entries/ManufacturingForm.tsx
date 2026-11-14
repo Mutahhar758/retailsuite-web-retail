@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Card, Form, Input, InputNumber, Button, Space, Typography, 
   Select, DatePicker, Table, Row, Col, Divider, message, Popconfirm, 
@@ -27,6 +27,7 @@ import {
   toBasePrimaryQty, 
   resolveDisplayQtyAndUnit 
 } from '../../utils/unitConversion';
+import { useGridKeyboard, closeOpenSelectDropdowns } from '../../hooks/useGridKeyboard';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -52,6 +53,103 @@ interface ProductionLineRow {
   isIssued: boolean;
 }
 
+const createEmptyRow = (seq: number): ProductionLineRow => ({
+  key: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  seq,
+  rawItemId: '',
+  plannedQty: 1,
+  primaryQty: 1,
+  displayPrimaryQty: 1,
+  selectedUnitFactor: 1,
+  secQty: 0,
+  actualQty: 1,
+  unitCost: 0,
+  totalCost: 0,
+  availableStock: 0,
+  isIssued: true
+});
+
+interface MaterialItemSelectCellProps {
+  rowIdx: number;
+  isLastRow: boolean;
+  record: ProductionLineRow;
+  items: Item[];
+  getCellRef: (rowIdx: number, colKey: string) => React.RefObject<any>;
+  onSelectItem: (rawItemId: string, key: string, rowIdx: number) => void;
+  focusCell: (rowIdx: number, colKey: string) => void;
+  onEmptyLastRowExit: () => void;
+  onNavigateCellKeyDown: (rowIdx: number, colKey: string, e: React.KeyboardEvent) => void;
+}
+
+const MaterialItemSelectCell: React.FC<MaterialItemSelectCellProps> = ({
+  rowIdx,
+  isLastRow,
+  record,
+  items,
+  getCellRef,
+  onSelectItem,
+  focusCell,
+  onEmptyLastRowExit,
+  onNavigateCellKeyDown,
+}) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Select
+      ref={getCellRef(rowIdx, 'itemId')}
+      className={`grid-select-row-${rowIdx}`}
+      showSearch
+      open={open}
+      onDropdownVisibleChange={setOpen}
+      placeholder="Select Raw Material"
+      value={record.rawItemId || undefined}
+      onSelect={(val) => {
+        setOpen(false);
+        onSelectItem(val, record.key, rowIdx);
+      }}
+      onChange={(val) => {
+        setOpen(false);
+        if (val) {
+          onSelectItem(val, record.key, rowIdx);
+        }
+      }}
+      onBlur={() => setOpen(false)}
+      style={{ width: '100%' }}
+      {...getItemSelectProps(items)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          if (open) {
+            return;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(false);
+
+          if (record.rawItemId) {
+            focusCell(rowIdx, 'primaryQty');
+          } else if (isLastRow) {
+            onEmptyLastRowExit();
+          }
+          return;
+        }
+
+        if (e.key === 'Tab') {
+          setOpen(false);
+          if (!record.rawItemId && isLastRow) {
+            e.preventDefault();
+            onEmptyLastRowExit();
+          }
+          return;
+        }
+
+        if (!open) {
+          onNavigateCellKeyDown(rowIdx, 'itemId', e);
+        }
+      }}
+    />
+  );
+};
+
 export const ManufacturingForm: React.FC = () => {
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = Boolean(voucherNo && voucherNo !== 'new');
@@ -64,8 +162,14 @@ export const ManufacturingForm: React.FC = () => {
   const [units, setUnits] = useState<UnitDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [availableBoms, setAvailableBoms] = useState<BomResponse[]>([]);
-  const [lines, setLines] = useState<ProductionLineRow[]>([]);
+  const [lines, setLines] = useState<ProductionLineRow[]>(() => (isEdit ? [] : [createEmptyRow(1)]));
   const [finishedItemId, setFinishedItemId] = useState<string>('');
+
+  const pendingFocusRef = useRef<{ rowIdx: number; colKey: string } | null>(null);
+  const laborCostRef = useRef<any>(null);
+  const overheadCostRef = useRef<any>(null);
+  const packagingCostRef = useRef<any>(null);
+  const saveBtnRef = useRef<HTMLButtonElement>(null);
 
   // Overhead & Production values
   const [targetQty, setTargetQty] = useState<number>(1);
@@ -113,7 +217,7 @@ export const ManufacturingForm: React.FC = () => {
   }, [units]);
 
   // Load existing voucher if edit mode
-  const fetchVoucher = useCallback(async (currentItems: Item[]) => {
+  const fetchVoucher = useCallback(async (currentItems: Item[], currentUnits: UnitDto[]) => {
     if (!isEdit || !voucherNo) {
       form.setFieldsValue({
         date: dayjs(),
@@ -168,7 +272,7 @@ export const ManufacturingForm: React.FC = () => {
         const secQty = hasSec && pSize > 0 ? Math.floor(l.actualQty / pSize) : 0;
         const rawBasePrimaryQty = hasSec && pSize > 0 ? Math.round((l.actualQty - (secQty * pSize)) * 10000) / 10000 : l.actualQty;
 
-        const resolved = resolveDisplayQtyAndUnit(rawBasePrimaryQty, item, units as any);
+        const resolved = resolveDisplayQtyAndUnit(rawBasePrimaryQty, item, currentUnits as any);
 
         return {
           key: `row-${index}`,
@@ -191,13 +295,14 @@ export const ManufacturingForm: React.FC = () => {
           isIssued: l.isIssued
         };
       });
-      setLines(rows);
+      const nextSeq = rows.length > 0 ? Math.max(...rows.map(r => r.seq)) + 1 : 1;
+      setLines([...rows, createEmptyRow(nextSeq)]);
     } catch (err) {
       message.error('Failed to load manufacturing voucher');
     } finally {
       setLoading(false);
     }
-  }, [isEdit, voucherNo, form, units]);
+  }, [isEdit, voucherNo, form]);
 
   // Lookups
   useEffect(() => {
@@ -209,10 +314,11 @@ export const ManufacturingForm: React.FC = () => {
           narrationService.getActiveNarrations()
         ]);
         const validItems = itemList || [];
+        const validUnits = unitList || [];
         setItems(validItems);
-        setUnits(unitList || []);
+        setUnits(validUnits);
         setNarrations(narrationList || []);
-        fetchVoucher(validItems);
+        fetchVoucher(validItems, validUnits);
       } catch (err) {
         message.error('Failed to load item and unit lookups');
       }
@@ -297,21 +403,22 @@ export const ManufacturingForm: React.FC = () => {
           isIssued: true
         };
       });
-      setLines(newRows);
+      const nextSeq = newRows.length > 0 ? Math.max(...newRows.map(r => r.seq)) + 1 : 1;
+      setLines([...newRows, createEmptyRow(nextSeq)]);
     } catch (err: any) {
       message.warning('Could not calculate estimate from recipe');
     }
   };
 
   const handleTargetQtyChange = (val: number | null) => {
-    const newQty = val || 1;
+    const newQty = typeof val === 'number' ? val : 0;
     setTargetQty(newQty);
     setProducedQty(newQty);
     form.setFieldValue('producedQty', newQty);
 
     const bomId = form.getFieldValue('bomMasterId');
     const itemId = form.getFieldValue('finishedItemId');
-    if (bomId && itemId) {
+    if (bomId && itemId && newQty > 0) {
       applyBomEstimate(bomId, itemId, newQty);
     }
   };
@@ -399,26 +506,118 @@ export const ManufacturingForm: React.FC = () => {
     }));
   };
 
-  const handleAddRow = () => {
-    const newSeq = lines.length > 0 ? Math.max(...lines.map(r => r.seq)) + 1 : 1;
-    const newRow: ProductionLineRow = {
-      key: `custom-${Date.now()}`,
-      seq: newSeq,
-      rawItemId: '',
-      plannedQty: 1,
-      primaryQty: 1,
-      secQty: 0,
-      actualQty: 1,
-      unitCost: 0,
-      totalCost: 0,
-      availableStock: 0,
-      isIssued: true
+  const focusSummaryCard = useCallback(() => {
+    closeOpenSelectDropdowns();
+    const doFocus = () => {
+      if (laborCostRef.current?.focus) {
+        laborCostRef.current.focus();
+        laborCostRef.current.select?.();
+      } else {
+        const el = document.querySelector<HTMLInputElement>('.mfg-summary-labor input');
+        el?.focus();
+        el?.select?.();
+      }
     };
-    setLines([...lines, newRow]);
+    doFocus();
+    requestAnimationFrame(doFocus);
+  }, []);
+
+  const handleAddRow = useCallback(() => {
+    setLines(prev => {
+      const newSeq = prev.length > 0 ? Math.max(...prev.map(r => r.seq)) + 1 : 1;
+      return [...prev, createEmptyRow(newSeq)];
+    });
+  }, []);
+
+  const { getCellRef, handleCellKeyDown, focusCell } = useGridKeyboard({
+    rowCount: lines.length,
+    enterCols: ['itemId', 'primaryQty', 'secQty', 'actualQty', 'unitCost'],
+    arrowCols: ['itemId', 'primaryQty', 'secQty', 'actualQty', 'unitCost'],
+    firstColKey: 'itemId',
+    onAddRow: handleAddRow,
+    pendingFocusRef,
+    isRowValid: (idx) => Boolean(lines[idx]?.rawItemId),
+    onSave: focusSummaryCard,
+  });
+
+  const handleMfgCellKeyDown = useCallback(
+    (rowIdx: number, colKey: string, e: React.KeyboardEvent, hasSecUnit?: boolean) => {
+      const isLastEmptyRow = rowIdx === lines.length - 1 && !lines[rowIdx]?.rawItemId;
+      if (e.key === 'Enter' && isLastEmptyRow) {
+        e.preventDefault();
+        e.stopPropagation();
+        focusSummaryCard();
+        return;
+      }
+
+      if (colKey === 'primaryQty' && !hasSecUnit && (e.key === 'Enter' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        e.stopPropagation();
+        focusCell(rowIdx, 'actualQty');
+        return;
+      }
+
+      if (colKey === 'actualQty' && !hasSecUnit && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        e.stopPropagation();
+        focusCell(rowIdx, 'primaryQty');
+        return;
+      }
+
+      handleCellKeyDown(rowIdx, colKey, e);
+    },
+    [lines, focusSummaryCard, focusCell, handleCellKeyDown],
+  );
+
+  const handleMaterialSelect = (rawItemId: string, key: string, rowIdx: number) => {
+    const item = items.find(i => i.id === rawItemId);
+    const rate = item ? (item.priRate || item.opnRate || 0) : 0;
+    const allowed = getItemAllowedUnits(item);
+    const unit = item ? (item.defaultUnit || item.primaryUnit || allowed[0]?.code) : undefined;
+    const pSize = Number(item?.qtyInPack || 0);
+    const selectable = getSelectablePrimaryUnits(item, units as any);
+    const primaryOpt = selectable[0];
+
+    setLines(prev => {
+      const isLastRow = prev.length > 0 && prev[prev.length - 1].key === key;
+      const updatedRows = prev.map(row => {
+        if (row.key === key) {
+          return {
+            ...row,
+            rawItemId,
+            unitCost: rate,
+            unitId: unit,
+            secUnit: item?.secondaryUnit,
+            qtyInPack: pSize,
+            primaryQty: 1,
+            displayPrimaryQty: 1,
+            selectedUnitId: primaryOpt?.unitId || unit,
+            selectedUnitFactor: primaryOpt?.factor || 1,
+            secQty: 0,
+            actualQty: 1,
+            totalCost: rate
+          };
+        }
+        return row;
+      });
+
+      if (isLastRow) {
+        const nextSeq = updatedRows.length > 0 ? Math.max(...updatedRows.map(r => r.seq)) + 1 : 1;
+        return [...updatedRows, createEmptyRow(nextSeq)];
+      }
+      return updatedRows;
+    });
+
+    setTimeout(() => {
+      focusCell(rowIdx, 'primaryQty');
+    }, 30);
   };
 
   const handleRemoveRow = (key: string) => {
-    setLines(lines.filter(r => r.key !== key));
+    setLines(prev => {
+      const remaining = prev.filter(r => r.key !== key);
+      return remaining.length > 0 ? remaining : [createEmptyRow(1)];
+    });
   };
 
   // Total Calculations
@@ -426,17 +625,18 @@ export const ManufacturingForm: React.FC = () => {
   const totalOverheadCost = (laborCost || 0) + (overheadCost || 0) + (packagingCost || 0);
   const grandTotalCost = totalMaterialCost + totalOverheadCost;
   const unitProductionCost = producedQty > 0 ? grandTotalCost / producedQty : 0;
-  const hasShortage = lines.some(r => r.availableStock < r.actualQty);
+  const hasShortage = lines.some(r => Boolean(r.rawItemId) && r.availableStock < r.actualQty);
 
   const submitWithStatus = async (status: ProductionStatus) => {
     try {
       const values = await form.validateFields();
-      if (lines.length === 0) {
+      const filledLines = lines.filter(r => Boolean(r.rawItemId));
+      if (filledLines.length === 0) {
         message.error('Please add at least one consumed material.');
         return;
       }
 
-      const invalidLine = lines.find(r => !r.rawItemId || r.actualQty <= 0);
+      const invalidLine = filledLines.find(r => r.actualQty <= 0);
       if (invalidLine) {
         message.error('Please ensure all consumed materials have valid item selection and quantity > 0.');
         return;
@@ -458,7 +658,7 @@ export const ManufacturingForm: React.FC = () => {
         remarks: values.remarks,
         status: status,
         currentStage: status === ProductionStatusEnum.InProgress ? 'Material Issued' : status === ProductionStatusEnum.Completed ? 'Completed' : 'Planned',
-        lines: lines.map((r, i) => ({
+        lines: filledLines.map((r, i) => ({
           seq: i + 1,
           rawItemId: r.rawItemId,
           plannedQty: r.plannedQty || r.actualQty,
@@ -499,37 +699,17 @@ export const ManufacturingForm: React.FC = () => {
       title: 'Raw Material / Ingredient',
       key: 'rawItemId',
       width: 250,
-      render: (_: any, record: ProductionLineRow) => (
-        <Select
-          showSearch
-          placeholder="Select Raw Material"
-          value={record.rawItemId || undefined}
-          onChange={(val) => {
-            const item = items.find(i => i.id === val);
-            const rate = item ? (item.priRate || item.opnRate || 0) : 0;
-            const allowed = getItemAllowedUnits(item);
-            const unit = item ? (item.defaultUnit || item.primaryUnit || allowed[0]?.code) : undefined;
-            const pSize = Number(item?.qtyInPack || 0);
-            setLines(prev => prev.map(row => {
-              if (row.key === record.key) {
-                return {
-                  ...row,
-                  rawItemId: val,
-                  unitCost: rate,
-                  unitId: unit,
-                  secUnit: item?.secondaryUnit,
-                  qtyInPack: pSize,
-                  primaryQty: 1,
-                  secQty: 0,
-                  actualQty: 1,
-                  totalCost: rate
-                };
-              }
-              return row;
-            }));
-          }}
-          style={{ width: '100%' }}
-          {...getItemSelectProps(items)}
+      render: (_: any, record: ProductionLineRow, rowIdx: number) => (
+        <MaterialItemSelectCell
+          rowIdx={rowIdx}
+          isLastRow={rowIdx === lines.length - 1}
+          record={record}
+          items={items}
+          getCellRef={getCellRef}
+          onSelectItem={handleMaterialSelect}
+          focusCell={focusCell}
+          onEmptyLastRowExit={focusSummaryCard}
+          onNavigateCellKeyDown={handleMfgCellKeyDown}
         />
       )
     },
@@ -552,11 +732,14 @@ export const ManufacturingForm: React.FC = () => {
       title: 'Primary Qty',
       key: 'primaryQty',
       width: 175,
-      render: (_: any, record: ProductionLineRow) => {
+      render: (_: any, record: ProductionLineRow, rowIdx: number) => {
         const item = items.find(i => i.id === record.rawItemId);
         const selectableUnits = getSelectablePrimaryUnits(item, units as any);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
         const priUnit = getUnitTitle(priCode);
+        const secCode = item?.secondaryUnit || record.secUnit || '';
+        const pSize = Number(item?.qtyInPack || record.qtyInPack || 0);
+        const hasSecUnit = Boolean(secCode && secCode !== priCode && pSize > 1);
 
         const currentUnitId = record.selectedUnitId || selectableUnits[0]?.unitId || priCode;
         const displayValue = record.displayPrimaryQty !== undefined 
@@ -567,11 +750,15 @@ export const ManufacturingForm: React.FC = () => {
 
         return (
           <InputNumber
+            ref={getCellRef(rowIdx, 'primaryQty')}
             min={0}
             step={record.selectedUnitFactor && record.selectedUnitFactor > 1 ? 1 : 0.01}
             controls={false}
+            keyboard={false}
             value={displayValue}
             placeholder="0"
+            onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
+            onKeyDown={(e) => handleMfgCellKeyDown(rowIdx, 'primaryQty', e, hasSecUnit)}
             onChange={(val) => handleRowQtyChange(record.key, 'primaryQty', val || 0)}
             style={{ width: '100%' }}
             addonAfter={
@@ -601,7 +788,7 @@ export const ManufacturingForm: React.FC = () => {
       title: 'Sec Qty',
       key: 'secQty',
       width: 130,
-      render: (_: any, record: ProductionLineRow) => {
+      render: (_: any, record: ProductionLineRow, rowIdx: number) => {
         const item = items.find(i => i.id === record.rawItemId);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
         const secCode = item?.secondaryUnit || record.secUnit || '';
@@ -610,13 +797,17 @@ export const ManufacturingForm: React.FC = () => {
         const secUnit = hasSecUnit ? getUnitTitle(secCode) : '';
         return (
           <InputNumber
+            ref={getCellRef(rowIdx, 'secQty')}
             min={0}
             step={1}
             controls={false}
+            keyboard={false}
             disabled={!hasSecUnit}
             value={hasSecUnit ? record.secQty : undefined}
             placeholder={hasSecUnit ? '0' : '—'}
             addonAfter={secUnit ? <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{secUnit}</span> : undefined}
+            onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
+            onKeyDown={(e) => handleMfgCellKeyDown(rowIdx, 'secQty', e, hasSecUnit)}
             onChange={(val) => handleRowQtyChange(record.key, 'secQty', val || 0)}
             style={{ width: '100%' }}
           />
@@ -627,18 +818,25 @@ export const ManufacturingForm: React.FC = () => {
       title: 'Actual Consumed',
       key: 'actualQty',
       width: 150,
-      render: (_: any, record: ProductionLineRow) => {
+      render: (_: any, record: ProductionLineRow, rowIdx: number) => {
         const item = items.find(i => i.id === record.rawItemId);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
+        const secCode = item?.secondaryUnit || record.secUnit || '';
+        const pSize = Number(item?.qtyInPack || record.qtyInPack || 0);
+        const hasSecUnit = Boolean(secCode && secCode !== priCode && pSize > 1);
         const priUnit = getUnitTitle(priCode);
         return (
           <InputNumber
+            ref={getCellRef(rowIdx, 'actualQty')}
             min={0.0001}
             step={0.1}
             controls={false}
+            keyboard={false}
             value={record.actualQty}
             placeholder="0"
             addonAfter={priUnit ? <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{priUnit}</span> : undefined}
+            onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
+            onKeyDown={(e) => handleMfgCellKeyDown(rowIdx, 'actualQty', e, hasSecUnit)}
             onChange={(val) => handleRowQtyChange(record.key, 'actualQty', val || 0)}
             style={{ width: '100%' }}
           />
@@ -665,11 +863,15 @@ export const ManufacturingForm: React.FC = () => {
       key: 'unitCost',
       width: 115,
       align: 'right' as const,
-      render: (_: any, record: ProductionLineRow) => (
+      render: (_: any, record: ProductionLineRow, rowIdx: number) => (
         <InputNumber
+          ref={getCellRef(rowIdx, 'unitCost')}
           min={0}
           controls={false}
+          keyboard={false}
           value={record.unitCost}
+          onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
+          onKeyDown={(e) => handleMfgCellKeyDown(rowIdx, 'unitCost', e)}
           onChange={(val) => handleRowChange(record.key, 'unitCost', val || 0)}
           style={{ width: '100%' }}
         />
@@ -742,11 +944,13 @@ export const ManufacturingForm: React.FC = () => {
               </Button>
 
               <Button 
+                ref={saveBtnRef}
                 type="primary" 
                 style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
                 icon={<CheckCircleOutlined />} 
                 onClick={() => submitWithStatus(ProductionStatusEnum.Completed)}
                 loading={saving}
+                className="form-save-btn"
               >
                 Complete Production
               </Button>
@@ -832,6 +1036,9 @@ export const ManufacturingForm: React.FC = () => {
                   >
                     <InputNumber
                       min={0.0001}
+                      step={0.01}
+                      precision={2}
+                      controls={false}
                       style={{ width: '100%' }}
                       onChange={handleTargetQtyChange}
                     />
@@ -856,8 +1063,11 @@ export const ManufacturingForm: React.FC = () => {
                   >
                     <InputNumber
                       min={0.0001}
+                      step={0.01}
+                      precision={2}
+                      controls={false}
                       style={{ width: '100%' }}
-                      onChange={(v) => setProducedQty(v || 1)}
+                      onChange={(v) => setProducedQty(typeof v === 'number' ? v : 0)}
                     />
                   </Form.Item>
                 </Col>
@@ -954,12 +1164,21 @@ export const ManufacturingForm: React.FC = () => {
               loading={loading}
               style={{ position: 'sticky', top: 20 }}
             >
-              <Form.Item label="Direct Labor Allocated" name="laborCost">
+              <Form.Item label="Direct Labor Allocated" name="laborCost" className="mfg-summary-labor">
                 <InputNumber
+                  ref={laborCostRef}
                   min={0}
                   step={10}
                   controls={false}
                   style={{ width: '100%' }}
+                  onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      overheadCostRef.current?.focus();
+                      overheadCostRef.current?.select?.();
+                    }
+                  }}
                   onChange={(v) => setLaborCost(v || 0)}
                   prefix="Rs."
                 />
@@ -967,10 +1186,19 @@ export const ManufacturingForm: React.FC = () => {
 
               <Form.Item label="Machine & Utility Overheads" name="overheadCost">
                 <InputNumber
+                  ref={overheadCostRef}
                   min={0}
                   step={10}
                   controls={false}
                   style={{ width: '100%' }}
+                  onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      packagingCostRef.current?.focus();
+                      packagingCostRef.current?.select?.();
+                    }
+                  }}
                   onChange={(v) => setOverheadCost(v || 0)}
                   prefix="Rs."
                 />
@@ -978,10 +1206,18 @@ export const ManufacturingForm: React.FC = () => {
 
               <Form.Item label="Packaging & Consumables" name="packagingCost">
                 <InputNumber
+                  ref={packagingCostRef}
                   min={0}
                   step={10}
                   controls={false}
                   style={{ width: '100%' }}
+                  onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      saveBtnRef.current?.focus();
+                    }
+                  }}
                   onChange={(v) => setPackagingCost(v || 0)}
                   prefix="Rs."
                 />
@@ -1016,7 +1252,7 @@ export const ManufacturingForm: React.FC = () => {
                     />
                     <div style={{ marginTop: 8 }}>
                       <Text type="secondary">Output: </Text>
-                      <Text strong>{producedQty} {getUnitTitle(watchedUnitId) || 'units'}</Text>
+                      <Text strong>{Number(producedQty || 0).toFixed(2)} {getUnitTitle(watchedUnitId) || 'units'}</Text>
                     </div>
                     <Divider style={{ margin: '8px 0' }} />
                     <Statistic
