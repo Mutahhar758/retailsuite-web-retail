@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Card, Form, Input, InputNumber, Button, Space, Typography, 
   Select, Switch, Table, Row, Col, Divider, message, Popconfirm, Statistic, Tag 
@@ -17,6 +17,7 @@ import {
   toBasePrimaryQty, 
   resolveDisplayQtyAndUnit 
 } from '../../utils/unitConversion';
+import { useGridKeyboard, closeOpenSelectDropdowns } from '../../hooks/useGridKeyboard';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -41,6 +42,102 @@ interface IngredientRow {
   totalCost: number;
 }
 
+const createEmptyRow = (seq: number): IngredientRow => ({
+  key: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  seq,
+  rawItemId: '',
+  primaryQty: 1,
+  displayPrimaryQty: 1,
+  selectedUnitFactor: 1,
+  secQty: 0,
+  qty: 1,
+  scrapPercentage: 0,
+  isOptional: false,
+  rate: 0,
+  totalCost: 0
+});
+
+interface IngredientItemSelectCellProps {
+  rowIdx: number;
+  isLastRow: boolean;
+  record: IngredientRow;
+  items: Item[];
+  getCellRef: (rowIdx: number, colKey: string) => React.RefObject<any>;
+  onSelectItem: (rawItemId: string, key: string, rowIdx: number) => void;
+  focusCell: (rowIdx: number, colKey: string) => void;
+  onEmptyLastRowExit: () => void;
+  onNavigateCellKeyDown: (rowIdx: number, colKey: string, e: React.KeyboardEvent) => void;
+}
+
+const IngredientItemSelectCell: React.FC<IngredientItemSelectCellProps> = ({
+  rowIdx,
+  isLastRow,
+  record,
+  items,
+  getCellRef,
+  onSelectItem,
+  focusCell,
+  onEmptyLastRowExit,
+  onNavigateCellKeyDown,
+}) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Select
+      ref={getCellRef(rowIdx, 'itemId')}
+      className={`grid-select-row-${rowIdx}`}
+      showSearch
+      open={open}
+      onDropdownVisibleChange={setOpen}
+      placeholder="Select Ingredient"
+      value={record.rawItemId || undefined}
+      onSelect={(val) => {
+        setOpen(false);
+        onSelectItem(val, record.key, rowIdx);
+      }}
+      onChange={(val) => {
+        setOpen(false);
+        if (val) {
+          onSelectItem(val, record.key, rowIdx);
+        }
+      }}
+      onBlur={() => setOpen(false)}
+      style={{ width: '100%' }}
+      {...getItemSelectProps(items)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          if (open) {
+            return;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(false);
+
+          if (record.rawItemId) {
+            focusCell(rowIdx, 'primaryQty');
+          } else if (isLastRow) {
+            onEmptyLastRowExit();
+          }
+          return;
+        }
+
+        if (e.key === 'Tab') {
+          setOpen(false);
+          if (!record.rawItemId && isLastRow) {
+            e.preventDefault();
+            onEmptyLastRowExit();
+          }
+          return;
+        }
+
+        if (!open) {
+          onNavigateCellKeyDown(rowIdx, 'itemId', e);
+        }
+      }}
+    />
+  );
+};
+
 export const BomForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const isEdit = Boolean(id && id !== 'new');
@@ -51,8 +148,15 @@ export const BomForm: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [units, setUnits] = useState<UnitDto[]>([]);
-  const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
+  const [ingredients, setIngredients] = useState<IngredientRow[]>(() => (isEdit ? [] : [createEmptyRow(1)]));
   const [finishedItemId, setFinishedItemId] = useState<string>('');
+
+  // Refs for keyboard navigation and summary card focus
+  const pendingFocusRef = useRef<{ rowIdx: number; colKey: string } | null>(null);
+  const laborCostRef = useRef<any>(null);
+  const overheadCostRef = useRef<any>(null);
+  const packagingCostRef = useRef<any>(null);
+  const saveBtnRef = useRef<HTMLButtonElement>(null);
 
   // Overhead values from form state
   const [laborCost, setLaborCost] = useState<number>(0);
@@ -98,7 +202,7 @@ export const BomForm: React.FC = () => {
   }, [units]);
 
   // Load existing BOM if in edit mode
-  const fetchBom = useCallback(async (currentItems: Item[]) => {
+  const fetchBom = useCallback(async (currentItems: Item[], currentUnits: UnitDto[]) => {
     if (!isEdit) {
       form.setFieldsValue({
         outputQty: 1,
@@ -143,7 +247,7 @@ export const BomForm: React.FC = () => {
         const secQty = hasSec && pSize > 0 ? Math.floor(l.qty / pSize) : 0;
         const rawBasePrimaryQty = hasSec && pSize > 0 ? Math.round((l.qty - (secQty * pSize)) * 10000) / 10000 : l.qty;
 
-        const resolved = resolveDisplayQtyAndUnit(rawBasePrimaryQty, item, units as any);
+        const resolved = resolveDisplayQtyAndUnit(rawBasePrimaryQty, item, currentUnits as any);
 
         return {
           key: `row-${index}`,
@@ -164,13 +268,14 @@ export const BomForm: React.FC = () => {
           totalCost: l.totalEstimatedCost || (l.qty * (1 + l.scrapPercentage / 100) * (l.currentRate || 0))
         };
       });
-      setIngredients(rows);
+      const nextSeq = rows.length > 0 ? Math.max(...rows.map(r => r.seq)) + 1 : 1;
+      setIngredients([...rows, createEmptyRow(nextSeq)]);
     } catch (err) {
       message.error('Failed to load recipe details');
     } finally {
       setLoading(false);
     }
-  }, [id, isEdit, form, units]);
+  }, [id, isEdit, form]);
 
   // Load items and units
   useEffect(() => {
@@ -181,9 +286,10 @@ export const BomForm: React.FC = () => {
           unitService.getActiveUnits()
         ]);
         const validItems = itemList || [];
+        const validUnits = unitList || [];
         setItems(validItems);
-        setUnits(unitList || []);
-        fetchBom(validItems);
+        setUnits(validUnits);
+        fetchBom(validItems, validUnits);
       } catch (err) {
         message.error('Failed to load item lookup');
       }
@@ -198,7 +304,70 @@ export const BomForm: React.FC = () => {
     return { ...row, totalCost: Math.round(cost * 100) / 100 };
   };
 
-  const handleItemSelect = (rawItemId: string, key: string) => {
+  const focusSummaryCard = useCallback(() => {
+    closeOpenSelectDropdowns();
+    const doFocus = () => {
+      if (laborCostRef.current?.focus) {
+        laborCostRef.current.focus();
+        laborCostRef.current.select?.();
+      } else {
+        const el = document.querySelector<HTMLInputElement>('.bom-summary-labor input');
+        el?.focus();
+        el?.select?.();
+      }
+    };
+    doFocus();
+    requestAnimationFrame(doFocus);
+  }, []);
+
+  const handleAddRow = useCallback(() => {
+    setIngredients(prev => {
+      const newSeq = prev.length > 0 ? Math.max(...prev.map(r => r.seq)) + 1 : 1;
+      return [...prev, createEmptyRow(newSeq)];
+    });
+  }, []);
+
+  const { getCellRef, handleCellKeyDown, focusCell } = useGridKeyboard({
+    rowCount: ingredients.length,
+    enterCols: ['itemId', 'primaryQty', 'secQty', 'qty', 'scrapPercentage', 'rate'],
+    arrowCols: ['itemId', 'primaryQty', 'secQty', 'qty', 'scrapPercentage', 'rate'],
+    firstColKey: 'itemId',
+    onAddRow: handleAddRow,
+    pendingFocusRef,
+    isRowValid: (idx) => Boolean(ingredients[idx]?.rawItemId),
+    onSave: focusSummaryCard,
+  });
+
+  const handleBomCellKeyDown = useCallback(
+    (rowIdx: number, colKey: string, e: React.KeyboardEvent, hasSecUnit?: boolean) => {
+      const isLastEmptyRow = rowIdx === ingredients.length - 1 && !ingredients[rowIdx]?.rawItemId;
+      if (e.key === 'Enter' && isLastEmptyRow) {
+        e.preventDefault();
+        e.stopPropagation();
+        focusSummaryCard();
+        return;
+      }
+
+      if (colKey === 'primaryQty' && !hasSecUnit && (e.key === 'Enter' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        e.stopPropagation();
+        focusCell(rowIdx, 'qty');
+        return;
+      }
+
+      if (colKey === 'qty' && !hasSecUnit && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        e.stopPropagation();
+        focusCell(rowIdx, 'primaryQty');
+        return;
+      }
+
+      handleCellKeyDown(rowIdx, colKey, e);
+    },
+    [ingredients, focusSummaryCard, focusCell, handleCellKeyDown],
+  );
+
+  const handleItemSelect = (rawItemId: string, key: string, rowIdx: number) => {
     const found = items.find(i => i.id === rawItemId);
     const allowed = getItemAllowedUnits(found);
     const unitId = found ? (found.defaultUnit || found.primaryUnit || allowed[0]?.code) : undefined;
@@ -210,26 +379,39 @@ export const BomForm: React.FC = () => {
     const selectedUnitId = primaryOpt?.unitId || unitId;
     const selectedUnitFactor = primaryOpt?.factor || 1;
 
-    setIngredients(prev => prev.map(row => {
-      if (row.key === key) {
-        const updated: IngredientRow = {
-          ...row,
-          rawItemId,
-          primaryQty: 1,
-          displayPrimaryQty: 1,
-          selectedUnitId,
-          selectedUnitFactor,
-          secQty: 0,
-          qty: 1,
-          rate,
-          unitId,
-          secUnit: found?.secondaryUnit,
-          qtyInPack: pSize
-        };
-        return updateRowCost(updated);
+    setIngredients(prev => {
+      const isLastRow = prev.length > 0 && prev[prev.length - 1].key === key;
+      const updatedRows = prev.map(row => {
+        if (row.key === key) {
+          const updated: IngredientRow = {
+            ...row,
+            rawItemId,
+            primaryQty: 1,
+            displayPrimaryQty: 1,
+            selectedUnitId,
+            selectedUnitFactor,
+            secQty: 0,
+            qty: 1,
+            rate,
+            unitId,
+            secUnit: found?.secondaryUnit,
+            qtyInPack: pSize
+          };
+          return updateRowCost(updated);
+        }
+        return row;
+      });
+
+      if (isLastRow) {
+        const nextSeq = updatedRows.length > 0 ? Math.max(...updatedRows.map(r => r.seq)) + 1 : 1;
+        return [...updatedRows, createEmptyRow(nextSeq)];
       }
-      return row;
-    }));
+      return updatedRows;
+    });
+
+    setTimeout(() => {
+      focusCell(rowIdx, 'primaryQty');
+    }, 30);
   };
 
   const handleRowUnitChange = (key: string, newUnitId: string) => {
@@ -312,27 +494,11 @@ export const BomForm: React.FC = () => {
     }));
   };
 
-  const handleAddRow = () => {
-    const newSeq = ingredients.length > 0 ? Math.max(...ingredients.map(r => r.seq)) + 1 : 1;
-    const newRow: IngredientRow = {
-      key: `row-${Date.now()}`,
-      seq: newSeq,
-      rawItemId: '',
-      primaryQty: 1,
-      displayPrimaryQty: 1,
-      selectedUnitFactor: 1,
-      secQty: 0,
-      qty: 1,
-      scrapPercentage: 0,
-      isOptional: false,
-      rate: 0,
-      totalCost: 0
-    };
-    setIngredients([...ingredients, newRow]);
-  };
-
   const handleRemoveRow = (key: string) => {
-    setIngredients(ingredients.filter(r => r.key !== key));
+    setIngredients(prev => {
+      const remaining = prev.filter(r => r.key !== key);
+      return remaining.length > 0 ? remaining : [createEmptyRow(1)];
+    });
   };
 
   // Calculations
@@ -342,14 +508,15 @@ export const BomForm: React.FC = () => {
   const unitProductionCost = outputQty > 0 ? grandTotalCost / outputQty : 0;
 
   const onFinish = async (values: any) => {
-    if (ingredients.length === 0) {
+    const filledIngredients = ingredients.filter(r => Boolean(r.rawItemId));
+    if (filledIngredients.length === 0) {
       message.error('Please add at least one raw material / ingredient.');
       return;
     }
 
-    const invalidRow = ingredients.find(r => !r.rawItemId || r.qty <= 0);
+    const invalidRow = filledIngredients.find(r => r.qty <= 0);
     if (invalidRow) {
-      message.error('Please select an item and enter a valid quantity for all ingredients.');
+      message.error('Please enter a valid quantity for all ingredients.');
       return;
     }
 
@@ -365,7 +532,7 @@ export const BomForm: React.FC = () => {
       overheadCost: values.overheadCost || 0,
       packagingCost: values.packagingCost || 0,
       notes: values.notes,
-      lines: ingredients.map((r, i) => ({
+      lines: filledIngredients.map((r, i) => ({
         seq: i + 1,
         rawItemId: r.rawItemId,
         qty: r.qty,
@@ -404,14 +571,17 @@ export const BomForm: React.FC = () => {
       title: 'Raw Material / Ingredient',
       key: 'rawItemId',
       width: 250,
-      render: (_: any, record: IngredientRow) => (
-        <Select
-          showSearch
-          placeholder="Select Ingredient"
-          value={record.rawItemId || undefined}
-          onChange={(val) => handleItemSelect(val, record.key)}
-          style={{ width: '100%' }}
-          {...getItemSelectProps(items)}
+      render: (_: any, record: IngredientRow, rowIdx: number) => (
+        <IngredientItemSelectCell
+          rowIdx={rowIdx}
+          isLastRow={rowIdx === ingredients.length - 1}
+          record={record}
+          items={items}
+          getCellRef={getCellRef}
+          onSelectItem={handleItemSelect}
+          focusCell={focusCell}
+          onEmptyLastRowExit={focusSummaryCard}
+          onNavigateCellKeyDown={handleBomCellKeyDown}
         />
       )
     },
@@ -419,11 +589,14 @@ export const BomForm: React.FC = () => {
       title: 'Primary Qty',
       key: 'primaryQty',
       width: 175,
-      render: (_: any, record: IngredientRow) => {
+      render: (_: any, record: IngredientRow, rowIdx: number) => {
         const item = items.find(i => i.id === record.rawItemId);
         const selectableUnits = getSelectablePrimaryUnits(item, units as any);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
         const priUnit = getUnitTitle(priCode);
+        const secCode = item?.secondaryUnit || record.secUnit || '';
+        const pSize = Number(item?.qtyInPack || record.qtyInPack || 0);
+        const hasSecUnit = Boolean(secCode && secCode !== priCode && pSize > 1);
 
         const currentUnitId = record.selectedUnitId || selectableUnits[0]?.unitId || priCode;
         const displayValue = record.displayPrimaryQty !== undefined 
@@ -434,11 +607,18 @@ export const BomForm: React.FC = () => {
 
         return (
           <InputNumber
+            ref={getCellRef(rowIdx, 'primaryQty')}
             min={0}
             step={record.selectedUnitFactor && record.selectedUnitFactor > 1 ? 1 : 0.01}
             controls={false}
+            keyboard={false}
             value={displayValue}
             placeholder="0"
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+            }}
+            onKeyDown={(e) => handleBomCellKeyDown(rowIdx, 'primaryQty', e, hasSecUnit)}
             onChange={(val) => handleRowQtyChange(record.key, 'primaryQty', val || 0)}
             style={{ width: '100%' }}
             addonAfter={
@@ -468,7 +648,7 @@ export const BomForm: React.FC = () => {
       title: 'Sec Qty',
       key: 'secQty',
       width: 130,
-      render: (_: any, record: IngredientRow) => {
+      render: (_: any, record: IngredientRow, rowIdx: number) => {
         const item = items.find(i => i.id === record.rawItemId);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
         const secCode = item?.secondaryUnit || record.secUnit || '';
@@ -477,13 +657,20 @@ export const BomForm: React.FC = () => {
         const secUnit = hasSecUnit ? getUnitTitle(secCode) : '';
         return (
           <InputNumber
+            ref={getCellRef(rowIdx, 'secQty')}
             min={0}
             step={1}
             controls={false}
+            keyboard={false}
             disabled={!hasSecUnit}
             value={hasSecUnit ? record.secQty : undefined}
             placeholder={hasSecUnit ? '0' : '—'}
             addonAfter={secUnit ? <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{secUnit}</span> : undefined}
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+            }}
+            onKeyDown={(e) => handleBomCellKeyDown(rowIdx, 'secQty', e, hasSecUnit)}
             onChange={(val) => handleRowQtyChange(record.key, 'secQty', val || 0)}
             style={{ width: '100%' }}
           />
@@ -494,18 +681,28 @@ export const BomForm: React.FC = () => {
       title: 'Total Qty',
       key: 'qty',
       width: 150,
-      render: (_: any, record: IngredientRow) => {
+      render: (_: any, record: IngredientRow, rowIdx: number) => {
         const item = items.find(i => i.id === record.rawItemId);
         const priCode = item?.primaryUnit || item?.defaultUnit || record.unitId || '';
+        const secCode = item?.secondaryUnit || record.secUnit || '';
+        const pSize = Number(item?.qtyInPack || record.qtyInPack || 0);
+        const hasSecUnit = Boolean(secCode && secCode !== priCode && pSize > 1);
         const priUnit = getUnitTitle(priCode);
         return (
           <InputNumber
+            ref={getCellRef(rowIdx, 'qty')}
             min={0.0001}
             step={0.1}
             controls={false}
+            keyboard={false}
             value={record.qty}
             placeholder="0"
             addonAfter={priUnit ? <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{priUnit}</span> : undefined}
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+            }}
+            onKeyDown={(e) => handleBomCellKeyDown(rowIdx, 'qty', e, hasSecUnit)}
             onChange={(val) => handleRowQtyChange(record.key, 'qty', val || 0)}
             style={{ width: '100%' }}
           />
@@ -516,14 +713,21 @@ export const BomForm: React.FC = () => {
       title: 'Scrap / Wastage %',
       key: 'scrapPercentage',
       width: 110,
-      render: (_: any, record: IngredientRow) => (
+      render: (_: any, record: IngredientRow, rowIdx: number) => (
         <InputNumber
+          ref={getCellRef(rowIdx, 'scrapPercentage')}
           min={0}
           max={100}
           controls={false}
+          keyboard={false}
           value={record.scrapPercentage}
           formatter={v => `${v}%`}
           parser={v => Number(v?.replace('%', '') || 0)}
+          onFocus={(e) => {
+            const input = e.target as HTMLInputElement;
+            input?.select?.();
+          }}
+          onKeyDown={(e) => handleBomCellKeyDown(rowIdx, 'scrapPercentage', e)}
           onChange={(val) => handleRowChange(record.key, 'scrapPercentage', val || 0)}
           style={{ width: '100%' }}
         />
@@ -534,11 +738,18 @@ export const BomForm: React.FC = () => {
       key: 'rate',
       width: 110,
       align: 'right' as const,
-      render: (_: any, record: IngredientRow) => (
+      render: (_: any, record: IngredientRow, rowIdx: number) => (
         <InputNumber
+          ref={getCellRef(rowIdx, 'rate')}
           min={0}
           controls={false}
+          keyboard={false}
           value={record.rate}
+          onFocus={(e) => {
+            const input = e.target as HTMLInputElement;
+            input?.select?.();
+          }}
+          onKeyDown={(e) => handleBomCellKeyDown(rowIdx, 'rate', e)}
           onChange={(val) => handleRowChange(record.key, 'rate', val || 0)}
           style={{ width: '100%' }}
         />
@@ -589,7 +800,14 @@ export const BomForm: React.FC = () => {
           <Col>
             <Space>
               <Button onClick={() => navigate('/setup/bom')}>Cancel</Button>
-              <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={saving}>
+              <Button
+                ref={saveBtnRef}
+                type="primary"
+                htmlType="submit"
+                icon={<SaveOutlined />}
+                loading={saving}
+                className="form-save-btn"
+              >
                 Save Recipe
               </Button>
             </Space>
@@ -652,10 +870,11 @@ export const BomForm: React.FC = () => {
                   >
                     <InputNumber
                       min={0.0001}
-                      step={1}
+                      step={0.01}
+                      precision={2}
                       controls={false}
                       style={{ width: '100%' }}
-                      onChange={(v) => setOutputQty(v || 1)}
+                      onChange={(v) => setOutputQty(typeof v === 'number' ? v : 0)}
                     />
                   </Form.Item>
                 </Col>
@@ -751,12 +970,21 @@ export const BomForm: React.FC = () => {
               loading={loading}
               style={{ position: 'sticky', top: 20 }}
             >
-              <Form.Item label="Labor Cost per Batch" name="laborCost">
+              <Form.Item label="Labor Cost per Batch" name="laborCost" className="bom-summary-labor">
                 <InputNumber
+                  ref={laborCostRef}
                   min={0}
                   step={10}
                   controls={false}
                   style={{ width: '100%' }}
+                  onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      overheadCostRef.current?.focus();
+                      overheadCostRef.current?.select?.();
+                    }
+                  }}
                   onChange={(v) => setLaborCost(v || 0)}
                   prefix="Rs."
                 />
@@ -764,10 +992,19 @@ export const BomForm: React.FC = () => {
 
               <Form.Item label="Utilities & Overhead per Batch" name="overheadCost">
                 <InputNumber
+                  ref={overheadCostRef}
                   min={0}
                   step={10}
                   controls={false}
                   style={{ width: '100%' }}
+                  onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      packagingCostRef.current?.focus();
+                      packagingCostRef.current?.select?.();
+                    }
+                  }}
                   onChange={(v) => setOverheadCost(v || 0)}
                   prefix="Rs."
                 />
@@ -775,10 +1012,18 @@ export const BomForm: React.FC = () => {
 
               <Form.Item label="Packaging Cost per Batch" name="packagingCost">
                 <InputNumber
+                  ref={packagingCostRef}
                   min={0}
                   step={10}
                   controls={false}
                   style={{ width: '100%' }}
+                  onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      saveBtnRef.current?.focus();
+                    }
+                  }}
                   onChange={(v) => setPackagingCost(v || 0)}
                   prefix="Rs."
                 />
@@ -813,7 +1058,7 @@ export const BomForm: React.FC = () => {
                     />
                     <div style={{ marginTop: 6 }}>
                       <Text type="secondary">Yield: </Text>
-                      <Text strong>{outputQty} {getUnitTitle(watchedUnitId, false) || 'units'}</Text>
+                      <Text strong>{Number(outputQty || 0).toFixed(2)} {getUnitTitle(watchedUnitId, false) || 'units'}</Text>
                     </div>
                     <Divider style={{ margin: '8px 0' }} />
                     <Statistic
