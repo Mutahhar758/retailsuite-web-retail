@@ -81,6 +81,40 @@ export function parseBarcodePayload(
   }
 
   // -------------------------------------------------------------
+  // 0a-2. RetailSuite Compact 12-digit Variable Barcode (By Amount): 3 + IIIIII + PPPPP
+  // Prefix 3 (1 digit) + Item ID (6 digits) + Amount in Rs. (5 digits)
+  // Even length (12 digits) for compact Code-128C; calculates qty from live rate at scan time.
+  // e.g. 300004100050 -> Item 000041, Rs. 50 packet -> qty = round4(50 / rate)
+  // -------------------------------------------------------------
+  if (cleanDigits.length === 12 && cleanDigits.startsWith('3')) {
+    const exactMatch = items.find(
+      (i) => i.barcode && i.barcode.trim().toLowerCase() === raw.toLowerCase()
+    );
+    if (!exactMatch) {
+      const itemPart = cleanDigits.substring(1, 7);
+      const amtPart = cleanDigits.substring(7, 12);
+      const rawAmt = parseInt(amtPart, 10);
+
+      const item = findItemByPlu(itemPart, items) || findItemByCode(itemPart, items);
+      if (item && rawAmt > 0) {
+        const totalAmt = round2(rawAmt);
+        const baseRate = item.priRate || 0;
+        const parsedQty = baseRate > 0 ? round4(totalAmt / baseRate) : 1;
+
+        return {
+          matchedItem: item,
+          qty: parsedQty,
+          rate: baseRate > 0 ? baseRate : totalAmt,
+          amount: totalAmt,
+          isVariableWeight: true,
+          unit: resolveItemUnitTitle(item),
+          rawCode: raw
+        };
+      }
+    }
+  }
+
+  // -------------------------------------------------------------
   // 0b. RetailSuite Compact 18-digit Variable Barcode: 2 + IIIIII + QQQQQ + AAAAAA
   // Prefix 2 (1 digit) + Item ID (6 digits) + Qty*1000 (5 digits) + Amount (6 digits, whole number max 9 lac)
   // If Amount is 000000, resolves live rate from product at scan time.
@@ -378,4 +412,8 @@ function round2(val: number): number {
 
 function round3(val: number): number {
   return Math.round((val + Number.EPSILON) * 1000) / 1000;
+}
+
+function round4(val: number): number {
+  return Math.round((val + Number.EPSILON) * 10000) / 10000;
 }

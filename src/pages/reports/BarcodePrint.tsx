@@ -59,9 +59,11 @@ export const BarcodePrint: React.FC = () => {
 
   // Variable Qty / Weight Mode (Prints on Primary Unit)
   const [isVariableWeight, setIsVariableWeight] = useState<boolean>(false);
+  const [variableMode, setVariableMode] = useState<'qty' | 'amount'>('qty');
   const [printQty, setPrintQty] = useState<number>(1);
   const [calcRate, setCalcRate] = useState<number>(0);
   const [calcAmount, setCalcAmount] = useState<number>(0);
+  const [includeQtyOnAmountSticker, setIncludeQtyOnAmountSticker] = useState<boolean>(false);
 
   // Batch Print Queue
   const [layout, setLayout] = useState<'Roll4Inch3Up' | 'ThermalRoll' | 'SheetA4'>('Roll4Inch3Up');
@@ -213,6 +215,7 @@ export const BarcodePrint: React.FC = () => {
 
   const handleQtyChange = (val: number | null) => {
     const q = val !== null && val !== undefined ? val : 1;
+    setVariableMode('qty');
     setPrintQty(q);
     if (calcRate > 0) {
       setCalcAmount(Math.round(q * calcRate));
@@ -221,6 +224,9 @@ export const BarcodePrint: React.FC = () => {
 
   const handleAmountChange = (val: number | null) => {
     const amt = val !== null && val !== undefined ? Math.round(val) : 0;
+    if (amt > 0) {
+      setVariableMode('amount');
+    }
     setCalcAmount(amt);
     if (calcRate > 0) {
       const calculatedQty = Math.round((amt / calcRate + Number.EPSILON) * 1000) / 1000;
@@ -267,12 +273,16 @@ export const BarcodePrint: React.FC = () => {
   };
 
   // Generate barcode string (uses compact all-numeric Code-128C format)
-  // If variableWeight is true: 12-digit format: 2 + IIIIII + QQQQQ (Qty Only)
+  // If variableWeight is true:
+  //   - 'qty' mode:    12-digit format: 2 + IIIIII + QQQQQ (Qty x 1000)
+  //   - 'amount' mode: 12-digit format: 3 + IIIIII + PPPPP (Amount in Rs.)
   // If variableWeight is false: standard item barcode
   const generateBarcodeString = (
     item: ProductOption,
     variableWeight: boolean,
-    qty: number
+    qty: number,
+    mode: 'qty' | 'amount' = 'qty',
+    amount: number = 0
   ): string => {
     const baseCode = (item.barcode || item.id)?.replace(/[\r\n]/g, '').trim() || '000000';
     if (!variableWeight) return baseCode;
@@ -280,6 +290,16 @@ export const BarcodePrint: React.FC = () => {
     const numericId = !isNaN(Number(item.id))
       ? String(parseInt(item.id, 10)).padStart(6, '0')
       : (!isNaN(Number(baseCode)) ? String(parseInt(baseCode, 10)).padStart(6, '0') : null);
+
+    if (mode === 'amount') {
+      const amtInt = Math.min(99999, Math.max(1, Math.round(amount || 1)));
+      if (numericId && numericId.length <= 6) {
+        const amtStr = amtInt.toString().padStart(5, '0');
+        // 12-digit all-numeric: 3 + 6-digit Item ID + 5-digit Amount (Rs.)
+        return `3${numericId}${amtStr}`;
+      }
+      return `VW-${baseCode}-Q${qty || 1}-P${amtInt}`;
+    }
 
     if (numericId && numericId.length <= 6) {
       const qtyGrams = Math.min(99999, Math.max(1, Math.round((qty || 1) * 1000))).toString().padStart(5, '0');
@@ -298,8 +318,13 @@ export const BarcodePrint: React.FC = () => {
       return;
     }
 
-    const finalBarcode = generateBarcodeString(selectedItem, isVariableWeight, printQty);
+    const isByAmount = isVariableWeight && variableMode === 'amount';
+    const finalBarcode = generateBarcodeString(selectedItem, isVariableWeight, printQty, variableMode, calcAmount);
     const subInfo = resolveSubUnit(selectedItem, printQty);
+    const shouldIncludeQty = isVariableWeight && (!isByAmount || includeQtyOnAmountSticker);
+    const effectiveTotalAmount = isVariableWeight
+      ? (isByAmount && calcAmount > 0 ? Math.round(calcAmount) : Math.round(printQty * calcRate))
+      : undefined;
 
     const newItem: BarcodePrintItem = {
       itemId: selectedItem.id,
@@ -307,11 +332,11 @@ export const BarcodePrint: React.FC = () => {
       barcode: finalBarcode,
       rate: calcRate,
       copies: Math.max(1, copies),
-      qty: isVariableWeight ? printQty : undefined,
+      qty: shouldIncludeQty ? printQty : undefined,
       unit: isVariableWeight ? primaryUnit : undefined,
-      displayQty: isVariableWeight ? subInfo.displayQty : undefined,
-      displayUnit: isVariableWeight ? subInfo.displayUnit : undefined,
-      totalAmount: isVariableWeight ? Math.round(printQty * calcRate) : undefined,
+      displayQty: shouldIncludeQty ? subInfo.displayQty : undefined,
+      displayUnit: shouldIncludeQty ? subInfo.displayUnit : undefined,
+      totalAmount: effectiveTotalAmount,
       isVariableWeight,
       companySubHeader: companySubHeader || undefined
     };
@@ -319,7 +344,9 @@ export const BarcodePrint: React.FC = () => {
     setBatchQueue(prev => [...prev, newItem]);
     message.success(
       isVariableWeight
-        ? `Added ${copies}x "${selectedItem.title}" (${subInfo.displayQty} ${subInfo.displayUnit}) to queue`
+        ? (isByAmount
+            ? `Added ${copies}x "${selectedItem.title}" (Rs. ${effectiveTotalAmount}) to queue`
+            : `Added ${copies}x "${selectedItem.title}" (${subInfo.displayQty} ${subInfo.displayUnit}) to queue`)
         : `Added ${copies}x "${selectedItem.title}" to queue`
     );
   };
@@ -337,12 +364,17 @@ export const BarcodePrint: React.FC = () => {
   // Build request payload
   const buildPayload = (): BarcodePrintRequest => {
     let itemsToPrint: BarcodePrintItem[] = [];
+    const isByAmount = isVariableWeight && variableMode === 'amount';
 
     if (batchQueue.length > 0) {
       itemsToPrint = [...batchQueue];
     } else if (selectedItem) {
-      const finalBarcode = generateBarcodeString(selectedItem, isVariableWeight, printQty);
+      const finalBarcode = generateBarcodeString(selectedItem, isVariableWeight, printQty, variableMode, calcAmount);
       const subInfo = resolveSubUnit(selectedItem, printQty);
+      const shouldIncludeQty = isVariableWeight && (!isByAmount || includeQtyOnAmountSticker);
+      const effectiveTotalAmount = isVariableWeight
+        ? (isByAmount && calcAmount > 0 ? Math.round(calcAmount) : Math.round(printQty * calcRate))
+        : undefined;
 
       itemsToPrint = [{
         itemId: selectedItem.id,
@@ -350,11 +382,11 @@ export const BarcodePrint: React.FC = () => {
         barcode: finalBarcode,
         rate: calcRate,
         copies: Math.max(1, copies),
-        qty: isVariableWeight ? printQty : undefined,
+        qty: shouldIncludeQty ? printQty : undefined,
         unit: isVariableWeight ? primaryUnit : undefined,
-        displayQty: isVariableWeight ? subInfo.displayQty : undefined,
-        displayUnit: isVariableWeight ? subInfo.displayUnit : undefined,
-        totalAmount: isVariableWeight ? Math.round(printQty * calcRate) : undefined,
+        displayQty: shouldIncludeQty ? subInfo.displayQty : undefined,
+        displayUnit: shouldIncludeQty ? subInfo.displayUnit : undefined,
+        totalAmount: effectiveTotalAmount,
         isVariableWeight,
         companySubHeader: companySubHeader || undefined
       }];
@@ -366,7 +398,7 @@ export const BarcodePrint: React.FC = () => {
       sideStickersSpreadMm: 2.0,
       includeCompanyName,
       includeTitle,
-      includePrice,
+      includePrice: isByAmount ? true : includePrice,
       includeRate,
       companyName,
       companySubHeader: companySubHeader || undefined
@@ -624,10 +656,10 @@ export const BarcodePrint: React.FC = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b' }}>
-                      Variable Weight / Qty
+                      Variable Weight / Packet
                     </div>
                     <div style={{ fontSize: 11, color: '#64748b' }}>
-                      Put quantity in barcode
+                      {variableMode === 'amount' ? 'Put packet amount in barcode' : 'Put quantity in barcode'}
                     </div>
                   </div>
                   <Switch
@@ -645,6 +677,21 @@ export const BarcodePrint: React.FC = () => {
 
                 {isVariableWeight && (
                   <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <Radio.Group
+                      size="small"
+                      value={variableMode}
+                      onChange={e => setVariableMode(e.target.value)}
+                      buttonStyle="solid"
+                      style={{ width: '100%', display: 'flex' }}
+                    >
+                      <Radio.Button value="qty" style={{ flex: 1, textAlign: 'center', fontSize: 11, fontWeight: 600 }}>
+                        By Qty
+                      </Radio.Button>
+                      <Radio.Button value="amount" style={{ flex: 1, textAlign: 'center', fontSize: 11, fontWeight: 600 }}>
+                        By Amount (Rs)
+                      </Radio.Button>
+                    </Radio.Group>
+
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: 11, color: '#475569' }}>Primary Unit:</span>
                       <Tag color="blue" style={{ margin: 0, fontWeight: 600 }}>{primaryUnit}</Tag>
@@ -653,7 +700,7 @@ export const BarcodePrint: React.FC = () => {
                     <Row gutter={8}>
                       <Col span={12}>
                         <div style={{ fontSize: 11, fontWeight: 500, marginBottom: 3, color: '#334155' }}>
-                          Qty ({primaryUnit}) <span style={{ color: '#ef4444' }}>*</span>
+                          Qty ({primaryUnit}) {variableMode === 'qty' && <span style={{ color: '#ef4444' }}>*</span>}
                         </div>
                         <InputNumber
                           min={0.001}
@@ -666,7 +713,7 @@ export const BarcodePrint: React.FC = () => {
                       </Col>
                       <Col span={12}>
                         <div style={{ fontSize: 11, fontWeight: 500, marginBottom: 3, color: '#334155' }}>
-                          Amount (Rs) <span style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }}>(calc qty)</span>
+                          Amount (Rs) {variableMode === 'amount' ? <span style={{ color: '#ef4444' }}>*</span> : <span style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }}>(calc qty)</span>}
                         </div>
                         <InputNumber
                           min={0}
@@ -675,7 +722,7 @@ export const BarcodePrint: React.FC = () => {
                           value={calcAmount}
                           onChange={handleAmountChange}
                           style={{ width: '100%' }}
-                          placeholder="Auto-calc qty"
+                          placeholder="Packet Rs."
                         />
                       </Col>
                     </Row>
@@ -697,7 +744,9 @@ export const BarcodePrint: React.FC = () => {
                     </div>
 
                     <div style={{ fontSize: 10, color: '#64748b', fontStyle: 'italic' }}>
-                      * Enter amount to auto-calculate qty. Barcode number contains only item & qty.
+                      {variableMode === 'amount'
+                        ? '* Barcode stores packet Amount (Rs). Qty is calculated from rate at scan time.'
+                        : '* Barcode stores item & Qty. Rate is resolved at scan time.'}
                     </div>
 
                     <div style={{
@@ -709,7 +758,7 @@ export const BarcodePrint: React.FC = () => {
                       fontFamily: 'monospace',
                       wordBreak: 'break-all'
                     }}>
-                      Barcode: {selectedItem ? generateBarcodeString(selectedItem, true, printQty) : '200000100250'}
+                      Barcode: {selectedItem ? generateBarcodeString(selectedItem, true, printQty, variableMode, calcAmount) : (variableMode === 'amount' ? '300000100050' : '200000100250')}
                     </div>
                   </div>
                 )}
@@ -801,10 +850,17 @@ export const BarcodePrint: React.FC = () => {
                   <Text style={{ fontSize: 12 }}>Product Title</Text>
                   <Switch size="small" checked={includeTitle} onChange={setIncludeTitle} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 12 }}>Price / Amount on Sticker</Text>
-                  <Switch size="small" checked={includePrice} onChange={setIncludePrice} />
-                </div>
+                {isVariableWeight && variableMode === 'amount' ? (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 12 }}>Qty on Sticker</Text>
+                    <Switch size="small" checked={includeQtyOnAmountSticker} onChange={setIncludeQtyOnAmountSticker} />
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 12 }}>Price / Amount on Sticker</Text>
+                    <Switch size="small" checked={includePrice} onChange={setIncludePrice} />
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text style={{ fontSize: 12 }}>Unit Rate on Sticker</Text>
                   <Switch size="small" checked={includeRate} onChange={setIncludeRate} />

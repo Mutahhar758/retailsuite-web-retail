@@ -37,6 +37,14 @@ const mockItems: any[] = [
     primaryUnitTitle: 'kg',
     defaultUnit: '004',
     defaultUnitTitle: 'kg'
+  },
+  {
+    id: '000041',
+    title: 'Long',
+    barcode: '000041',
+    priRate: 3400,
+    primaryUnit: 'kg',
+    defaultUnit: 'kg'
   }
 ];
 
@@ -107,6 +115,13 @@ assert(res9?.unit === 'kg', `Unit resolves to 'kg' instead of code '004' (got ${
 // Test 10: Category-Item ID lookup (e.g. 01-000105)
 const res10 = parseBarcodePayload('01-000105', mockItems);
 assert(res10 !== null && res10.matchedItem.id === '000105', 'Category-Item ID (01-000105) resolves Item 000105');
+
+// Test 11: 12-digit By-Amount Barcode (3 + IIIIII + PPPPP)
+const res11 = parseBarcodePayload('300004100050', mockItems);
+assert(res11 !== null && res11.matchedItem.id === '000041', '12-digit By-Amount resolves Long');
+assert(res11?.amount === 50, `Amount is Rs. 50 (got ${res11?.amount})`);
+assert(res11?.rate === 3400, `Rate stays 3400 (got ${res11?.rate})`);
+assert(res11?.qty === 0.0147, `Qty calculated at scan time is 0.0147 (got ${res11?.qty})`);
 
 if (failed > 0) {
   process.exit(1);
