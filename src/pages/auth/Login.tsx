@@ -8,6 +8,7 @@ import { AddLicenseModal } from './AddLicenseModal';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { offlineCacheService } from '../../services/offlineCacheService';
 import api from '../../services/api';
+import { ConnectionSwitcher } from '../../components/common/ConnectionSwitcher';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -108,6 +109,9 @@ export const Login: React.FC = () => {
           <img src="/logo.png" alt="Logo" className="mx-auto mb-4" style={{ height: 64, objectFit: 'contain' }} />
           <Title level={2} className="mb-2">RetailSuite Portal</Title>
           <Text type="secondary">Sign in to access your dashboard</Text>
+          <div style={{ marginTop: 10 }}>
+            <ConnectionSwitcher />
+          </div>
         </div>
 
         {!isOnline && (

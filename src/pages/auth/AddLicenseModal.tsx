@@ -30,6 +30,7 @@ export const AddLicenseModal: React.FC<AddLicenseModalProps> = ({ open, onCancel
           licenseKey: values.licenseKey,
           tenantIdentifier,
           name,
+          isOnPremises: Boolean(tenantData?.isOnPremises),
           hasSupplyFeature: !!tenantData?.hasSupplyFeature,
           hasSecondaryQty: !!tenantData?.hasSecondaryQty,
           hasKotFeature: !!tenantData?.hasKotFeature,

@@ -38,6 +38,7 @@ import api from '../services/api';
 import { CURRENT_APP_VERSION } from '../utils/autoVersionRefresh';
 import { GeminiAssistantWidget } from '../components/ai/GeminiAssistantWidget';
 import { NavigationCommandModal, type SearchableNavItem } from '../components/common/NavigationCommandModal';
+import { ConnectionSwitcher } from '../components/common/ConnectionSwitcher';
 
 const { Header, Sider, Content } = Layout;
 
@@ -692,6 +693,8 @@ export const MainLayout: React.FC = () => {
                 </Button>
               </Dropdown>
             )}
+
+            <ConnectionSwitcher compact />
 
             <Tooltip title={`Switch to ${appTheme === 'light' ? 'Dark' : 'Light'} Mode`}>
               <Button 

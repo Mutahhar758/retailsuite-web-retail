@@ -2,9 +2,10 @@ import axios from 'axios';
 import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useAppStore } from '../stores/useAppStore';
+import { getActiveBaseUrl, isCurrentTenantOnPremises, normalizeBaseUrl, probeLocalServer } from './connectionManager';
 
 const api = axios.create({
-  baseURL: 'https://retailer-api.bizgripsolutions.com/',
+  baseURL: 'https://localhost:5001/',
   timeout: 30000,
 });
 
@@ -29,7 +30,14 @@ const processQueue = (error: any, token: string | null = null) => {
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const { accessToken } = useAuthStore.getState();
-    const { currentTenantIdentifier } = useAppStore.getState();
+    const { currentTenantIdentifier, cloudServerUrl } = useAppStore.getState();
+
+    // Cloud-only license verification always goes to the Cloud server
+    const isLicenseVerify = config.url?.includes('/license/verify');
+    const resolvedBase = isLicenseVerify
+      ? normalizeBaseUrl(cloudServerUrl)
+      : getActiveBaseUrl();
+    config.baseURL = `${resolvedBase}/`;
 
     if (accessToken && config.headers) {
       config.headers.Authorization = `Bearer ${accessToken}`;
@@ -47,7 +55,34 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const originalRequest = error.config as InternalAxiosRequestConfig & {
+      _retry?: boolean;
+      _failoverRetried?: boolean;
+    };
+
+    // In Auto mode, transparently fail over between Local POS and Cloud Relay on network errors
+    if (
+      !error.response &&
+      originalRequest &&
+      !originalRequest._failoverRetried &&
+      !originalRequest.url?.includes('/license/verify') &&
+      isCurrentTenantOnPremises()
+    ) {
+      const { connectionMode, activeTarget, localServerUrl, setActiveTarget } = useAppStore.getState();
+      if (connectionMode === 'auto') {
+        originalRequest._failoverRetried = true;
+        if (activeTarget === 'cloud') {
+          const localReachable = await probeLocalServer(localServerUrl);
+          if (localReachable) {
+            setActiveTarget('local');
+            return api(originalRequest);
+          }
+        } else {
+          setActiveTarget('cloud');
+          return api(originalRequest);
+        }
+      }
+    }
 
     if (error.response?.status === 401) {
       // Skip interceptor redirect/suppression for login and refresh requests
@@ -84,7 +119,7 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const response = await axios.post('https://retailer-api.bizgripsolutions.com/api/auth/refresh', {
+        const response = await axios.post(`${getActiveBaseUrl()}/api/auth/refresh`, {
           refreshToken,
         });
 
