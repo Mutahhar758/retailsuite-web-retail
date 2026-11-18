@@ -12,7 +12,9 @@ import {
   Col,
   Tag,
   Button,
-  Tooltip
+  Tooltip,
+  Alert,
+  message
 } from 'antd';
 import {
   PlusOutlined,
@@ -61,6 +63,7 @@ export const InlineMultiPaymentSection: React.FC<InlineMultiPaymentSectionProps>
 }) => {
   const [accounts, setAccounts] = useState<ChartOfAccountHeadDto[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [accountsError, setAccountsError] = useState(false);
 
   // Track previous netAmount and whether user manually customized payment amounts or cleared all lines
   const prevNetAmountRef = useRef<number>(netAmount);
@@ -92,34 +95,34 @@ export const InlineMultiPaymentSection: React.FC<InlineMultiPaymentSectionProps>
   };
 
   // Fetch Cash & Bank accounts from Chart of Accounts
+  const loadAccounts = React.useCallback(async (isMountedCheck?: () => boolean) => {
+    setLoadingAccounts(true);
+    setAccountsError(false);
+    try {
+      const res = await chartOfAccountService.getCashBankAccounts();
+      if (!isMountedCheck || isMountedCheck()) {
+        setAccounts(res || []);
+      }
+    } catch {
+      if (!isMountedCheck || isMountedCheck()) {
+        setAccounts([]);
+        setAccountsError(true);
+        message.error('Failed to load cash & bank accounts');
+      }
+    } finally {
+      if (!isMountedCheck || isMountedCheck()) {
+        setLoadingAccounts(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
-    setLoadingAccounts(true);
-    chartOfAccountService
-      .getCashBankAccounts()
-      .then(res => {
-        if (isMounted) {
-          setAccounts(res || []);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setAccounts([
-            { account: '001002002001001', title: 'Main Cash' },
-            { account: '001002002001002', title: 'Shop Petty Cash' },
-            { account: '001002002002001', title: 'Meezan Bank' },
-            { account: '001002002002002', title: 'HBL Islamic' }
-          ]);
-        }
-      })
-      .finally(() => {
-        if (isMounted) setLoadingAccounts(false);
-      });
-
+    loadAccounts(() => isMounted);
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loadAccounts]);
 
   // Find the default cash account
   const defaultCashAccount = useMemo(() => {
@@ -367,6 +370,19 @@ export const InlineMultiPaymentSection: React.FC<InlineMultiPaymentSectionProps>
       </div>
 
       {/* Main Grid: Left = Payments Table, Right = Net Summary & Balance */}
+      {accountsError && (
+        <Alert
+          type="error"
+          showIcon
+          message="Could not load Cash & Bank accounts from the database."
+          action={
+            <Button size="small" type="primary" onClick={() => loadAccounts()}>
+              Retry
+            </Button>
+          }
+          style={{ marginBottom: 12 }}
+        />
+      )}
       <Row gutter={16} align="top">
         {/* Left Side: Payment Accounts Breakdown */}
         <Col xs={24} lg={17}>
