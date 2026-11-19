@@ -53,6 +53,7 @@ export const MANUFACTURING_ENABLE_KEY = 'Manufacturing.EnableManufacturing';
 
 // Transaction setting keys
 export const TRANSACTION_ENABLE_CARRIAGE_KEY = 'Transaction.EnableCarriage';
+export const PURCHASE_ALLOW_SALE_PRICE_UPDATE_KEY = 'Purchase.AllowSalePriceUpdate';
 
 // Barcode Fast Scan setting keys
 export const BARCODE_FAST_SCAN_ENABLED_KEY   = 'Barcode.FastScanEnabled';

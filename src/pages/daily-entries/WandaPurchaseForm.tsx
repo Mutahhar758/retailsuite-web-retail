@@ -3,11 +3,11 @@ import KeyboardShortcutsBar from '../../components/common/KeyboardShortcutsBar';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
-  Table, Space, message, InputNumber, Popconfirm, Tag
+  Table, Space, message, InputNumber, Popconfirm, Tag, Tooltip, Badge
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
-  ShoppingCartOutlined, UserOutlined, FileTextOutlined, CopyOutlined
+  ShoppingCartOutlined, UserOutlined, FileTextOutlined, CopyOutlined, TagsOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -18,6 +18,8 @@ import { narrationService, type NarrationDto } from '../../services/narrationSer
 import { round } from '../../utils/numberUtils';
 import { useGridKeyboard } from '../../hooks/useGridKeyboard';
 import { getItemSelectProps, type SelectableItemLike } from '../../utils/itemSelectOptions';
+import { PurchaseSalePriceModal } from '../../components/purchases/PurchaseSalePriceModal';
+import { useSettingsStore, PURCHASE_ALLOW_SALE_PRICE_UPDATE_KEY } from '../../stores/useSettingsStore';
 
 const { Title, Text } = Typography;
 
@@ -109,6 +111,13 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
 };
 
 export const WandaPurchaseForm: React.FC = () => {
+  const { getSetting, fetchSettings } = useSettingsStore();
+  const allowSalePriceUpdate = getSetting(PURCHASE_ALLOW_SALE_PRICE_UPDATE_KEY, 'false') === 'true';
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
+
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -118,6 +127,7 @@ export const WandaPurchaseForm: React.FC = () => {
   const [vendors, setVendors] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [purchaseLines, setPurchaseLines] = useState<any[]>([]);
+  const [priceModalRowKey, setPriceModalRowKey] = useState<any>(null);
 
   const isEdit = !!voucherNo && voucherNo !== 'new' && voucherNo !== '[object Object]';
 
@@ -334,6 +344,10 @@ export const WandaPurchaseForm: React.FC = () => {
             updated.secRate = item.lastPurchaseSecRate ?? item.secCostRate ?? ((updated.rate || 0) * (pSize > 0 ? pSize : 1));
             updated.packQty = pSize;
             updated.packing = (item as any)?.packing || 0;
+            updated.salePrice = item.priRate ?? 0;
+            updated.secSalePrice = item.secRate ?? 0;
+            updated.minSalePrice = item.minSalePrice ?? null;
+            updated.customerCategoryPrices = undefined;
           }
         }
 
@@ -441,7 +455,13 @@ export const WandaPurchaseForm: React.FC = () => {
           secQty: l.secQty || 0,
           secRate: l.secRate || 0,
           qtyInPack: l.packQty || 0,
-          packing: l.packing || 0
+          packing: l.packing || 0,
+          ...(allowSalePriceUpdate ? {
+            salePrice: l.salePrice ?? null,
+            secSalePrice: l.secSalePrice ?? null,
+            minSalePrice: l.minSalePrice ?? null,
+            customerCategoryPrices: l.customerCategoryPrices
+          } : {})
         }))
       };
 
@@ -454,6 +474,7 @@ export const WandaPurchaseForm: React.FC = () => {
         message.success('Purchase created successfully: ' + newVNo);
         handleNew();
       }
+      inventoryService.getItemsLookup(undefined, true).then(setItems).catch(() => {});
     } catch {
       message.error('Failed to save purchase');
     } finally {
@@ -682,6 +703,36 @@ export const WandaPurchaseForm: React.FC = () => {
         />
       )
     },
+    ...(allowSalePriceUpdate ? [{
+      title: 'Sale Price',
+      dataIndex: 'salePrice',
+      width: 120,
+      render: (val: number | undefined, record: any) => {
+        const item = items.find(i => String(i.id) === String(record.itemId));
+        const displayVal = val ?? item?.priRate;
+        return (
+          <InputNumber
+            value={displayVal}
+            disabled={!record.itemId}
+            tabIndex={-1}
+            style={{ width: '100%' }}
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+              setTimeout(() => input?.select?.(), 20);
+            }}
+            onChange={(v) => updateRow(record.key, 'salePrice', v != null ? Number(v) : 0)}
+            min={0}
+            controls={false}
+            keyboard={false}
+            precision={4}
+            step={0.01}
+            formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            parser={v => v?.replace(/\$\s?|(,*)/g, '') as any}
+          />
+        );
+      }
+    }] : []),
     {
       title: 'Amount',
       dataIndex: 'amount',
@@ -691,15 +742,29 @@ export const WandaPurchaseForm: React.FC = () => {
     },
     {
       title: '',
-      width: 60,
+      width: allowSalePriceUpdate ? 90 : 60,
       render: (_: any, record: any) => (
-        <Button 
-          type="text" 
-          danger 
-          icon={<DeleteOutlined />} 
-          onClick={() => removeRow(record)} 
-          disabled={purchaseLines.length === 1} 
-        />
+        <Space size={2}>
+          {allowSalePriceUpdate && (
+            <Tooltip title="Edit Sale Prices & Category Rates">
+              <Badge dot={!!record.customerCategoryPrices} offset={[-4, 4]}>
+                <Button
+                  type="text"
+                  icon={<TagsOutlined />}
+                  disabled={!record.itemId}
+                  onClick={() => setPriceModalRowKey(record.key)}
+                />
+              </Badge>
+            </Tooltip>
+          )}
+          <Button
+            type="text"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => removeRow(record)}
+            disabled={purchaseLines.length === 1}
+          />
+        </Space>
       )
     }
   ];
@@ -918,6 +983,39 @@ export const WandaPurchaseForm: React.FC = () => {
           </div>
         </Form>
       </Card>
+
+      {(() => {
+        const modalRow = purchaseLines.find(r => r.key === priceModalRowKey);
+        const modalItem = modalRow ? items.find(i => String(i.id) === String(modalRow.itemId)) : undefined;
+        return (
+          <PurchaseSalePriceModal
+            open={priceModalRowKey !== null && !!modalItem}
+            item={modalItem}
+            initialSalePrice={modalRow?.salePrice}
+            initialSecSalePrice={modalRow?.secSalePrice}
+            initialMinSalePrice={modalRow?.minSalePrice}
+            initialCategoryPrices={modalRow?.customerCategoryPrices}
+            showSecondaryRate
+            onCancel={() => setPriceModalRowKey(null)}
+            onApply={(vals) => {
+              setPurchaseLines(prev =>
+                prev.map(r =>
+                  r.key === priceModalRowKey
+                    ? {
+                        ...r,
+                        salePrice: vals.salePrice,
+                        secSalePrice: vals.secSalePrice,
+                        minSalePrice: vals.minSalePrice,
+                        customerCategoryPrices: vals.customerCategoryPrices,
+                      }
+                    : r
+                )
+              );
+              setPriceModalRowKey(null);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };

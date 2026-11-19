@@ -3,11 +3,11 @@ import KeyboardShortcutsBar from '../../components/common/KeyboardShortcutsBar';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
-  Table, Space, message, InputNumber, Popconfirm, Tag
+  Table, Space, message, InputNumber, Popconfirm, Tag, Tooltip, Badge
 } from 'antd';
 import {
   PlusOutlined, SaveOutlined, DeleteOutlined, ArrowLeftOutlined,
-  ShoppingCartOutlined, UserOutlined, FileTextOutlined, CopyOutlined
+  ShoppingCartOutlined, UserOutlined, FileTextOutlined, CopyOutlined, TagsOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -16,13 +16,14 @@ import { inventoryService, type Item } from '../../services/inventoryService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 import { useAppStore } from '../../stores/useAppStore';
-import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, MOBILE_SHOP_ENABLE_KEY } from '../../stores/useSettingsStore';
+import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, MOBILE_SHOP_ENABLE_KEY, PURCHASE_ALLOW_SALE_PRICE_UPDATE_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 import { getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
 import { BarcodeFastScanBar } from '../../components/common/BarcodeFastScanBar';
 import { useGridKeyboard } from '../../hooks/useGridKeyboard';
 import { getItemSelectProps, type SelectableItemLike } from '../../utils/itemSelectOptions';
 import { InlineMultiPaymentSection, type PaymentEntry } from '../../components/InlineMultiPaymentSection';
+import { PurchaseSalePriceModal } from '../../components/purchases/PurchaseSalePriceModal';
 
 const { Title, Text } = Typography;
 
@@ -121,6 +122,7 @@ export const NormalPurchaseForm: React.FC = () => {
   const hasSecondaryQty = settingSecQty !== '' ? settingSecQty === 'true' : (currentOrg?.hasSecondaryQty ?? false);
   const settingMobile = getSetting(MOBILE_SHOP_ENABLE_KEY, '');
   const hasMobileShopFeature = settingMobile !== '' ? settingMobile === 'true' : (currentOrg?.hasMobileShopFeature ?? false);
+  const allowSalePriceUpdate = getSetting(PURCHASE_ALLOW_SALE_PRICE_UPDATE_KEY, 'false') === 'true';
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const navigate = useNavigate();
@@ -135,6 +137,7 @@ export const NormalPurchaseForm: React.FC = () => {
   // Multi-Payment / Split Tender state
   const [splitPayments, setSplitPayments] = useState<PaymentEntry[]>([]);
   const [resetCounter, setResetCounter] = useState(0);
+  const [priceModalRowKey, setPriceModalRowKey] = useState<any>(null);
 
   const isEdit = !!voucherNo && voucherNo !== 'new' && voucherNo !== '[object Object]';
 
@@ -449,6 +452,10 @@ export const NormalPurchaseForm: React.FC = () => {
             updated.rate = baseRate;
             updated.secUnit = currentItem.secondaryUnit || '';
             updated.secRate = baseSecRate;
+            updated.salePrice = currentItem.priRate ?? 0;
+            updated.secSalePrice = currentItem.secRate ?? 0;
+            updated.minSalePrice = currentItem.minSalePrice ?? null;
+            updated.customerCategoryPrices = undefined;
             updated.selectedUnitId = undefined;
             updated.selectedUnitFactor = 1;
             updated.displayQty = row.qty || 1;
@@ -550,6 +557,9 @@ export const NormalPurchaseForm: React.FC = () => {
           rate,
           secUnit: scannedItem.secondaryUnit,
           secRate,
+          salePrice: scannedItem.priRate ?? 0,
+          secSalePrice: scannedItem.secRate ?? 0,
+          minSalePrice: scannedItem.minSalePrice ?? null,
           secQty: 0,
           qty: scanQty,
           addLess: 0,
@@ -675,7 +685,13 @@ export const NormalPurchaseForm: React.FC = () => {
           conditionNote: l.conditionNote || null,
           secUnit: l.secUnit || null,
           secQty: l.secQty || 0,
-          secRate: l.secRate || 0
+          secRate: l.secRate || 0,
+          ...(allowSalePriceUpdate ? {
+            salePrice: l.salePrice ?? null,
+            secSalePrice: l.secSalePrice ?? null,
+            minSalePrice: l.minSalePrice ?? null,
+            customerCategoryPrices: l.customerCategoryPrices
+          } : {})
         }))
       };
 
@@ -688,6 +704,7 @@ export const NormalPurchaseForm: React.FC = () => {
         message.success('Purchase created successfully: ' + newVNo);
         handleNew();
       }
+      inventoryService.getItemsLookup(undefined, true).then(setItems).catch(() => {});
     } catch {
       message.error('Failed to save purchase');
     } finally {
@@ -983,6 +1000,36 @@ export const NormalPurchaseForm: React.FC = () => {
         />
       )
     },
+    ...(allowSalePriceUpdate ? [{
+      title: 'Sale Price',
+      dataIndex: 'salePrice',
+      width: 120,
+      render: (val: number | undefined, record: any) => {
+        const item = items.find(i => String(i.id) === String(record.itemId));
+        const displayVal = val ?? item?.priRate;
+        return (
+          <InputNumber
+            value={displayVal}
+            disabled={!record.itemId}
+            tabIndex={-1}
+            style={{ width: '100%' }}
+            onFocus={(e) => {
+              const input = e.target as HTMLInputElement;
+              input?.select?.();
+              setTimeout(() => input?.select?.(), 20);
+            }}
+            onChange={(v) => updateRow(record.key, 'salePrice', v != null ? Number(v) : 0)}
+            min={0}
+            controls={false}
+            keyboard={false}
+            precision={4}
+            step={0.01}
+            formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            parser={v => v?.replace(/\$\s?|(,*)/g, '') as any}
+          />
+        );
+      }
+    }] : []),
     {
       title: 'Amount',
       dataIndex: 'amount',
@@ -992,15 +1039,29 @@ export const NormalPurchaseForm: React.FC = () => {
     },
     {
       title: '',
-      width: 60,
+      width: allowSalePriceUpdate ? 90 : 60,
       render: (_: any, record: any) => (
-        <Button 
-          type="text" 
-          danger 
-          icon={<DeleteOutlined />} 
-          onClick={() => removeRow(record)} 
-          disabled={purchaseLines.length === 1} 
-        />
+        <Space size={2}>
+          {allowSalePriceUpdate && (
+            <Tooltip title="Edit Sale Prices & Category Rates">
+              <Badge dot={!!record.customerCategoryPrices} offset={[-4, 4]}>
+                <Button
+                  type="text"
+                  icon={<TagsOutlined />}
+                  disabled={!record.itemId}
+                  onClick={() => setPriceModalRowKey(record.key)}
+                />
+              </Badge>
+            </Tooltip>
+          )}
+          <Button
+            type="text"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => removeRow(record)}
+            disabled={purchaseLines.length === 1}
+          />
+        </Space>
       )
     }
   ];
@@ -1240,6 +1301,39 @@ export const NormalPurchaseForm: React.FC = () => {
           </div>
         </Form>
       </Card>
+
+      {(() => {
+        const modalRow = purchaseLines.find(r => r.key === priceModalRowKey);
+        const modalItem = modalRow ? items.find(i => String(i.id) === String(modalRow.itemId)) : undefined;
+        return (
+          <PurchaseSalePriceModal
+            open={priceModalRowKey !== null && !!modalItem}
+            item={modalItem}
+            initialSalePrice={modalRow?.salePrice}
+            initialSecSalePrice={modalRow?.secSalePrice}
+            initialMinSalePrice={modalRow?.minSalePrice}
+            initialCategoryPrices={modalRow?.customerCategoryPrices}
+            showSecondaryRate={hasSecondaryQty}
+            onCancel={() => setPriceModalRowKey(null)}
+            onApply={(vals) => {
+              setPurchaseLines(prev =>
+                prev.map(r =>
+                  r.key === priceModalRowKey
+                    ? {
+                        ...r,
+                        salePrice: vals.salePrice,
+                        secSalePrice: vals.secSalePrice,
+                        minSalePrice: vals.minSalePrice,
+                        customerCategoryPrices: vals.customerCategoryPrices,
+                      }
+                    : r
+                )
+              );
+              setPriceModalRowKey(null);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import api from './api';
+import type { ItemCustomerCategoryPriceUpsertRequest } from './inventoryService';
 
 export interface PurchaseLine {
   seq: number;
@@ -62,6 +63,10 @@ export interface PurchaseCreateRequest {
     secQty?: number;
     secRate?: number;
     secUnit?: string | null;
+    salePrice?: number | null;
+    secSalePrice?: number | null;
+    minSalePrice?: number | null;
+    customerCategoryPrices?: ItemCustomerCategoryPriceUpsertRequest[];
   }[];
   payments?: {
     seq: number;

@@ -60,6 +60,7 @@ import {
   RESTAURANT_VOICE_CALLOUT_ACCENT_KEY,
   SUPPLY_ENABLE_KEY,
   TRANSACTION_ENABLE_CARRIAGE_KEY,
+  PURCHASE_ALLOW_SALE_PRICE_UPDATE_KEY,
   BARCODE_FAST_SCAN_ENABLED_KEY,
   BARCODE_FAST_SCAN_INCREMENT_KEY,
   BARCODE_FAST_SCAN_SOUND_KEY,
@@ -122,6 +123,7 @@ export const SettingsPage: React.FC = () => {
   const [secondaryQtyEnabled, setSecondaryQtyEnabled] = useState(false);
   const [supplyEnabled, setSupplyEnabled] = useState(false);
   const [carriageEnabled, setCarriageEnabled] = useState(false);
+  const [allowPurchaseSalePriceUpdate, setAllowPurchaseSalePriceUpdate] = useState(false);
   const [savingInventory, setSavingInventory] = useState(false);
   const [inventoryLastSaved, setInventoryLastSaved] = useState<string | null>(null);
 
@@ -281,6 +283,8 @@ export const SettingsPage: React.FC = () => {
     setQrBankName(getSetting(BILL_QR_BANK_NAME, ''));
     setQrIncludeAmount(getSetting(BILL_QR_INCLUDE_AMOUNT, 'false') === 'true');
     setSecondaryQtyEnabled(getSetting(INVENTORY_ENABLE_SECONDARY_QTY_KEY, 'false') === 'true');
+    setCarriageEnabled(getSetting(TRANSACTION_ENABLE_CARRIAGE_KEY, 'false') === 'true');
+    setAllowPurchaseSalePriceUpdate(getSetting(PURCHASE_ALLOW_SALE_PRICE_UPDATE_KEY, 'false') === 'true');
     const supplySetting = getSetting(SUPPLY_ENABLE_KEY, '');
     const orgSupply = licenses.find((l) => l.tenantIdentifier === currentTenantIdentifier)?.hasSupplyFeature ?? false;
     setSupplyEnabled(supplySetting !== '' ? supplySetting === 'true' : orgSupply);
@@ -349,6 +353,12 @@ export const SettingsPage: React.FC = () => {
         TRANSACTION_ENABLE_CARRIAGE_KEY,
         carriageEnabled ? 'true' : 'false',
         'Enable Carriage / Rent column in Sale Supplies, Customer Presets, and Reports',
+        'Transaction'
+      );
+      await updateSetting(
+        PURCHASE_ALLOW_SALE_PRICE_UPDATE_KEY,
+        allowPurchaseSalePriceUpdate ? 'true' : 'false',
+        'Allow updating item sale prices and customer category rates from Purchase forms',
         'Transaction'
       );
       setInventoryLastSaved(new Date().toLocaleTimeString());
@@ -1260,6 +1270,27 @@ export const SettingsPage: React.FC = () => {
                             <Switch
                               checked={carriageEnabled}
                               onChange={setCarriageEnabled}
+                              checkedChildren="Enabled"
+                              unCheckedChildren="Disabled"
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+
+                      <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <Row align="middle" justify="space-between">
+                          <Col span={18}>
+                            <Text strong style={{ fontSize: 15, display: 'block' }}>
+                              Update Sale Prices from Purchase Form
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                              When enabled, Sale Price and Category Rates columns are displayed in Purchase forms so item prices can be updated on purchase save.
+                            </Text>
+                          </Col>
+                          <Col span={6} style={{ textAlign: 'right' }}>
+                            <Switch
+                              checked={allowPurchaseSalePriceUpdate}
+                              onChange={setAllowPurchaseSalePriceUpdate}
                               checkedChildren="Enabled"
                               unCheckedChildren="Disabled"
                             />
