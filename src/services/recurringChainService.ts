@@ -1,12 +1,19 @@
 import api from './api';
 
+export type RecurrenceFrequency = 'Daily' | 'Weekly' | 'BiWeekly' | 'Monthly';
+
 export interface RecurringChainDto {
   id: number;
   name: string;
   voucherType: string;
-  frequency: string;
+  frequency: RecurrenceFrequency | string;
   dayOfWeek?: number;
+  daysOfWeek?: number[];
   dayOfMonth?: number;
+  interval?: number;
+  startDate?: string;
+  scheduleSummary?: string;
+  nextRunDate?: string;
   isActive: boolean;
   lastRunDate?: string;
   lastVoucherNo?: string;
@@ -18,17 +25,23 @@ export interface RecurringChainCreateRequest {
   name: string;
   voucherType: string;
   sourceVoucherNo: string;
-  frequency: string;
+  frequency: RecurrenceFrequency | string;
   dayOfWeek?: number;
+  daysOfWeek?: number[];
   dayOfMonth?: number;
+  interval?: number;
+  startDate?: string;
   notes?: string;
 }
 
 export interface RecurringChainUpdateRequest {
   name: string;
-  frequency: string;
+  frequency: RecurrenceFrequency | string;
   dayOfWeek?: number;
+  daysOfWeek?: number[];
   dayOfMonth?: number;
+  interval?: number;
+  startDate?: string;
   isActive: boolean;
   notes?: string;
 }

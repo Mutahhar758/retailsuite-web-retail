@@ -1,25 +1,58 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Table, Card, Button, Space, Typography, Tag, message,
-  Modal, Form, Input, Select, Switch, Row, Col, Statistic, Popconfirm, Tooltip
+  Modal, Form, Input, Select, Switch, Row, Col, Statistic, Popconfirm, Tooltip,
+  Checkbox, DatePicker, InputNumber
 } from 'antd';
 import {
   PlusOutlined, ReloadOutlined, PlayCircleOutlined,
   ThunderboltOutlined, CheckCircleOutlined, PauseCircleOutlined,
-  CalendarOutlined, EditOutlined, DeleteOutlined
+  CalendarOutlined, EditOutlined, DeleteOutlined, ClockCircleOutlined
 } from '@ant-design/icons';
-import dayjs from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import {
   recurringChainService,
   type RecurringChainDto,
   type RecurringChainCreateRequest,
-  type RecurringChainUpdateRequest
+  type RecurringChainUpdateRequest,
+  type RecurrenceFrequency
 } from '../../services/recurringChainService';
+import { getUpcomingDates } from '../../utils/recurringSchedule';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
 
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+const WEEKDAYS_MON_FRI = [1, 2, 3, 4, 5];
+const MON_SAT = [1, 2, 3, 4, 5, 6];
+const SUN_THU = [0, 1, 2, 3, 4];
+
+const DAY_OPTIONS = [
+  { label: 'Sun', value: 0 },
+  { label: 'Mon', value: 1 },
+  { label: 'Tue', value: 2 },
+  { label: 'Wed', value: 3 },
+  { label: 'Thu', value: 4 },
+  { label: 'Fri', value: 5 },
+  { label: 'Sat', value: 6 },
+];
+
 const dayOfWeekNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const getFrequencyTagColor = (frequency: string) => {
+  switch (frequency) {
+    case 'Daily':
+      return 'cyan';
+    case 'Weekly':
+      return 'geekblue';
+    case 'BiWeekly':
+      return 'purple';
+    case 'Monthly':
+      return 'orange';
+    default:
+      return 'default';
+  }
+};
 
 export const RecurringVoucherList: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -28,6 +61,12 @@ export const RecurringVoucherList: React.FC = () => {
   const [editingItem, setEditingItem] = useState<RecurringChainDto | null>(null);
   const [runningId, setRunningId] = useState<number | null>(null);
   const [form] = Form.useForm();
+
+  const watchedFrequency = Form.useWatch('frequency', form) as RecurrenceFrequency | undefined;
+  const watchedDaysOfWeek = Form.useWatch('daysOfWeek', form) as number[] | undefined;
+  const watchedDayOfMonth = Form.useWatch('dayOfMonth', form) as number | undefined;
+  const watchedInterval = Form.useWatch('interval', form) as number | undefined;
+  const watchedStartDate = Form.useWatch('startDate', form) as Dayjs | null | undefined;
 
   const fetchChains = useCallback(async () => {
     try {
@@ -45,14 +84,54 @@ export const RecurringVoucherList: React.FC = () => {
     fetchChains();
   }, [fetchChains]);
 
+  const handleFrequencyChange = (freq: RecurrenceFrequency) => {
+    if (freq === 'Daily') {
+      form.setFieldsValue({
+        daysOfWeek: ALL_DAYS,
+        interval: 1,
+      });
+    } else if (freq === 'Weekly') {
+      const currentDays = form.getFieldValue('daysOfWeek') as number[] | undefined;
+      form.setFieldsValue({
+        daysOfWeek: currentDays && currentDays.length > 0 && currentDays.length < 7 ? currentDays : [1],
+        interval: 1,
+      });
+    } else if (freq === 'BiWeekly') {
+      const currentDays = form.getFieldValue('daysOfWeek') as number[] | undefined;
+      form.setFieldsValue({
+        daysOfWeek: currentDays && currentDays.length > 0 && currentDays.length < 7 ? currentDays : [1],
+        interval: 2,
+        startDate: form.getFieldValue('startDate') || dayjs(),
+      });
+    } else if (freq === 'Monthly') {
+      form.setFieldsValue({
+        dayOfMonth: form.getFieldValue('dayOfMonth') || 1,
+        interval: 1,
+      });
+    }
+  };
+
   const handleCreateOrUpdate = async (values: any) => {
     try {
+      const freq: RecurrenceFrequency = values.frequency || 'Daily';
+      const selectedDays: number[] | undefined =
+        freq === 'Daily' || freq === 'Weekly' || freq === 'BiWeekly'
+          ? (values.daysOfWeek as number[] | undefined)
+          : undefined;
+
+      const schedulePayload = {
+        frequency: freq,
+        daysOfWeek: selectedDays && selectedDays.length > 0 ? [...selectedDays].sort((a, b) => a - b) : undefined,
+        dayOfWeek: selectedDays && selectedDays.length > 0 ? selectedDays[0] : undefined,
+        dayOfMonth: freq === 'Monthly' ? values.dayOfMonth : undefined,
+        interval: freq === 'BiWeekly' ? 2 : (values.interval ?? 1),
+        startDate: values.startDate ? dayjs(values.startDate).format('YYYY-MM-DD') : undefined,
+      };
+
       if (editingItem) {
         const updateReq: RecurringChainUpdateRequest = {
           name: values.name,
-          frequency: values.frequency,
-          dayOfWeek: values.frequency === 'Weekly' ? values.dayOfWeek : undefined,
-          dayOfMonth: values.frequency === 'Monthly' ? values.dayOfMonth : undefined,
+          ...schedulePayload,
           isActive: values.isActive ?? true,
           notes: values.notes,
         };
@@ -63,9 +142,7 @@ export const RecurringVoucherList: React.FC = () => {
           name: values.name,
           voucherType: values.voucherType,
           sourceVoucherNo: values.sourceVoucherNo,
-          frequency: values.frequency,
-          dayOfWeek: values.frequency === 'Weekly' ? values.dayOfWeek : undefined,
-          dayOfMonth: values.frequency === 'Monthly' ? values.dayOfMonth : undefined,
+          ...schedulePayload,
           notes: values.notes,
         };
         await recurringChainService.createFromVoucher(createReq);
@@ -75,8 +152,9 @@ export const RecurringVoucherList: React.FC = () => {
       setEditingItem(null);
       form.resetFields();
       fetchChains();
-    } catch {
-      message.error('Operation failed.');
+    } catch (err: any) {
+      const serverMsg = err?.response?.data?.message || err?.response?.data?.messages?.[0];
+      message.error(serverMsg || 'Operation failed.');
     }
   };
 
@@ -122,6 +200,8 @@ export const RecurringVoucherList: React.FC = () => {
     form.resetFields();
     form.setFieldsValue({
       frequency: 'Daily',
+      daysOfWeek: ALL_DAYS,
+      interval: 1,
       voucherType: 'SP',
       isActive: true,
     });
@@ -130,12 +210,25 @@ export const RecurringVoucherList: React.FC = () => {
 
   const openEditModal = (record: RecurringChainDto) => {
     setEditingItem(record);
+    const freq = (record.frequency || 'Daily') as RecurrenceFrequency;
+    let initialDays = record.daysOfWeek && record.daysOfWeek.length > 0
+      ? record.daysOfWeek
+      : (record.dayOfWeek !== undefined && record.dayOfWeek !== null ? [record.dayOfWeek] : []);
+
+    if (freq === 'Daily' && initialDays.length === 0) {
+      initialDays = ALL_DAYS;
+    } else if ((freq === 'Weekly' || freq === 'BiWeekly') && initialDays.length === 0) {
+      initialDays = [1];
+    }
+
     form.setFieldsValue({
       name: record.name,
       voucherType: record.voucherType,
-      frequency: record.frequency,
-      dayOfWeek: record.dayOfWeek,
-      dayOfMonth: record.dayOfMonth,
+      frequency: freq,
+      daysOfWeek: initialDays,
+      dayOfMonth: record.dayOfMonth ?? 1,
+      interval: record.interval ?? (freq === 'BiWeekly' ? 2 : 1),
+      startDate: record.startDate ? dayjs(record.startDate) : null,
       isActive: record.isActive,
       notes: record.notes,
     });
@@ -144,6 +237,16 @@ export const RecurringVoucherList: React.FC = () => {
 
   const activeCount = data.filter(d => d.isActive).length;
   const todayRuns = data.filter(d => d.lastRunDate === dayjs().format('YYYY-MM-DD')).length;
+
+  const upcomingPreviewDates = modalVisible
+    ? getUpcomingDates({
+        frequency: watchedFrequency,
+        daysOfWeek: watchedDaysOfWeek,
+        dayOfMonth: watchedDayOfMonth,
+        interval: watchedInterval,
+        startDate: watchedStartDate,
+      }, 5)
+    : [];
 
   const columns = [
     {
@@ -176,18 +279,32 @@ export const RecurringVoucherList: React.FC = () => {
       dataIndex: 'frequency',
       key: 'frequency',
       render: (_: string, record: RecurringChainDto) => {
-        if (record.frequency === 'Daily') {
-          return <Tag color="cyan">Every Day</Tag>;
+        const color = getFrequencyTagColor(record.frequency);
+        let summary = record.scheduleSummary;
+        if (!summary) {
+          if (record.frequency === 'Daily') {
+            summary = 'Every Day';
+          } else if (record.frequency === 'Weekly') {
+            const dayName = record.dayOfWeek !== undefined && record.dayOfWeek !== null
+              ? dayOfWeekNames[record.dayOfWeek] : 'Monday';
+            summary = `Weekly (${dayName})`;
+          } else if (record.frequency === 'Monthly') {
+            summary = `Monthly (Day ${record.dayOfMonth ?? 1})`;
+          } else {
+            summary = record.frequency;
+          }
         }
-        if (record.frequency === 'Weekly') {
-          const dayName = record.dayOfWeek !== undefined && record.dayOfWeek !== null
-            ? dayOfWeekNames[record.dayOfWeek] : 'Monday';
-          return <Tag color="geekblue">Weekly ({dayName})</Tag>;
-        }
-        if (record.frequency === 'Monthly') {
-          return <Tag color="orange">Monthly (Day {record.dayOfMonth ?? 1})</Tag>;
-        }
-        return <Tag>{record.frequency}</Tag>;
+
+        return (
+          <Space orientation="vertical" size={2}>
+            <Tag color={color}>{summary}</Tag>
+            {record.startDate && (
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                From {dayjs(record.startDate).format('DD-MMM-YYYY')}
+              </Text>
+            )}
+          </Space>
+        );
       },
     },
     {
@@ -207,6 +324,26 @@ export const RecurringVoucherList: React.FC = () => {
           </Text>
         </Space>
       ),
+    },
+    {
+      title: 'Next Scheduled',
+      key: 'nextRun',
+      render: (_: any, record: RecurringChainDto) => {
+        if (!record.isActive) {
+          return <Text type="secondary">Paused</Text>;
+        }
+        if (!record.nextRunDate) {
+          return <Text type="secondary">—</Text>;
+        }
+        const isToday = record.nextRunDate === dayjs().format('YYYY-MM-DD');
+        return (
+          <Space size={4}>
+            <ClockCircleOutlined style={{ color: '#0284c7' }} />
+            <Text>{dayjs(record.nextRunDate).format('ddd, DD-MMM-YYYY')}</Text>
+            {isToday && <Tag color="processing">Today</Tag>}
+          </Space>
+        );
+      },
     },
     {
       title: 'Last Generated',
@@ -272,7 +409,7 @@ export const RecurringVoucherList: React.FC = () => {
         <Col>
           <Title level={3} style={{ margin: 0 }}>Recurring Vouchers & Daily Automation</Title>
           <Paragraph type="secondary" style={{ margin: 0 }}>
-            Automate recurring daily, weekly, or monthly vouchers directly from the latest voucher in each chain.
+            Automate daily, weekday-only, weekly, bi-weekly, or monthly vouchers directly from the latest voucher in each chain.
           </Paragraph>
         </Col>
         <Col>
@@ -314,7 +451,7 @@ export const RecurringVoucherList: React.FC = () => {
             <Statistic
               title="Daily Hangfire Job"
               value="Once Daily"
-              suffix="at 00:05 AM"
+              suffix="at 08:00 PM"
               valueStyle={{ color: '#9333ea', fontSize: 20 }}
               prefix={<CalendarOutlined />}
             />
@@ -338,113 +475,283 @@ export const RecurringVoucherList: React.FC = () => {
         onCancel={() => setModalVisible(false)}
         onOk={() => form.submit()}
         okText={editingItem ? 'Save Changes' : 'Start Recurring Chain'}
+        width={700}
+        centered
         destroyOnClose
+        styles={{ body: { paddingTop: 8, paddingBottom: 4 } }}
       >
         <Form
           form={form}
           layout="vertical"
+          size="middle"
           onFinish={handleCreateOrUpdate}
         >
-          <Form.Item
-            name="name"
-            label="Schedule / Chain Name"
-            rules={[{ required: true, message: 'Please enter a name for this chain' }]}
-          >
-            <Input placeholder="e.g. Daily Bread Supply Route 1" />
-          </Form.Item>
-
-          {!editingItem && (
-            <>
-              <Form.Item
-                name="voucherType"
-                label="Voucher Type"
-                rules={[{ required: true }]}
-              >
-                <Select>
-                  <Option value="SP">Supply Voucher (Sale Supply)</Option>
-                  <Option value="JV">Journal Voucher (JV)</Option>
-                </Select>
-              </Form.Item>
-
-              <Form.Item
-                name="sourceVoucherNo"
-                label="Initial Voucher Number to Start Chain From"
-                rules={[{ required: true, message: 'Please provide the voucher number to clone from' }]}
-                extra="The system links this voucher into the chain and copies its items & amounts."
-              >
-                <Input placeholder="e.g. 00042 or 00010" />
-              </Form.Item>
-            </>
+          {!editingItem ? (
+            <Row gutter={12}>
+              <Col span={10}>
+                <Form.Item
+                  name="name"
+                  label="Schedule / Chain Name"
+                  rules={[{ required: true, message: 'Enter a name' }]}
+                  style={{ marginBottom: 10 }}
+                >
+                  <Input placeholder="e.g. Weekday Bread Supply" />
+                </Form.Item>
+              </Col>
+              <Col span={7}>
+                <Form.Item
+                  name="voucherType"
+                  label="Voucher Type"
+                  rules={[{ required: true }]}
+                  style={{ marginBottom: 10 }}
+                >
+                  <Select>
+                    <Option value="SP">Supply (SP)</Option>
+                    <Option value="JV">Journal (JV)</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col span={7}>
+                <Form.Item
+                  name="sourceVoucherNo"
+                  label="Source Voucher #"
+                  rules={[{ required: true, message: 'Enter voucher #' }]}
+                  style={{ marginBottom: 10 }}
+                >
+                  <Input placeholder="e.g. 00042" />
+                </Form.Item>
+              </Col>
+            </Row>
+          ) : (
+            <Row gutter={12} align="middle">
+              <Col span={18}>
+                <Form.Item
+                  name="name"
+                  label="Schedule / Chain Name"
+                  rules={[{ required: true, message: 'Enter a name' }]}
+                  style={{ marginBottom: 10 }}
+                >
+                  <Input placeholder="e.g. Weekday Bread Supply" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item
+                  name="isActive"
+                  label="Status"
+                  valuePropName="checked"
+                  style={{ marginBottom: 10 }}
+                >
+                  <Switch checkedChildren="Active" unCheckedChildren="Paused" />
+                </Form.Item>
+              </Col>
+            </Row>
           )}
 
-          <Form.Item
-            name="frequency"
-            label="Recurrence Frequency"
-            rules={[{ required: true }]}
-          >
-            <Select>
-              <Option value="Daily">Daily (Every Day)</Option>
-              <Option value="Weekly">Weekly (Specific Day)</Option>
-              <Option value="Monthly">Monthly (Specific Day of Month)</Option>
-            </Select>
-          </Form.Item>
+          <Row gutter={12}>
+            <Col span={watchedFrequency === 'Monthly' ? 10 : 12}>
+              <Form.Item
+                name="frequency"
+                label="Recurrence Pattern"
+                rules={[{ required: true }]}
+                style={{ marginBottom: 10 }}
+              >
+                <Select onChange={handleFrequencyChange}>
+                  <Option value="Daily">Daily (Choose Days / Skip Weekends)</Option>
+                  <Option value="Weekly">Weekly (Specific Day(s))</Option>
+                  <Option value="BiWeekly">Bi-Weekly (Every 2 Weeks)</Option>
+                  <Option value="Monthly">Monthly (Day of Month)</Option>
+                </Select>
+              </Form.Item>
+            </Col>
 
-          <Form.Item
-            noStyle
-            shouldUpdate={(prevValues, currentValues) => prevValues.frequency !== currentValues.frequency}
-          >
-            {({ getFieldValue }) => {
-              const freq = getFieldValue('frequency');
-              if (freq === 'Weekly') {
-                return (
+            {watchedFrequency === 'Daily' && watchedDaysOfWeek && watchedDaysOfWeek.length === 7 && (
+              <>
+                <Col span={5}>
                   <Form.Item
-                    name="dayOfWeek"
-                    label="Day of Week"
-                    rules={[{ required: true, message: 'Select day of week' }]}
+                    name="interval"
+                    label="Every (Days)"
+                    style={{ marginBottom: 10 }}
                   >
-                    <Select placeholder="Select day">
-                      {dayOfWeekNames.map((name, index) => (
-                        <Option key={index} value={index}>{name}</Option>
-                      ))}
-                    </Select>
+                    <InputNumber min={1} max={365} style={{ width: '100%' }} />
                   </Form.Item>
-                );
-              }
-              if (freq === 'Monthly') {
-                return (
+                </Col>
+                <Col span={7}>
+                  <Form.Item name="startDate" label="Start Date" style={{ marginBottom: 10 }}>
+                    <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" />
+                  </Form.Item>
+                </Col>
+              </>
+            )}
+
+            {watchedFrequency === 'Daily' && (!watchedDaysOfWeek || watchedDaysOfWeek.length < 7) && (
+              <Col span={12}>
+                <Form.Item name="startDate" label="Start Date (Optional)" style={{ marginBottom: 10 }}>
+                  <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" />
+                </Form.Item>
+              </Col>
+            )}
+
+            {watchedFrequency === 'Weekly' && (
+              <>
+                <Col span={5}>
+                  <Form.Item
+                    name="interval"
+                    label="Every (Weeks)"
+                    style={{ marginBottom: 10 }}
+                  >
+                    <InputNumber min={1} max={52} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={7}>
+                  <Form.Item name="startDate" label="Start Date" style={{ marginBottom: 10 }}>
+                    <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" />
+                  </Form.Item>
+                </Col>
+              </>
+            )}
+
+            {watchedFrequency === 'BiWeekly' && (
+              <Col span={12}>
+                <Form.Item
+                  name="startDate"
+                  label="Anchor Start Date"
+                  tooltip="Determines which alternating weeks the voucher is generated."
+                  style={{ marginBottom: 10 }}
+                >
+                  <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" />
+                </Form.Item>
+              </Col>
+            )}
+
+            {watchedFrequency === 'Monthly' && (
+              <>
+                <Col span={7}>
                   <Form.Item
                     name="dayOfMonth"
-                    label="Day of Month (1 - 31)"
-                    rules={[{ required: true, message: 'Enter day of month' }]}
+                    label="Day of Month"
+                    rules={[{ required: true, message: 'Select day' }]}
+                    style={{ marginBottom: 10 }}
                   >
-                    <Select placeholder="Select day of month">
+                    <Select placeholder="Day">
                       {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                        <Option key={day} value={day}>Day {day}</Option>
+                        <Option key={day} value={day}>
+                          {day === 31 ? 'Day 31 (Last Day)' : `Day ${day}`}
+                        </Option>
                       ))}
                     </Select>
                   </Form.Item>
-                );
-              }
-              return null;
-            }}
-          </Form.Item>
+                </Col>
+                <Col span={7}>
+                  <Form.Item
+                    name="interval"
+                    label="Repeat Every"
+                    style={{ marginBottom: 10 }}
+                  >
+                    <Select>
+                      <Option value={1}>Every Month</Option>
+                      <Option value={2}>Every 2 Months</Option>
+                      <Option value={3}>Quarterly (3M)</Option>
+                      <Option value={6}>Every 6 Months</Option>
+                      <Option value={12}>Yearly (12M)</Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </>
+            )}
+          </Row>
 
-          {editingItem && (
+          {(watchedFrequency === 'Daily' || watchedFrequency === 'Weekly' || watchedFrequency === 'BiWeekly') && (
             <Form.Item
-              name="isActive"
-              label="Active Status"
-              valuePropName="checked"
+              name="daysOfWeek"
+              style={{ marginBottom: 10 }}
+              label={
+                <Space size={8} wrap>
+                  <span>
+                    {watchedFrequency === 'BiWeekly' ? 'Active Days (Every 2 Weeks)' : 'Active Days of Week'}
+                  </span>
+                  {watchedFrequency === 'Daily' && (
+                    <Space size={4}>
+                      <Button size="small" type="link" style={{ padding: '0 4px', height: 'auto', fontSize: 12 }} onClick={() => form.setFieldsValue({ daysOfWeek: ALL_DAYS, interval: 1 })}>
+                        All
+                      </Button>
+                      <Button size="small" type="link" style={{ padding: '0 4px', height: 'auto', fontSize: 12 }} onClick={() => form.setFieldsValue({ daysOfWeek: WEEKDAYS_MON_FRI, interval: 1 })}>
+                        Mon–Fri
+                      </Button>
+                      <Button size="small" type="link" style={{ padding: '0 4px', height: 'auto', fontSize: 12 }} onClick={() => form.setFieldsValue({ daysOfWeek: MON_SAT, interval: 1 })}>
+                        Mon–Sat
+                      </Button>
+                      <Button size="small" type="link" style={{ padding: '0 4px', height: 'auto', fontSize: 12 }} onClick={() => form.setFieldsValue({ daysOfWeek: SUN_THU, interval: 1 })}>
+                        Sun–Thu
+                      </Button>
+                    </Space>
+                  )}
+                </Space>
+              }
+              rules={[
+                {
+                  validator: (_, val: number[] | undefined) =>
+                    val && val.length > 0
+                      ? Promise.resolve()
+                      : Promise.reject(new Error('Select at least one day of the week')),
+                },
+              ]}
             >
-              <Switch checkedChildren="Active" unCheckedChildren="Paused" />
+              <Checkbox.Group options={DAY_OPTIONS} />
             </Form.Item>
           )}
 
-          <Form.Item
-            name="notes"
-            label="Notes / Instructions"
+          {/* Compact Live Next 5 Scheduled Dates Preview */}
+          <div
+            style={{
+              background: upcomingPreviewDates.length > 0 ? '#f0f9ff' : '#fffbe6',
+              border: `1px solid ${upcomingPreviewDates.length > 0 ? '#bae6fd' : '#ffe58f'}`,
+              borderRadius: 6,
+              padding: '6px 10px',
+              marginBottom: 10,
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 6,
+            }}
           >
-            <Input.TextArea rows={2} placeholder="Optional instructions or memo" />
-          </Form.Item>
+            <Text strong style={{ fontSize: 12, color: '#0369a1', marginRight: 2 }}>
+              Next runs:
+            </Text>
+            {upcomingPreviewDates.length > 0 ? (
+              upcomingPreviewDates.map((d) => (
+                <Tag key={d.format('YYYY-MM-DD')} color="blue" style={{ margin: 0, fontSize: 11 }}>
+                  {d.format('ddd, DD MMM')}
+                </Tag>
+              ))
+            ) : (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                No upcoming dates match the current schedule.
+              </Text>
+            )}
+          </div>
+
+          <Row gutter={12}>
+            {watchedFrequency === 'Monthly' && (watchedInterval ?? 1) > 1 && (
+              <Col span={8}>
+                <Form.Item
+                  name="startDate"
+                  label="Anchor Start Date"
+                  style={{ marginBottom: 4 }}
+                >
+                  <DatePicker style={{ width: '100%' }} format="DD-MMM-YYYY" />
+                </Form.Item>
+              </Col>
+            )}
+            <Col span={watchedFrequency === 'Monthly' && (watchedInterval ?? 1) > 1 ? 16 : 24}>
+              <Form.Item
+                name="notes"
+                label="Notes / Instructions"
+                style={{ marginBottom: 4 }}
+              >
+                <Input placeholder="Optional instructions or memo" />
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Modal>
     </div>
