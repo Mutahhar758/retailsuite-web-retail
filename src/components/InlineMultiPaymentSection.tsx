@@ -26,7 +26,8 @@ import {
   DollarOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { chartOfAccountService, type ChartOfAccountHeadDto } from '../services/chartOfAccountService';
+import { type ChartOfAccountHeadDto } from '../services/chartOfAccountService';
+import { offlineCacheService } from '../services/offlineCacheService';
 
 const { Text } = Typography;
 
@@ -99,7 +100,7 @@ export const InlineMultiPaymentSection: React.FC<InlineMultiPaymentSectionProps>
     setLoadingAccounts(true);
     setAccountsError(false);
     try {
-      const res = await chartOfAccountService.getCashBankAccounts();
+      const res = await offlineCacheService.getCashBankAccounts();
       if (!isMountedCheck || isMountedCheck()) {
         setAccounts(res || []);
       }

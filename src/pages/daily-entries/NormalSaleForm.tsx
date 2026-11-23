@@ -1340,17 +1340,24 @@ export const NormalSaleForm: React.FC = () => {
         }
       } else {
         const newVno = await saleService.create(request, { offlineFallback: true });
+        const isOfflineResult = newVno.includes('-') && newVno.length <= 10;
 
-        if (newVno.includes('-') && newVno.length <= 10) {
+        if (isOfflineResult) {
           message.warning({
-            content: `Sale saved offline as ${newVno}. It will sync automatically when you reconnect.`,
+            content: `Sale saved offline as ${newVno}. Review & sync when you reconnect.`,
             duration: 8,
           });
         } else {
           message.success(`Sale created successfully. Voucher: SL-${newVno}`);
         }
 
-        if (shouldPrint && receiptDraft) {
+        // In offline mode, never direct-print by default — always save and preview
+        if (isOfflineResult && (shouldPrint || shouldPreview) && receiptDraft) {
+          receiptDraft.voucherNo = `SL-${newVno}`;
+          receiptDraft.isOffline = true;
+          setActiveReceiptData(receiptDraft);
+          setReceiptModalVisible(true);
+        } else if (shouldPrint && receiptDraft) {
           receiptDraft.voucherNo = `SL-${newVno}`;
           await printSaleReceiptDirect(receiptDraft);
         } else if (shouldPreview && receiptDraft) {

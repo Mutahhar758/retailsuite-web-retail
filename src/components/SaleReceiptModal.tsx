@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import {
   type SaleReceiptData,
   BILL_FORMAT_TO_PDF_LAYOUT,
+  isOfflineReceipt,
   printSaleReceiptDirect,
   printSaleReceiptPdf,
   printSaleReceiptViaBrowser,
@@ -47,7 +48,7 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
     let active = true;
     let objectUrl: string | null = null;
 
-    if (visible && receiptData?.voucherNo && !receiptData.voucherNo.startsWith('TEMP-') && navigator.onLine) {
+    if (visible && receiptData?.voucherNo && !isOfflineReceipt(receiptData)) {
       setPdfLoading(true);
       reportService.getSaleBillPdf({
         voucherNo: receiptData.voucherNo,
@@ -82,6 +83,8 @@ export const SaleReceiptModal: React.FC<SaleReceiptModalProps> = ({
     try {
       if (onPrintThermal) {
         await onPrintThermal(receiptData);
+      } else if (isOfflineReceipt(receiptData)) {
+        await printSaleReceiptDirect(receiptData, { format: printFormat, fallbackToBrowser: false });
       } else {
         const printed = await printSaleReceiptPdf(receiptData.voucherNo, BILL_FORMAT_TO_PDF_LAYOUT[printFormat], {
           isDuplicate: receiptData.isDuplicate

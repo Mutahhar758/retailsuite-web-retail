@@ -34,7 +34,7 @@ interface CacheMeta {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DB_NAME = 'retail-offline-v1';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const CACHE_TTL_MS = 72 * 60 * 60 * 1000; // 72 hours
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ function getDb(): Promise<IDBPDatabase> {
           });
         }
         // Reference data caches
-        for (const store of ['cachedItems', 'cachedCustomers', 'cachedNarrations', 'cachedUnits']) {
+        for (const store of ['cachedItems', 'cachedCustomers', 'cachedNarrations', 'cachedUnits', 'cachedCashBankAccounts']) {
           if (!db.objectStoreNames.contains(store)) {
             db.createObjectStore(store);
           }
@@ -89,8 +89,10 @@ function getDb(): Promise<IDBPDatabase> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEVICE_ID_KEY = 'device_id';
+const MACHINE_ID_KEY = 'machine_id';
 const LOCAL_SEQ_KEY = 'local_seq';
 const LS_DEVICE_ID = 'retail_device_id'; // localStorage backup
+const LS_MACHINE_ID = 'retail_machine_id';
 
 function generateDeviceId(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars (0,O,1,I)
@@ -103,8 +105,60 @@ function generateDeviceId(): string {
   return id;
 }
 
-export async function getOrCreateDeviceId(): Promise<string> {
-  // 1. Try IndexedDB
+export async function getOrCreateMachineId(): Promise<string> {
+  const db = await getDb();
+  const row = await db.get('deviceMeta', MACHINE_ID_KEY) as DeviceMeta | undefined;
+  if (row?.value) {
+    localStorage.setItem(LS_MACHINE_ID, String(row.value));
+    return String(row.value);
+  }
+
+  const lsId = localStorage.getItem(LS_MACHINE_ID);
+  if (lsId) {
+    await db.put('deviceMeta', { key: MACHINE_ID_KEY, value: lsId });
+    return lsId;
+  }
+
+  const newId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID().replace(/-/g, '')
+    : `${Date.now().toString(36)}${generateDeviceId()}${generateDeviceId()}`;
+  await db.put('deviceMeta', { key: MACHINE_ID_KEY, value: newId });
+  localStorage.setItem(LS_MACHINE_ID, newId);
+  return newId;
+}
+
+export async function getAssignedTerminalCode(tenantIdentifier?: string | null): Promise<string | null> {
+  const tenantKey = tenantIdentifier ? `terminal_code_${tenantIdentifier}` : DEVICE_ID_KEY;
+  const lsKey = tenantIdentifier ? `retail_terminal_${tenantIdentifier}` : LS_DEVICE_ID;
+  const db = await getDb();
+  const row = await db.get('deviceMeta', tenantKey) as DeviceMeta | undefined;
+  if (row?.value) {
+    localStorage.setItem(lsKey, String(row.value));
+    return String(row.value);
+  }
+  const lsVal = localStorage.getItem(lsKey);
+  if (lsVal) {
+    await db.put('deviceMeta', { key: tenantKey, value: lsVal });
+    return lsVal;
+  }
+  return null;
+}
+
+export async function saveAssignedTerminalCode(terminalCode: string, tenantIdentifier?: string | null): Promise<void> {
+  const tenantKey = tenantIdentifier ? `terminal_code_${tenantIdentifier}` : DEVICE_ID_KEY;
+  const lsKey = tenantIdentifier ? `retail_terminal_${tenantIdentifier}` : LS_DEVICE_ID;
+  const db = await getDb();
+  await db.put('deviceMeta', { key: tenantKey, value: terminalCode });
+  await db.put('deviceMeta', { key: DEVICE_ID_KEY, value: terminalCode });
+  localStorage.setItem(lsKey, terminalCode);
+  localStorage.setItem(LS_DEVICE_ID, terminalCode);
+}
+
+export async function getOrCreateDeviceId(tenantIdentifier?: string | null): Promise<string> {
+  const assigned = await getAssignedTerminalCode(tenantIdentifier);
+  if (assigned) return assigned;
+
+  // 1. Try IndexedDB fallback
   const db = await getDb();
   const row = await db.get('deviceMeta', DEVICE_ID_KEY) as DeviceMeta | undefined;
   if (row) {
@@ -119,7 +173,7 @@ export async function getOrCreateDeviceId(): Promise<string> {
     return lsId;
   }
 
-  // 3. Generate new
+  // 3. Generate local fallback until first online server registration
   const newId = generateDeviceId();
   await db.put('deviceMeta', { key: DEVICE_ID_KEY, value: newId });
   localStorage.setItem(LS_DEVICE_ID, newId);
@@ -134,10 +188,10 @@ export async function getNextLocalSeq(): Promise<number> {
   return next;
 }
 
-export async function getNextOfflineVoucherNo(): Promise<string> {
-  const deviceId = await getOrCreateDeviceId();
+export async function getNextOfflineVoucherNo(tenantIdentifier?: string | null): Promise<string> {
+  const deviceId = await getOrCreateDeviceId(tenantIdentifier);
   const seq = await getNextLocalSeq();
-  const paddedSeq = String(seq).padStart(4, '0');
+  const paddedSeq = String(seq).padStart(5, '0');
   return `${deviceId}-${paddedSeq}`;
 }
 
@@ -191,7 +245,7 @@ export async function updateOfflineSaleRetry(
 // Reference Data Cache
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type CacheStore = 'cachedItems' | 'cachedCustomers' | 'cachedNarrations' | 'cachedUnits';
+export type CacheStore = 'cachedItems' | 'cachedCustomers' | 'cachedNarrations' | 'cachedUnits' | 'cachedCashBankAccounts';
 
 export async function saveReferenceCache(store: CacheStore, data: unknown[]): Promise<void> {
   const { currentTenantIdentifier } = useAppStore.getState();

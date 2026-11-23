@@ -38,6 +38,8 @@ import api from '../services/api';
 import { CURRENT_APP_VERSION } from '../utils/autoVersionRefresh';
 import { GeminiAssistantWidget } from '../components/ai/GeminiAssistantWidget';
 import { NavigationCommandModal, type SearchableNavItem } from '../components/common/NavigationCommandModal';
+import { OfflineSyncReviewModal } from '../components/OfflineSyncReviewModal';
+import { offlineSyncService } from '../services/offlineSyncService';
 
 const { Header, Sider, Content } = Layout;
 
@@ -51,6 +53,13 @@ export const MainLayout: React.FC = () => {
   const { token } = theme.useToken();
   const { isOnline } = useNetworkStatus();
   const { pendingCount } = useOfflineStore();
+
+  // Prompt user to review pending offline sales when online
+  React.useEffect(() => {
+    if (isOnline && pendingCount > 0) {
+      offlineSyncService.promptForSyncReview().catch(console.error);
+    }
+  }, [isOnline, pendingCount]);
 
   // Global Ctrl+K / Cmd+K listener for quick search modal
   useEffect(() => {
@@ -761,6 +770,7 @@ export const MainLayout: React.FC = () => {
       )}
 
       <GeminiAssistantWidget />
+      <OfflineSyncReviewModal />
     </Layout>
   );
 };

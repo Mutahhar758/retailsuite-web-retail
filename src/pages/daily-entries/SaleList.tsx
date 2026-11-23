@@ -13,7 +13,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { saleService, type Sale, type OfflineSaleEntry } from '../../services/saleService';
 import { offlineCacheService } from '../../services/offlineCacheService';
-import { offlineSyncService } from '../../services/offlineSyncService';
 import { useOfflineStore } from '../../stores/useOfflineStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { useSettingsStore, BILL_THANK_YOU_KEY, BILL_THANK_YOU_DEFAULT } from '../../stores/useSettingsStore';
@@ -54,7 +53,6 @@ export const SaleList: React.FC = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [data, setData] = useState<Sale[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [offlineQueue, setOfflineQueue] = useState<OfflineSaleEntry[]>([]);
@@ -126,6 +124,7 @@ export const SaleList: React.FC = () => {
   // Fetch whenever the URL-derived query changes or online status changes.
   useEffect(() => {
     if (!isOnline) {
+      setLoading(false);
       loadOfflineQueue();
       return;
     }
@@ -146,10 +145,16 @@ export const SaleList: React.FC = () => {
         setData(result.data);
         setTotalCount(result.totalCount);
         await loadOfflineQueue();
-      } catch {
-        if (!cancelled) message.error('Failed to fetch sale vouchers');
+      } catch (err: any) {
+        const isNetworkError = !err?.response && (err?.code === 'ERR_NETWORK' || err?.code === 'ECONNABORTED' || err?.message === 'Network Error');
+        if (!cancelled && !isNetworkError) {
+          message.error('Failed to fetch sale vouchers');
+        }
+        if (isNetworkError) {
+          await loadOfflineQueue();
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -262,22 +267,8 @@ export const SaleList: React.FC = () => {
     setSearchParams(next);
   };
 
-  const handleSyncNow = async () => {
-    setSyncing(true);
-    try {
-      const result = await offlineSyncService.syncAll();
-      if (result.synced > 0) {
-        message.success(`${result.synced} voucher(s) synced successfully`);
-        // Refresh current page view
-        const next = new URLSearchParams(searchParams);
-        setSearchParams(next);
-      }
-      if (result.failed > 0) {
-        message.error(`${result.failed} voucher(s) failed to sync`);
-      }
-    } finally {
-      setSyncing(false);
-    }
+  const handleSyncNow = () => {
+    useOfflineStore.getState().setSyncReviewOpen(true);
   };
 
   // Build unified display rows: offline first, then server rows
@@ -477,7 +468,7 @@ export const SaleList: React.FC = () => {
                   size="small"
                   type="primary"
                   icon={<CloudSyncOutlined />}
-                  loading={syncing || isSyncing}
+                  loading={isSyncing}
                   onClick={handleSyncNow}
                   style={{ backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' }}
                 >

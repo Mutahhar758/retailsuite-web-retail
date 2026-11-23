@@ -9,11 +9,17 @@ interface OfflineState {
   lastSyncedAt: Date | null;
   /** Permanent device identifier (e.g. 'A3F1') */
   deviceId: string | null;
+  /** False when browser is online locally but API server is unreachable */
+  isServerReachable: boolean;
+  /** Controls the Offline Sync Review & Confirmation modal */
+  syncReviewOpen: boolean;
 
   setPendingCount: (n: number) => void;
   setSyncing: (b: boolean) => void;
   setLastSyncedAt: (d: Date) => void;
   setDeviceId: (id: string) => void;
+  setServerReachable: (b: boolean) => void;
+  setSyncReviewOpen: (b: boolean) => void;
 }
 
 /**
@@ -25,9 +31,13 @@ export const useOfflineStore = create<OfflineState>()((set) => ({
   isSyncing: false,
   lastSyncedAt: null,
   deviceId: null,
+  isServerReachable: typeof navigator !== 'undefined' ? navigator.onLine : true,
+  syncReviewOpen: false,
 
   setPendingCount: (pendingCount) => set({ pendingCount }),
   setSyncing: (isSyncing) => set({ isSyncing }),
   setLastSyncedAt: (lastSyncedAt) => set({ lastSyncedAt }),
   setDeviceId: (deviceId) => set({ deviceId }),
+  setServerReachable: (isServerReachable) => set({ isServerReachable }),
+  setSyncReviewOpen: (syncReviewOpen) => set({ syncReviewOpen }),
 }));

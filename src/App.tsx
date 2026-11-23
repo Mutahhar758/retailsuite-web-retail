@@ -111,6 +111,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   const { theme, currentTenantIdentifier, licenses } = useAppStore();
+  const { accessToken } = useAuthStore();
   const { setDeviceId, setPendingCount } = useOfflineStore();
 
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
@@ -123,7 +124,12 @@ function App() {
   // Reactive pending count update on tenant change
   useEffect(() => {
     saleService.getOfflinePendingCount(currentTenantIdentifier).then(n => setPendingCount(n));
-  }, [currentTenantIdentifier, setPendingCount]);
+    if (navigator.onLine && accessToken && currentTenantIdentifier) {
+      saleService.registerTerminal(currentTenantIdentifier).then(id => setDeviceId(id)).catch(console.error);
+    } else {
+      getOrCreateDeviceId(currentTenantIdentifier).then(id => setDeviceId(id));
+    }
+  }, [currentTenantIdentifier, accessToken, setPendingCount, setDeviceId]);
 
   // Offline system bootstrap (runs once on app load)
   useEffect(() => {

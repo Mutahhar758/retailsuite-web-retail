@@ -892,8 +892,10 @@ export const POSSaleForm: React.FC = () => {
       setSavedTokenNo(tokenNumber);
       setSavedOrderType(orderType || 'Takeaway');
 
-      // Customer bill receipt on sale creation
-      if (shouldPrintReceipt) {
+      const isOfflineResult = finalVoucherNo ? (finalVoucherNo.includes('-') && finalVoucherNo.length <= 10) : false;
+
+      // Customer bill receipt on sale creation (offline saves & previews without auto-printing)
+      if (shouldPrintReceipt && !isOfflineResult) {
         try {
           let printed = false;
           if (!finalVoucherNo.includes('-') && navigator.onLine) {
@@ -909,7 +911,6 @@ export const POSSaleForm: React.FC = () => {
         }
       }
 
-      const isOfflineResult = finalVoucherNo ? (finalVoucherNo.includes('-') && finalVoucherNo.length <= 10) : false;
       setIsOfflineSaved(isOfflineResult);
       setSavedVoucherNo(finalVoucherNo || '');
       setIsPaymentModalVisible(false);

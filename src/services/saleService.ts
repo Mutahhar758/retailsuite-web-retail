@@ -2,6 +2,9 @@ import dayjs from 'dayjs';
 import api from './api';
 import {
   getNextOfflineVoucherNo,
+  getOrCreateDeviceId,
+  getOrCreateMachineId,
+  saveAssignedTerminalCode,
   enqueueOfflineSale,
   getOfflineSaleQueue,
   type OfflineSaleEntry,
@@ -114,6 +117,8 @@ export interface SaleCreateRequest {
     checkNum?: string;
     checkDate?: string;
   }[];
+  offlineVoucherNo?: string;
+  counter?: string;
 }
 
 export interface SaleUpdateRequest {
@@ -185,8 +190,15 @@ export const saleService = {
     options: { offlineFallback?: boolean } = {}
   ): Promise<string> {
     if (navigator.onLine) {
-      const response = await api.post('/api/sales', request);
-      return response.data.body as string;
+      try {
+        const response = await api.post('/api/sales', request);
+        return response.data.body as string;
+      } catch (err: any) {
+        const isNetworkFailure = !err?.response || err?.code === 'ERR_NETWORK' || err?.code === 'ECONNABORTED';
+        if (!isNetworkFailure || !options.offlineFallback) {
+          throw err;
+        }
+      }
     }
 
     if (!options.offlineFallback) {
@@ -194,10 +206,10 @@ export const saleService = {
     }
 
     // Queue offline
-    const tempVoucherNo = await getNextOfflineVoucherNo();
+    const { currentTenantIdentifier } = useAppStore.getState();
+    const tempVoucherNo = await getNextOfflineVoucherNo(currentTenantIdentifier);
     const deviceId = tempVoucherNo.split('-')[0];
     const localSeq = parseInt(tempVoucherNo.split('-')[1], 10);
-    const { currentTenantIdentifier } = useAppStore.getState();
 
     const localId = await enqueueOfflineSale({
       deviceId,
@@ -266,5 +278,28 @@ export const saleService = {
     return queue.filter(
       (e) => e.status === 'pending' && (!tenantIdentifier || e.tenantIdentifier === tenantIdentifier)
     ).length;
+  },
+
+  /** Registers this browser terminal with /api/terminals/register to receive a guaranteed-unique T01/T02... ID. */
+  async registerTerminal(tenantIdentifier?: string | null): Promise<string> {
+    if (!navigator.onLine) {
+      return getOrCreateDeviceId(tenantIdentifier);
+    }
+    try {
+      const machineId = await getOrCreateMachineId();
+      const response = await api.post('/api/terminals/register', {
+        machineId,
+        machineName: `Web POS (${navigator.platform || 'Browser'})`,
+      });
+      const assigned = response.data?.body?.terminalCode as string | undefined;
+      if (assigned) {
+        await saveAssignedTerminalCode(assigned, tenantIdentifier);
+        useOfflineStore.getState().setDeviceId(assigned);
+        return assigned;
+      }
+    } catch {
+      // Fall back to existing local ID if offline or unauthenticated
+    }
+    return getOrCreateDeviceId(tenantIdentifier);
   },
 };

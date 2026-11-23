@@ -2,6 +2,7 @@ import axios from 'axios';
 import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useAppStore } from '../stores/useAppStore';
+import { useOfflineStore } from '../stores/useOfflineStore';
 
 const api = axios.create({
   baseURL: 'https://retailer-api.bizgripsolutions.com/',
@@ -45,8 +46,20 @@ api.interceptors.request.use(
 );
 
 api.interceptors.response.use(
-  (response: AxiosResponse) => response,
+  (response: AxiosResponse) => {
+    if (!useOfflineStore.getState().isServerReachable) {
+      useOfflineStore.getState().setServerReachable(true);
+    }
+    return response;
+  },
   async (error) => {
+    const isNetworkError =
+      !error?.response &&
+      (error?.code === 'ERR_NETWORK' || error?.message === 'Network Error');
+    if (isNetworkError) {
+      useOfflineStore.getState().setServerReachable(false);
+    }
+
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     if (error.response?.status === 401) {

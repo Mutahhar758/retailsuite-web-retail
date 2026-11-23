@@ -25,12 +25,15 @@ const MAX_RETRIES = 5;
 // Sync Engine
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function syncAll(): Promise<SyncResult> {
+async function syncSelected(localIds: number[]): Promise<SyncResult> {
   const { setSyncing, setPendingCount, setLastSyncedAt } = useOfflineStore.getState();
 
   // Guard: don't run if offline or already syncing
   if (!navigator.onLine) return { synced: 0, failed: 0, remaining: 0 };
   if (useOfflineStore.getState().isSyncing) return { synced: 0, failed: 0, remaining: 0 };
+
+  const idSet = new Set(localIds);
+  if (idSet.size === 0) return { synced: 0, failed: 0, remaining: 0 };
 
   // Guard: don't sync if not authenticated
   const { accessToken } = useAuthStore.getState();
@@ -50,7 +53,7 @@ async function syncAll(): Promise<SyncResult> {
 
   const queue = await getOfflineSaleQueue();
   const pending = queue.filter(
-    (e) => e.status === 'pending' && e.tenantIdentifier === currentTenantIdentifier
+    (e) => e.localId != null && idSet.has(e.localId) && e.tenantIdentifier === currentTenantIdentifier
   );
 
   let synced = 0;
@@ -62,7 +65,12 @@ async function syncAll(): Promise<SyncResult> {
     if (!navigator.onLine || sessionExpired) break;
 
     try {
-      const realVoucherNo = await saleService.createOnline(entry.request, entry.tenantIdentifier);
+      const payload = {
+        ...entry.request,
+        offlineVoucherNo: entry.tempVoucherNo,
+        counter: entry.deviceId,
+      };
+      const realVoucherNo = await saleService.createOnline(payload, entry.tenantIdentifier);
       await removeOfflineSale(entry.localId!);
       synced++;
 
@@ -114,6 +122,37 @@ async function syncAll(): Promise<SyncResult> {
   return { synced, failed, remaining };
 }
 
+async function syncAll(): Promise<SyncResult> {
+  const { currentTenantIdentifier } = useAppStore.getState();
+  const queue = await getOfflineSaleQueue();
+  const pendingIds = queue
+    .filter((e) => e.status === 'pending' && e.tenantIdentifier === currentTenantIdentifier && e.localId != null)
+    .map((e) => e.localId!);
+  return syncSelected(pendingIds);
+}
+
+async function ignoreSelected(localIds: number[]): Promise<number> {
+  const { currentTenantIdentifier } = useAppStore.getState();
+  let removed = 0;
+  for (const id of localIds) {
+    await removeOfflineSale(id);
+    removed++;
+  }
+  const remaining = await saleService.getOfflinePendingCount(currentTenantIdentifier);
+  useOfflineStore.getState().setPendingCount(remaining);
+  return removed;
+}
+
+async function promptForSyncReview(): Promise<void> {
+  if (!navigator.onLine) return;
+  const { currentTenantIdentifier } = useAppStore.getState();
+  const count = await saleService.getOfflinePendingCount(currentTenantIdentifier);
+  useOfflineStore.getState().setPendingCount(count);
+  if (count > 0) {
+    useOfflineStore.getState().setSyncReviewOpen(true);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Listener management
 // ─────────────────────────────────────────────────────────────────────────────
@@ -123,7 +162,8 @@ let boundListener: (() => void) | null = null;
 function startListening(): void {
   if (boundListener) return; // already registered
   boundListener = () => {
-    syncAll().catch(console.error);
+    useOfflineStore.getState().setServerReachable(true);
+    promptForSyncReview().catch(console.error);
   };
   window.addEventListener('online', boundListener);
 }
@@ -141,6 +181,9 @@ function stopListening(): void {
 
 export const offlineSyncService = {
   syncAll,
+  syncSelected,
+  ignoreSelected,
+  promptForSyncReview,
   startListening,
   stopListening,
 };

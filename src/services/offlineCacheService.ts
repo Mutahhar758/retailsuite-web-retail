@@ -92,6 +92,14 @@ export const offlineCacheService = {
     );
   },
 
+  async getCashBankAccounts(): Promise<ChartOfAccountHeadDto[]> {
+    return fetchOrCache<ChartOfAccountHeadDto>(
+      'cachedCashBankAccounts',
+      'Cash & Bank Accounts',
+      () => chartOfAccountService.getCashBankAccounts()
+    );
+  },
+
   /**
    * Pre-fetch all reference data in one shot.
    * Call on app startup when online to ensure cache is warm.
@@ -103,6 +111,7 @@ export const offlineCacheService = {
       offlineCacheService.getCustomers(),
       offlineCacheService.getNarrations(),
       offlineCacheService.getUnits(),
+      offlineCacheService.getCashBankAccounts(),
     ]);
   },
 };

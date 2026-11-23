@@ -44,6 +44,7 @@ export interface SaleReceiptData {
   orgPhone?: string;
   thankYouMessage?: string;
   isDuplicate?: boolean;
+  isOffline?: boolean;
 }
 
 export interface SalePrintOptions {
@@ -262,9 +263,17 @@ export const printSaleReceiptPdf = async (
   }
 };
 
+export const isOfflineReceipt = (data?: Pick<SaleReceiptData, 'voucherNo' | 'isOffline'> | null): boolean => {
+  if (!data) return true;
+  if (data.isOffline || !navigator.onLine) return true;
+  const clean = (data.voucherNo || '').replace(/^SL-/i, '').trim();
+  return !clean || clean.startsWith('TEMP-');
+};
+
 /**
  * Print via silent Direct Thermal Printer (Bridge / WebUSB).
- * Prefers server-side QuestPDF when voucher is saved, with fallback to ESC/POS on printer bridge.
+ * Prefers server-side QuestPDF when voucher is saved online, with fallback to ESC/POS on printer bridge
+ * and browser print preview when offline.
  */
 export const printSaleReceiptDirect = async (
   data: SaleReceiptData,
@@ -275,9 +284,10 @@ export const printSaleReceiptDirect = async (
   const printerName = options.printerName || localStorage.getItem('pos_printer_name') || 'XP-80';
   const cutPaper = options.cutPaper ?? (localStorage.getItem('pos_printer_cut_paper') !== 'false');
   const openDrawer = options.openDrawer ?? (localStorage.getItem('pos_printer_open_drawer') === 'true');
+  const offline = isOfflineReceipt(data);
 
-  // If we have a saved voucher on the server, attempt QuestPDF high-fidelity printing first
-  if (data.voucherNo && !data.voucherNo.startsWith('TEMP-') && navigator.onLine) {
+  // If we have a saved online voucher on the server, attempt QuestPDF high-fidelity printing first
+  if (data.voucherNo && !offline) {
     const layout = options.format === 'a4' ? 'A4Sheet' : (options.format === 'a5' ? 'A5Sheet' : 'Thermal80mm');
     try {
       const pdfPrinted = await printSaleReceiptPdf(data.voucherNo, layout, {
@@ -301,6 +311,11 @@ export const printSaleReceiptDirect = async (
     message.success(`Receipt printed to ${printerName}`);
     return true;
   } catch (err: any) {
+    if (options.fallbackToBrowser === true) {
+      console.warn('Direct thermal print unavailable, using browser fallback:', err);
+      printSaleReceiptViaBrowser(data, options.format || 'thermal');
+      return true;
+    }
     console.error('Direct thermal print to printer bridge failed:', err);
     message.error(err?.message || 'Failed to print receipt to printer bridge. Please check that printer bridge is running.');
     return false;
