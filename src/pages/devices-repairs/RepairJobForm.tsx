@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { COA_ROOT_IDS } from '../../constants/chartOfAccountConstants';
 import { 
   Row, Col, Card, Form, Input, InputNumber, Button, Select, 
   DatePicker, Space, Typography, Table, message, Divider, Alert
@@ -422,7 +423,7 @@ export const RepairJobForm: React.FC = () => {
                       }
                       options={customers.map(c => ({
                         value: c.account,
-                        label: `${c.title} (${c.accountType || (c.account.startsWith('002') ? 'Vendor' : 'Customer')})`
+                        label: `${c.title} (${c.accountType || (c.account.startsWith(COA_ROOT_IDS.LIABILITIES) ? 'Vendor' : 'Customer')})`
                       }))}
                     />
                   </Form.Item>

@@ -1,4 +1,5 @@
 import KeyboardShortcutsBar from '../../components/common/KeyboardShortcutsBar';
+import { COA_ROOT_IDS } from '../../constants/chartOfAccountConstants';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Row, Col, Card, Typography, Form, DatePicker, Select, Input, Button,
@@ -2111,7 +2112,7 @@ export const NormalSaleForm: React.FC = () => {
                 filterOption={(input, option) =>
                   (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
                 }
-                options={customers.map(c => ({ value: c.account, label: `${c.title} (${c.accountType || (c.account.startsWith('002') ? 'Vendor' : 'Customer')})` }))}
+                options={customers.map(c => ({ value: c.account, label: `${c.title} (${c.accountType || (c.account.startsWith(COA_ROOT_IDS.LIABILITIES) ? 'Vendor' : 'Customer')})` }))}
               />
             </Form.Item>
           </Col>

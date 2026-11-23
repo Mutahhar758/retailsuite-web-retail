@@ -13,6 +13,7 @@ import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { fixedAssetService } from '../../services/fixedAssetService';
+import { COA_SEGMENT_LENGTHS } from '../../constants/chartOfAccountConstants';
 
 const { Title, Text } = Typography;
 
@@ -99,8 +100,8 @@ export const FixedAssetList: React.FC = () => {
   // Map each asset to its Category and Subcategory
   const tableData: AssetTableRow[] = useMemo(() => {
     return assets.map((a) => {
-      const catId = a.account.substring(0, 9);
-      const subId = a.account.substring(0, 12);
+      const catId = a.account.substring(0, COA_SEGMENT_LENGTHS.LEVEL_3);
+      const subId = a.account.substring(0, COA_SEGMENT_LENGTHS.LEVEL_4);
 
       const cat = categories.find((c) => c.account === catId);
       const sub = subcategories.find((s) => s.account === subId);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { COA_ROOT_IDS } from '../../../constants/chartOfAccountConstants';
 import {
   Modal, Upload, Button, Table, Space, Typography, Tag, Select,
   InputNumber, Image, Spin, message, Row, Col, DatePicker, Card
@@ -264,7 +265,7 @@ export const ScanSupplySheetModal: React.FC<ScanSupplySheetModalProps> = ({
               (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
             }
             options={customers.map(c => ({
-              label: `${c.title} (${c.accountType || (c.account.startsWith('002') ? 'Vendor' : 'Customer')})`,
+              label: `${c.title} (${c.accountType || (c.account.startsWith(COA_ROOT_IDS.LIABILITIES) ? 'Vendor' : 'Customer')})`,
               value: c.account
             }))}
           />

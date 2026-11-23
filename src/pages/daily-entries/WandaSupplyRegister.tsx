@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { COA_ROOT_IDS } from '../../constants/chartOfAccountConstants';
 import {
   Table, Card, Button, Space, Typography, Tag, message,
   Form, DatePicker, Select, InputNumber, Row, Col,
@@ -735,7 +736,7 @@ export const WandaSupplyRegister: React.FC = () => {
                 >
                   {customers.map(c => (
                     <Select.Option key={c.account} value={c.account}>
-                      {c.title} ({c.accountType || (c.account.startsWith('002') ? 'Vendor' : 'Customer')})
+                      {c.title} ({c.accountType || (c.account.startsWith(COA_ROOT_IDS.LIABILITIES) ? 'Vendor' : 'Customer')})
                     </Select.Option>
                   ))}
                 </Select>

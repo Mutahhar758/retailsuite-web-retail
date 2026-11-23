@@ -1,5 +1,6 @@
 import { chartOfAccountService, type ChartOfAccountHeadDto } from './chartOfAccountService';
 import { paymentService, type PaymentCreateRequest } from './paymentService';
+import { COA_LEVELS, COA_PREFIXES } from '../constants/chartOfAccountConstants';
 
 export interface ExpenseItemDto {
   account: string;
@@ -33,22 +34,22 @@ export interface ExpenseRecordDto {
   createdOn: string;
 }
 
-export const OPERATING_EXPENSES_PREFIX = '004002';
-export const DEFAULT_ADMIN_EXPENSES_PREFIX = '004002001';
+export const OPERATING_EXPENSES_PREFIX = COA_PREFIXES.OPERATING_EXPENSES;
+export const DEFAULT_ADMIN_EXPENSES_PREFIX = COA_PREFIXES.DEFAULT_ADMIN_EXPENSES;
 
 export const expenseService = {
   /**
    * Get expense subcategories (e.g. Utility Bills, Rent, Maintenance)
    */
   async getSubcategories(): Promise<ChartOfAccountHeadDto[]> {
-    return await chartOfAccountService.getLookup(OPERATING_EXPENSES_PREFIX, 4);
+    return await chartOfAccountService.getLookup(OPERATING_EXPENSES_PREFIX, COA_LEVELS.CATEGORY);
   },
 
   /**
    * Get broad expense categories
    */
   async getParentCategories(): Promise<ChartOfAccountHeadDto[]> {
-    return await chartOfAccountService.getLookup(OPERATING_EXPENSES_PREFIX, 3);
+    return await chartOfAccountService.getLookup(OPERATING_EXPENSES_PREFIX, COA_LEVELS.SUB_GROUP);
   },
 
   /**
@@ -56,7 +57,7 @@ export const expenseService = {
    */
   async getExpenseItems(subcategoryId?: string): Promise<ChartOfAccountHeadDto[]> {
     const prefix = subcategoryId || OPERATING_EXPENSES_PREFIX;
-    return await chartOfAccountService.getLookup(prefix, 5);
+    return await chartOfAccountService.getLookup(prefix, COA_LEVELS.DETAIL);
   },
 
   /**

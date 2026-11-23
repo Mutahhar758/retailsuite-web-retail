@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { COA_ROOT_IDS } from '../../constants/chartOfAccountConstants';
 import {
   Card,
   Form,
@@ -622,7 +623,7 @@ export const WandaCustomerBill: React.FC = () => {
               >
                 {customers.map((c: any) => (
                   <Select.Option key={c.account} value={c.account}>
-                    {c.parentCustomerTitle ? `${c.title} (Sub of: ${c.parentCustomerTitle})` : `${c.title} (${c.accountType || (c.account.startsWith('002') ? 'Vendor' : 'Customer')})`}
+                    {c.parentCustomerTitle ? `${c.title} (Sub of: ${c.parentCustomerTitle})` : `${c.title} (${c.accountType || (c.account.startsWith(COA_ROOT_IDS.LIABILITIES) ? 'Vendor' : 'Customer')})`}
                   </Select.Option>
                 ))}
               </Select>

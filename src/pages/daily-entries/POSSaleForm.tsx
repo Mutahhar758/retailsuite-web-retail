@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { COA_ROOT_IDS } from '../../constants/chartOfAccountConstants';
 import {
   Row, Col, Typography, Button, Input, InputNumber, Space, message, Tag, Modal, List, Badge, Alert, Dropdown, Segmented, Select, Tooltip, Popconfirm
 } from 'antd';
@@ -2328,7 +2329,7 @@ export const POSSaleForm: React.FC = () => {
                     </div>
                   }
                   title={<span style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{item.title}</span>}
-                  description={<span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>({item.accountType || (item.account.startsWith('002') ? 'Vendor' : 'Customer')})</span>}
+                  description={<span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>({item.accountType || (item.account.startsWith(COA_ROOT_IDS.LIABILITIES) ? 'Vendor' : 'Customer')})</span>}
                 />
               </List.Item>
             )}

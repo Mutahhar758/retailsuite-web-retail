@@ -2,8 +2,9 @@ import { chartOfAccountService, type ChartOfAccountHeadDto } from './chartOfAcco
 import { paymentService, type PaymentCreateRequest } from './paymentService';
 import { journalVoucherService, type JournalVoucherCreateRequest } from './journalVoucherService';
 import { openingBalanceService } from './openingBalanceService';
+import { COA_LEVELS, COA_PREFIXES } from '../constants/chartOfAccountConstants';
 
-export const FIXED_ASSETS_PREFIX = '001001';
+export const FIXED_ASSETS_PREFIX = COA_PREFIXES.FIXED_ASSETS;
 
 export interface FixedAssetDto {
   account: string;
@@ -32,7 +33,7 @@ export const fixedAssetService = {
    * Get Fixed Asset Categories (Equipment, Furniture, IT, Vehicles, Land)
    */
   async getCategories(): Promise<ChartOfAccountHeadDto[]> {
-    return await chartOfAccountService.getLookup(FIXED_ASSETS_PREFIX, 3);
+    return await chartOfAccountService.getLookup(FIXED_ASSETS_PREFIX, COA_LEVELS.SUB_GROUP);
   },
 
   /**
@@ -40,7 +41,7 @@ export const fixedAssetService = {
    */
   async getSubcategories(parentCategoryId?: string): Promise<ChartOfAccountHeadDto[]> {
     const prefix = parentCategoryId || FIXED_ASSETS_PREFIX;
-    return await chartOfAccountService.getLookup(prefix, 4);
+    return await chartOfAccountService.getLookup(prefix, COA_LEVELS.CATEGORY);
   },
 
   /**

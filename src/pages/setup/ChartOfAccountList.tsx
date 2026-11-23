@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { chartOfAccountService, type ChartOfAccountDto } from '../../services/chartOfAccountService';
+import { COA_PREFIXES, COA_ROOT_IDS } from '../../constants/chartOfAccountConstants';
 import type { DataNode } from 'antd/es/tree';
 
 const { Title, Text } = Typography;
@@ -206,13 +207,13 @@ export const ChartOfAccountList: React.FC = () => {
           const childrenL3 = data.filter(d => d.parentId === l2.account);
 
           let quickAction = null;
-          if (l2.account === '001001') {
+          if (l2.account === COA_PREFIXES.FIXED_ASSETS) {
             quickAction = (
               <Button type="primary" size="small" icon={<ShopOutlined />} onClick={() => navigate('/setup/fixed-assets')}>
                 Manage Fixed Assets
               </Button>
             );
-          } else if (l2.account === '001002') {
+          } else if (l2.account === COA_PREFIXES.CURRENT_ASSETS) {
             quickAction = (
               <Space>
                 <Button size="small" icon={<BankOutlined />} onClick={() => navigate('/setup/bank-accounts')}>
@@ -223,13 +224,13 @@ export const ChartOfAccountList: React.FC = () => {
                 </Button>
               </Space>
             );
-          } else if (l2.account === '002001') {
+          } else if (l2.account === COA_PREFIXES.CURRENT_LIABILITIES) {
             quickAction = (
               <Button size="small" icon={<TeamOutlined />} onClick={() => navigate('/setup/vendors')}>
                 Manage Vendors
               </Button>
             );
-          } else if (l2.account === '004002') {
+          } else if (l2.account === COA_PREFIXES.OPERATING_EXPENSES) {
             quickAction = (
               <Button type="primary" danger size="small" icon={<DollarOutlined />} onClick={() => navigate('/daily-entries/expenses')}>
                 Record Expense
@@ -336,32 +337,32 @@ export const ChartOfAccountList: React.FC = () => {
 
       {viewMode === 'friendly' ? (
         <Tabs
-          defaultActiveKey="001"
+          defaultActiveKey={COA_ROOT_IDS.ASSETS}
           items={[
             {
-              key: '001',
+              key: COA_ROOT_IDS.ASSETS,
               label: '🏢 Assets',
-              children: renderFriendlyCategory('001'),
+              children: renderFriendlyCategory(COA_ROOT_IDS.ASSETS),
             },
             {
-              key: '004',
+              key: COA_ROOT_IDS.EXPENSES,
               label: '📉 Expenses',
-              children: renderFriendlyCategory('004'),
+              children: renderFriendlyCategory(COA_ROOT_IDS.EXPENSES),
             },
             {
-              key: '002',
+              key: COA_ROOT_IDS.LIABILITIES,
               label: '💳 Liabilities',
-              children: renderFriendlyCategory('002'),
+              children: renderFriendlyCategory(COA_ROOT_IDS.LIABILITIES),
             },
             {
-              key: '003',
+              key: COA_ROOT_IDS.INCOME,
               label: '💰 Income',
-              children: renderFriendlyCategory('003'),
+              children: renderFriendlyCategory(COA_ROOT_IDS.INCOME),
             },
             {
-              key: '005',
+              key: COA_ROOT_IDS.CAPITAL,
               label: '🏛️ Capital / Equity',
-              children: renderFriendlyCategory('005'),
+              children: renderFriendlyCategory(COA_ROOT_IDS.CAPITAL),
             },
           ]}
         />
