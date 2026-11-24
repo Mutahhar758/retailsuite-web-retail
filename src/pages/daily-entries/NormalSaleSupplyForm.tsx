@@ -27,6 +27,72 @@ import { getItemSelectProps } from '../../utils/itemSelectOptions';
 
 const { Title, Text } = Typography;
 
+interface CustomerSelectCellProps {
+  rowIdx: number;
+  record: any;
+  value: string;
+  customers: ChartOfAccountHeadDto[];
+  getCellRef: (rowIdx: number, colKey: string) => React.RefObject<any>;
+  handleCellKeyDown: (rowIdx: number, colKey: string, e: React.KeyboardEvent) => void;
+  onSelectCustomer: (key: number, customerId: string) => void;
+  focusCell: (rowIdx: number, colKey: string) => void;
+}
+
+const CustomerSelectCell: React.FC<CustomerSelectCellProps> = ({
+  rowIdx,
+  record,
+  value,
+  customers,
+  getCellRef,
+  handleCellKeyDown,
+  onSelectCustomer,
+  focusCell,
+}) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Select
+      ref={getCellRef(rowIdx, 'customerId')}
+      className={`grid-select-customerId grid-select-row-${rowIdx}`}
+      showSearch
+      defaultActiveFirstOption
+      open={open}
+      onOpenChange={setOpen}
+      style={{ width: '100%' }}
+      placeholder="Select Customer"
+      optionFilterProp="children"
+      value={value || undefined}
+      onSelect={(val) => {
+        setOpen(false);
+        onSelectCustomer(record.key, val);
+        queueMicrotask(() => focusCell(rowIdx, 'qty'));
+      }}
+      onChange={(val) => {
+        if (!val) {
+          onSelectCustomer(record.key, val);
+        }
+      }}
+      onBlur={() => setOpen(false)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          if (open) return;
+          handleCellKeyDown(rowIdx, 'customerId', e);
+          return;
+        }
+        if (e.key === 'Tab') {
+          setOpen(false);
+          return;
+        }
+        handleCellKeyDown(rowIdx, 'customerId', e);
+      }}
+    >
+      {customers.map(c => (
+        <Select.Option key={c.account} value={c.account}>{c.title}</Select.Option>
+      ))}
+    </Select>
+  );
+};
+
 export const NormalSaleSupplyForm: React.FC = () => {
   const { licenses, currentTenantIdentifier } = useAppStore();
   const currentOrg = licenses.find(l => l.tenantIdentifier === currentTenantIdentifier);
@@ -97,7 +163,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
   }, [supplyLines]);
 
   // ── Keyboard navigation ────────────────────────────────────────────────────
-  const pendingFocusRef = useRef<{ rowIdx: number; colKey: 'customerId' } | null>(null);
+  const pendingFocusRef = useRef<{ rowIdx: number; colKey: 'customerId' | 'qty' } | null>(null);
   const originalItemIdRef = useRef<string | null>(null);
 
   const handleAddRow = useCallback(() => {
@@ -120,6 +186,14 @@ export const NormalSaleSupplyForm: React.FC = () => {
     onSave: () => handleSave(),
   });
 
+  useEffect(() => {
+    if (pendingFocusRef.current) {
+      const { rowIdx, colKey } = pendingFocusRef.current;
+      pendingFocusRef.current = null;
+      focusCell(rowIdx, colKey);
+    }
+  }, [supplyLines, focusCell]);
+
   // Header field refs
   const datePickerRef = useRef<any>(null);
   const itemSelectRef = useRef<any>(null);
@@ -140,7 +214,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
   }, [form, isEdit, navigate]);
 
   useEffect(() => {
-    fetchSettings('Inventory');
+    fetchSettings();
     chartOfAccountService.getCustomerAccounts().then(setCustomers);
     narrationService.getActiveNarrationsLookup().then(setNarrations);
     inventoryService.getItemsLookup().then(setItems);
@@ -319,6 +393,12 @@ export const NormalSaleSupplyForm: React.FC = () => {
             secUnit: item?.secondaryUnit || ''
           };
         });
+        if (newLines.length > 0) {
+          pendingFocusRef.current = {
+            rowIdx: 0,
+            colKey: newLines[0].customerId ? 'qty' : 'customerId',
+          };
+        }
         setSupplyLines(newLines);
         message.success(`Loaded ${newLines.length} customers from ${order.title}`);
       }
@@ -400,19 +480,35 @@ export const NormalSaleSupplyForm: React.FC = () => {
   const handleDatePickerKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      setTimeout(() => itemSelectRef.current?.focus(), 50);
+      queueMicrotask(() => itemSelectRef.current?.focus());
     }
   }, []);
+
+  const focusAfterItem = useCallback(() => {
+    queueMicrotask(() => {
+      if (isEdit) {
+        focusCell(0, 'customerId');
+      } else {
+        supplyOrderSelectRef.current?.focus();
+      }
+    });
+  }, [isEdit, focusCell]);
 
   const handleItemSelectKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      setTimeout(() => supplyOrderSelectRef.current?.focus(), 50);
+      const target = e.target as HTMLElement;
+      if (target?.closest?.('.ant-select')?.classList.contains('ant-select-open')) return;
+      e.preventDefault();
+      focusAfterItem();
     }
-  }, []);
+  }, [focusAfterItem]);
 
   const handleSupplyOrderKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      setTimeout(() => focusCell(0, 'customerId'), 50);
+      const target = e.target as HTMLElement;
+      if (target?.closest?.('.ant-select')?.classList.contains('ant-select-open')) return;
+      e.preventDefault();
+      queueMicrotask(() => focusCell(0, 'customerId'));
     }
   }, [focusCell]);
 
@@ -647,6 +743,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
   };
 
   const handleCustomerChange = async (key: number, customerId: string) => {
+    setSupplyLines(prev => prev.map(l => (l.key === key ? { ...l, customerId } : l)));
     const masterItemId = form.getFieldValue('itemId');
 
     let defQty = 1;
@@ -704,20 +801,16 @@ export const NormalSaleSupplyForm: React.FC = () => {
       dataIndex: 'customerId',
       key: 'customerId',
       render: (text: string, record: any, rowIdx: number) => (
-        <Select
-          ref={getCellRef(rowIdx, 'customerId')}
-          showSearch
-          style={{ width: '100%' }}
-          placeholder="Select Customer"
-          optionFilterProp="children"
+        <CustomerSelectCell
+          rowIdx={rowIdx}
+          record={record}
           value={text}
-          onChange={(val) => handleCustomerChange(record.key, val)}
-          onKeyDown={(e) => handleCellKeyDown(rowIdx, 'customerId', e)}
-        >
-          {customers.map(c => (
-            <Select.Option key={c.account} value={c.account}>{c.title}</Select.Option>
-          ))}
-        </Select>
+          customers={customers}
+          getCellRef={getCellRef}
+          handleCellKeyDown={handleCellKeyDown}
+          onSelectCustomer={handleCustomerChange}
+          focusCell={focusCell}
+        />
       )
     },
     {
@@ -1055,6 +1148,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
                   ref={itemSelectRef}
                   showSearch
                   placeholder="Select Item"
+                  onSelect={focusAfterItem}
                   onChange={handleItemChange}
                   onKeyDown={handleItemSelectKeyDown}
                   {...getItemSelectProps(items)}

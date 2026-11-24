@@ -276,7 +276,7 @@ export const NormalPurchaseForm: React.FC = () => {
   useEffect(() => {
     const fetchLookups = async () => {
       try {
-        fetchSettings('Inventory');
+        fetchSettings();
         const [itemsRes, vendorsRes, narrsRes] = await Promise.all([
           inventoryService.getItemsLookup(undefined, true),
           chartOfAccountService.getDetailAccounts(),
@@ -1227,7 +1227,7 @@ export const NormalPurchaseForm: React.FC = () => {
               );
             }}
           />
-        <KeyboardShortcutsBar shortcuts={[{ key: 'F1', label: 'New' }, { key: 'F2', label: 'Vendor' }, { key: 'F3', label: 'Barcode' }, { key: 'F5', label: 'Save' }, { key: 'Ins', label: 'Add Row' }, { key: 'Enter', label: 'Next Field' }, { key: 'â†‘â†“â†â†’', label: 'Navigate' }, { key: 'Esc', label: 'Cancel Edit' }]} />
+        <KeyboardShortcutsBar shortcuts={[{ key: 'F1', label: 'New' }, { key: 'F2', label: 'Vendor' }, { key: 'F3', label: 'Barcode' }, { key: 'F5', label: 'Save' }, { key: 'Ins', label: 'Add Row' }, { key: 'Enter', label: 'Next Field' }, { key: '↑↓←→', label: 'Navigate' }, { key: 'Esc', label: 'Cancel Edit' }]} />
 
         {/* Inline Multi-Account & Partial Payment Settlement */}
         <InlineMultiPaymentSection
