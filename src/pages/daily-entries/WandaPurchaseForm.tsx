@@ -16,7 +16,7 @@ import { inventoryService, type Item } from '../../services/inventoryService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 import { round } from '../../utils/numberUtils';
-import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+import { useGridKeyboard, selectInputOnFocus } from '../../hooks/useGridKeyboard';
 import { getItemSelectProps, type SelectableItemLike } from '../../utils/itemSelectOptions';
 import { PurchaseSalePriceModal } from '../../components/purchases/PurchaseSalePriceModal';
 import { useSettingsStore, PURCHASE_ALLOW_SALE_PRICE_UPDATE_KEY } from '../../stores/useSettingsStore';
@@ -60,7 +60,7 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
       onSelect={(val) => {
         setOpen(false);
         updateRow(record.key, 'itemId', val);
-        focusCell(rowIdx, 'qty');
+        queueMicrotask(() => focusCell(rowIdx, 'qty'));
       }}
       onChange={(val) => {
         updateRow(record.key, 'itemId', val);
@@ -93,7 +93,7 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
 
         if (e.key === 'Tab') {
           setOpen(false);
-          if (!record.itemId) {
+          if (!record.itemId && !e.shiftKey) {
             e.preventDefault();
             const cashPaidInput = document.querySelector('.purchase-cash-paid input') as HTMLInputElement;
             if (cashPaidInput) {
@@ -546,11 +546,7 @@ export const WandaPurchaseForm: React.FC = () => {
           ref={getCellRef(rowIdx, 'qty')}
           value={text}
           style={{ width: '100%' }}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           controls={false}
           keyboard={false}
           onChange={(val) => updateRow(record.key, 'qty', val)}
@@ -568,11 +564,7 @@ export const WandaPurchaseForm: React.FC = () => {
           ref={getCellRef(rowIdx, 'secQty')}
           value={text}
           style={{ width: '100%' }}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           controls={false}
           keyboard={false}
           onChange={(val) => updateRow(record.key, 'secQty', val)}
@@ -591,11 +583,7 @@ export const WandaPurchaseForm: React.FC = () => {
           ref={getCellRef(rowIdx, 'packQty')}
           value={text}
           style={{ width: '100%' }}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           controls={false}
           keyboard={false}
           onChange={(val) => updateRow(record.key, 'packQty', val)}
@@ -614,11 +602,7 @@ export const WandaPurchaseForm: React.FC = () => {
           ref={getCellRef(rowIdx, 'packing')}
           value={text}
           style={{ width: '100%' }}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           controls={false}
           keyboard={false}
           onChange={(val) => updateRow(record.key, 'packing', val)}
@@ -638,11 +622,7 @@ export const WandaPurchaseForm: React.FC = () => {
           tabIndex={-1}
           value={text}
           style={{ width: '100%' }}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           controls={false}
           keyboard={false}
           onChange={(val) => updateRow(record.key, 'rate', val)}
@@ -665,11 +645,7 @@ export const WandaPurchaseForm: React.FC = () => {
           tabIndex={-1}
           value={text}
           style={{ width: '100%' }}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           controls={false}
           keyboard={false}
           onChange={(val) => updateRow(record.key, 'secRate', val)}
@@ -691,11 +667,7 @@ export const WandaPurchaseForm: React.FC = () => {
           ref={getCellRef(rowIdx, 'addLess')}
           value={text}
           style={{ width: '100%' }}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           controls={false}
           keyboard={false}
           onChange={(val) => updateRow(record.key, 'addLess', val)}
@@ -716,11 +688,7 @@ export const WandaPurchaseForm: React.FC = () => {
             disabled={!record.itemId}
             tabIndex={-1}
             style={{ width: '100%' }}
-            onFocus={(e) => {
-              const input = e.target as HTMLInputElement;
-              input?.select?.();
-              setTimeout(() => input?.select?.(), 20);
-            }}
+            onFocus={selectInputOnFocus}
             onChange={(v) => updateRow(record.key, 'salePrice', v != null ? Number(v) : 0)}
             min={0}
             controls={false}
@@ -928,11 +896,7 @@ export const WandaPurchaseForm: React.FC = () => {
                   <InputNumber
                     className="purchase-cash-paid"
                     style={{ width: '100%' }}
-                    onFocus={(e) => {
-                      const input = e.target as HTMLInputElement;
-                      input?.select?.();
-                      setTimeout(() => input?.select?.(), 20);
-                    }}
+                    onFocus={selectInputOnFocus}
                     size="large"
                     min={0}
                     controls={false}

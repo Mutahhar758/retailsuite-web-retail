@@ -20,7 +20,7 @@ import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, MOBILE_SHOP_ENABL
 import { round } from '../../utils/numberUtils';
 import { getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
 import { BarcodeFastScanBar } from '../../components/common/BarcodeFastScanBar';
-import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+import { useGridKeyboard, selectInputOnFocus } from '../../hooks/useGridKeyboard';
 import { getItemSelectProps, type SelectableItemLike } from '../../utils/itemSelectOptions';
 import { InlineMultiPaymentSection, type PaymentEntry } from '../../components/InlineMultiPaymentSection';
 import { PurchaseSalePriceModal } from '../../components/purchases/PurchaseSalePriceModal';
@@ -64,7 +64,7 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
       onSelect={(val) => {
         setOpen(false);
         updateRow(record.key, 'itemId', val);
-        focusCell(rowIdx, 'qty');
+        queueMicrotask(() => focusCell(rowIdx, 'qty'));
       }}
       onChange={(val) => {
         updateRow(record.key, 'itemId', val);
@@ -97,7 +97,7 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
 
         if (e.key === 'Tab') {
           setOpen(false);
-          if (!record.itemId) {
+          if (!record.itemId && !e.shiftKey) {
             e.preventDefault();
             const cashPaidInput = document.querySelector('.payment-record-amount input') as HTMLInputElement;
             if (cashPaidInput) {
@@ -870,11 +870,7 @@ export const NormalPurchaseForm: React.FC = () => {
             ref={getCellRef(rowIdx, 'qty')}
             value={resolved.displayQty}
             style={{ width: '100%' }}
-            onFocus={(e) => {
-              const input = e.target as HTMLInputElement;
-              input?.select?.();
-              setTimeout(() => input?.select?.(), 20);
-            }}
+            onFocus={selectInputOnFocus}
             onChange={(val) => updateRow(record.key, 'qty', val)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'qty', e)}
             min={0}
@@ -910,11 +906,7 @@ export const NormalPurchaseForm: React.FC = () => {
           tabIndex={-1}
           value={text}
           style={{ width: '100%' }}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           onChange={(val) => updateRow(record.key, 'rate', val)}
           onKeyDown={(e) => handleCellKeyDown(rowIdx, 'rate', e)}
           min={0}
@@ -937,11 +929,7 @@ export const NormalPurchaseForm: React.FC = () => {
             ref={getCellRef(rowIdx, 'secQty')}
             value={text}
             style={{ width: '100%' }}
-            onFocus={(e) => {
-              const input = e.target as HTMLInputElement;
-              input?.select?.();
-              setTimeout(() => input?.select?.(), 20);
-            }}
+            onFocus={selectInputOnFocus}
             onChange={(val) => updateRow(record.key, 'secQty', val)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secQty', e)}
             controls={false}
@@ -959,11 +947,7 @@ export const NormalPurchaseForm: React.FC = () => {
             ref={getCellRef(rowIdx, 'secRate')}
             value={text}
             style={{ width: '100%' }}
-            onFocus={(e) => {
-              const input = e.target as HTMLInputElement;
-              input?.select?.();
-              setTimeout(() => input?.select?.(), 20);
-            }}
+            onFocus={selectInputOnFocus}
             tabIndex={-1}
             onChange={(val) => updateRow(record.key, 'secRate', val)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secRate', e)}
@@ -987,11 +971,7 @@ export const NormalPurchaseForm: React.FC = () => {
           ref={getCellRef(rowIdx, 'addLess')}
           value={text}
           style={{ width: '100%' }}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           tabIndex={-1}
           controls={false}
           keyboard={false}
@@ -1013,11 +993,7 @@ export const NormalPurchaseForm: React.FC = () => {
             disabled={!record.itemId}
             tabIndex={-1}
             style={{ width: '100%' }}
-            onFocus={(e) => {
-              const input = e.target as HTMLInputElement;
-              input?.select?.();
-              setTimeout(() => input?.select?.(), 20);
-            }}
+            onFocus={selectInputOnFocus}
             onChange={(v) => updateRow(record.key, 'salePrice', v != null ? Number(v) : 0)}
             min={0}
             controls={false}
@@ -1251,7 +1227,7 @@ export const NormalPurchaseForm: React.FC = () => {
               );
             }}
           />
-        <KeyboardShortcutsBar shortcuts={[{ key: 'F1', label: 'New' }, { key: 'F2', label: 'Vendor' }, { key: 'F3', label: 'Barcode' }, { key: 'F5', label: 'Save' }, { key: 'Ins', label: 'Add Row' }, { key: 'Enter', label: 'Next Field' }, { key: '↑↓←→', label: 'Navigate' }, { key: 'Esc', label: 'Cancel Edit' }]} />
+        <KeyboardShortcutsBar shortcuts={[{ key: 'F1', label: 'New' }, { key: 'F2', label: 'Vendor' }, { key: 'F3', label: 'Barcode' }, { key: 'F5', label: 'Save' }, { key: 'Ins', label: 'Add Row' }, { key: 'Enter', label: 'Next Field' }, { key: 'â†‘â†“â†â†’', label: 'Navigate' }, { key: 'Esc', label: 'Cancel Edit' }]} />
 
         {/* Inline Multi-Account & Partial Payment Settlement */}
         <InlineMultiPaymentSection

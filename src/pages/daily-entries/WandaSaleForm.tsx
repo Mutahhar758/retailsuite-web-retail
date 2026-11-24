@@ -28,7 +28,7 @@ import { useAppStore } from '../../stores/useAppStore';
 import { round } from '../../utils/numberUtils';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { CustomerPriceHistoryModal } from '../../components/sale/CustomerPriceHistoryModal';
-import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+import { useGridKeyboard, selectInputOnFocus } from '../../hooks/useGridKeyboard';
 import { SaleReceiptModal } from '../../components/SaleReceiptModal';
 import { getItemSelectProps } from '../../utils/itemSelectOptions';
 import {
@@ -1070,7 +1070,7 @@ export const WandaSaleForm: React.FC = () => {
           {...getItemSelectProps(items)}
           onKeyDown={(e) => {
             handleCellKeyDown(rowIdx, 'itemId', e);
-            if (e.key === 'Tab' && !record.itemId) {
+            if (e.key === 'Tab' && !e.shiftKey && !record.itemId) {
               e.preventDefault();
               const cashReceiptInput = document.querySelector('.pos-cash-receipt input') as HTMLInputElement;
               if (cashReceiptInput) {
@@ -1684,11 +1684,7 @@ export const WandaSaleForm: React.FC = () => {
                       precision={2}
                       formatter={value => (value !== undefined && value !== null) ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
                       parser={value => value?.replace(/\$\s?|(,*)/g, '') as any}
-                      onFocus={(e) => {
-                        const input = e.target as HTMLInputElement;
-                        input?.select?.();
-                        setTimeout(() => input?.select?.(), 20);
-                      }}
+                      onFocus={selectInputOnFocus}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();

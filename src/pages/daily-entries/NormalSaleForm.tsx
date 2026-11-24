@@ -33,7 +33,7 @@ import { round } from '../../utils/numberUtils';
 import { getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
 import { BarcodeFastScanBar } from '../../components/common/BarcodeFastScanBar';
 import { CustomerPriceHistoryModal } from '../../components/sale/CustomerPriceHistoryModal';
-import { useGridKeyboard, closeOpenSelectDropdowns } from '../../hooks/useGridKeyboard';
+import { useGridKeyboard, closeOpenSelectDropdowns, selectInputOnFocus } from '../../hooks/useGridKeyboard';
 import { getItemSelectProps, type SelectableItemLike } from '../../utils/itemSelectOptions';
 import { SaleReceiptModal } from '../../components/SaleReceiptModal';
 import { InlineMultiPaymentSection, type PaymentEntry } from '../../components/InlineMultiPaymentSection';
@@ -97,7 +97,7 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
       onSelect={(val) => {
         setOpen(false);
         updateLine(record.key, 'itemId', val);
-        focusCell(rowIdx, 'qty');
+        queueMicrotask(() => focusCell(rowIdx, 'qty'));
       }}
       onChange={(val) => {
         updateLine(record.key, 'itemId', val);
@@ -133,7 +133,7 @@ const ItemSelectCell: React.FC<ItemSelectCellProps> = ({
 
         if (e.key === 'Tab') {
           setOpen(false);
-          if (!record.itemId) {
+          if (!record.itemId && !e.shiftKey) {
             e.preventDefault();
             const cashReceiptInput = document.querySelector('.payment-record-amount input') as HTMLInputElement;
             if (cashReceiptInput) {
@@ -1548,11 +1548,7 @@ export const NormalSaleForm: React.FC = () => {
             min={0}
             controls={false}
             keyboard={false}
-            onFocus={(e) => {
-              const input = e.target as HTMLInputElement;
-              input?.select?.();
-              setTimeout(() => input?.select?.(), 20);
-            }}
+            onFocus={selectInputOnFocus}
             onChange={(v) => updateLine(record.key, 'qty', v)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'qty', e)}
             addonAfter={
@@ -1597,11 +1593,7 @@ export const NormalSaleForm: React.FC = () => {
             step={0.01}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             parser={value => value?.replace(/[^0-9.]/g, '') as any}
-            onFocus={(e) => {
-              const input = e.target as HTMLInputElement;
-              input?.select?.();
-              setTimeout(() => input?.select?.(), 20);
-            }}
+            onFocus={selectInputOnFocus}
             onChange={(v) => updateLine(record.key, 'rate', v)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'rate', e)}
             tabIndex={-1}
@@ -1637,11 +1629,7 @@ export const NormalSaleForm: React.FC = () => {
             min={0}
             controls={false}
             keyboard={false}
-            onFocus={(e) => {
-              const input = e.target as HTMLInputElement;
-              input?.select?.();
-              setTimeout(() => input?.select?.(), 20);
-            }}
+            onFocus={selectInputOnFocus}
             onChange={(v) => updateLine(record.key, 'secQty', v)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secQty', e)}
           />
@@ -1664,11 +1652,7 @@ export const NormalSaleForm: React.FC = () => {
             step={0.01}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             parser={value => value?.replace(/[^0-9.]/g, '') as any}
-            onFocus={(e) => {
-              const input = e.target as HTMLInputElement;
-              input?.select?.();
-              setTimeout(() => input?.select?.(), 20);
-            }}
+            onFocus={selectInputOnFocus}
             onChange={(v) => updateLine(record.key, 'secRate', v)}
             onKeyDown={(e) => handleCellKeyDown(rowIdx, 'secRate', e)}
             tabIndex={-1}
@@ -1689,11 +1673,7 @@ export const NormalSaleForm: React.FC = () => {
           min={0}
           controls={false}
           keyboard={false}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           onChange={(v) => updateLine(record.key, 'discount', v)}
           onKeyDown={(e) => handleCellKeyDown(rowIdx, 'discount', e)}
           tabIndex={-1}
@@ -1715,11 +1695,7 @@ export const NormalSaleForm: React.FC = () => {
             step={1}
             formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
             parser={value => value?.replace(/[^0-9.]/g, '') as any}
-            onFocus={(e) => {
-              const input = e.target as HTMLInputElement;
-              input?.select?.();
-              setTimeout(() => input?.select?.(), 20);
-            }}
+            onFocus={selectInputOnFocus}
             onChange={(v) => updateLine(record.key, 'carriage', v)}
             tabIndex={-1}
           />
@@ -1745,11 +1721,7 @@ export const NormalSaleForm: React.FC = () => {
           step={1}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           parser={value => value?.replace(/[^0-9.]/g, '') as any}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           onChange={(v) => updateLine(record.key, 'amount', v)}
           onKeyDown={(e) => {
             if (e.key === 'Tab' && !e.shiftKey) {

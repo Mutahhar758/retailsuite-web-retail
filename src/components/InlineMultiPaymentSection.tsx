@@ -480,11 +480,7 @@ export const InlineMultiPaymentSection: React.FC<InlineMultiPaymentSectionProps>
                         parser={v => Number(v?.replace(/,/g, '') || 0)}
                         style={{ width: 140, fontWeight: 'bold', fontSize: 14 }}
                         onChange={val => handleUpdateLine(record.key, { amount: Number(val) || 0 })}
-                        onFocus={e => {
-                          const input = e.target as HTMLInputElement;
-                          input?.select?.();
-                          setTimeout(() => input?.select?.(), 20);
-                        }}
+                        onFocus={e => (e.target as HTMLInputElement)?.select?.()}
                         onKeyDown={e => {
                           if (e.key === 'Enter') {
                             e.preventDefault();

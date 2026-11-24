@@ -14,7 +14,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { receiptService, type ReceiptLineRequest } from '../../services/receiptService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
-import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+import { useGridKeyboard, selectInputOnFocus } from '../../hooks/useGridKeyboard';
 
 const { Title, Text } = Typography;
 
@@ -95,42 +95,11 @@ const AccountSelectCell: React.FC<AccountSelectCellProps> = ({
   focusCell,
 }) => {
   const [open, setOpen] = useState(false);
-  const selectRef = useRef<any>(null);
-
-  const focusAmount = useCallback(() => {
-    setOpen(false);
-
-    try {
-      selectRef.current?.blur?.();
-      const searchInput = document.getElementById(`voucher-account-${rowIdx}`) as HTMLInputElement;
-      searchInput?.blur?.();
-    } catch {}
-
-    const doFocus = () => {
-      const amtInput = (document.getElementById(`voucher-amount-${rowIdx}`) ||
-        document.querySelector(`.grid-amount-row-${rowIdx} input, .grid-amount-row-${rowIdx}`)) as HTMLInputElement;
-      if (amtInput) {
-        amtInput.focus();
-        amtInput.select?.();
-      } else {
-        focusCell(rowIdx, 'amount');
-      }
-    };
-
-    doFocus();
-    requestAnimationFrame(doFocus);
-    setTimeout(doFocus, 30);
-    setTimeout(doFocus, 80);
-  }, [rowIdx, focusCell]);
 
   return (
     <Select
       id={`voucher-account-${rowIdx}`}
-      ref={(inst) => {
-        selectRef.current = inst;
-        const r = getCellRef(rowIdx, 'account');
-        if (r) (r as any).current = inst;
-      }}
+      ref={getCellRef(rowIdx, 'account')}
       className={`grid-select-account grid-select-row-${rowIdx}`}
       showSearch
       defaultActiveFirstOption
@@ -140,9 +109,10 @@ const AccountSelectCell: React.FC<AccountSelectCellProps> = ({
       placeholder="Select Account"
       value={value || undefined}
       onSelect={(val) => {
+        setOpen(false);
         updateRow(record.key, 'account', val);
         handleAccountChange(val);
-        setTimeout(focusAmount, 20);
+        queueMicrotask(() => focusCell(rowIdx, 'amount'));
       }}
       onChange={(val) => {
         if (val) {
@@ -154,20 +124,14 @@ const AccountSelectCell: React.FC<AccountSelectCellProps> = ({
         setOpen(false);
       }}
       {...getAccountSelectProps(accounts)}
-      onInputKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          // Do NOT preventDefault: let Ant Design select the active option from dropdown!
-          setTimeout(focusAmount, 40);
-        }
-      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
           if (!open) {
             e.preventDefault();
             e.stopPropagation();
-            focusAmount();
-            return;
+            focusCell(rowIdx, 'amount');
           }
+          return;
         }
 
         if (e.key === 'Tab') {
@@ -470,11 +434,7 @@ export const ReceiptVoucherForm: React.FC = () => {
           keyboard={false}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           parser={value => Number(value!.replace(/Rs\.?\s?|(,*)/g, ''))}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           onChange={(val) => updateRow(record.key, 'amount', val)}
           onKeyDown={(e) => handleCellKeyDown(rowIdx, 'amount', e)}
         />

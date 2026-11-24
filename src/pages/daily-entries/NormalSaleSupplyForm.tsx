@@ -22,7 +22,7 @@ import { narrationService, type NarrationDto } from '../../services/narrationSer
 import { inventoryService, type Item, type ItemCustomerCategoryPriceDto } from '../../services/inventoryService';
 import { supplyOrderService, type SupplyOrder } from '../../services/supplyOrderService';
 import { customerService } from '../../services/customerService';
-import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+import { useGridKeyboard, selectInputOnFocus } from '../../hooks/useGridKeyboard';
 import { getItemSelectProps } from '../../utils/itemSelectOptions';
 
 const { Title, Text } = Typography;
@@ -929,11 +929,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
           step={1}
           formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           parser={value => value?.replace(/[^0-9.]/g, '') as any}
-          onFocus={(e) => {
-            const input = e.target as HTMLInputElement;
-            input?.select?.();
-            setTimeout(() => input?.select?.(), 20);
-          }}
+          onFocus={selectInputOnFocus}
           onChange={(v) => updateLine(record.key, 'amount', v)}
           onKeyDown={(e) => {
             if (e.key === 'Tab' && !e.shiftKey) {

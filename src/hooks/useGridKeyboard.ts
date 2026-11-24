@@ -114,6 +114,15 @@ export function closeOpenSelectDropdowns(): void {
 }
 
 /**
+ * Selects the text of a focused input synchronously without deferred timers
+ * that could steal focus after the user tabs away.
+ */
+export function selectInputOnFocus(e: React.FocusEvent<HTMLElement>): void {
+  const input = e.target as HTMLInputElement | null;
+  input?.select?.();
+}
+
+/**
  * Returns true when the keyboard event originated from inside an open
  * Ant Design Select or DatePicker popup.
  */
@@ -212,13 +221,13 @@ export function useGridKeyboard<TColKey extends string = string>({
   }, []);
 
   const focusCell = useCallback((rowIdx: number, colKey: string) => {
-    const doFocus = () => {
+    const doFocus = (): HTMLElement | null => {
       // 0. Direct ID check (e.g. voucher-account-0, voucher-amount-0)
       const directIdInput = document.getElementById(`voucher-${colKey}-${rowIdx}`) as HTMLInputElement;
       if (directIdInput) {
         directIdInput.focus();
-        directIdInput.select?.();
-        return;
+        if (document.activeElement === directIdInput) directIdInput.select?.();
+        return directIdInput;
       }
 
       // 1. Direct DOM check for Select search input (e.g. itemId, customerId, account)
@@ -227,8 +236,8 @@ export function useGridKeyboard<TColKey extends string = string>({
       );
       if (selectSearchInput && (colKey === 'itemId' || colKey === 'customerId' || colKey === 'account')) {
         selectSearchInput.focus();
-        selectSearchInput.select?.();
-        return;
+        if (document.activeElement === selectSearchInput) selectSearchInput.select?.();
+        return selectSearchInput;
       }
 
       // 1b. Direct DOM check for Amount input
@@ -238,8 +247,8 @@ export function useGridKeyboard<TColKey extends string = string>({
         );
         if (amountInput) {
           amountInput.focus();
-          amountInput.select?.();
-          return;
+          if (document.activeElement === amountInput) amountInput.select?.();
+          return amountInput;
         }
       }
 
@@ -257,11 +266,20 @@ export function useGridKeyboard<TColKey extends string = string>({
         }
 
         // Auto-select text for fast replacement (so user doesn't need to backspace first)
+        const targetEl: HTMLElement | null =
+          ref.current.input instanceof HTMLElement
+            ? ref.current.input
+            : ref.current instanceof HTMLElement
+              ? ref.current
+              : (document.activeElement as HTMLElement | null);
+
         if (typeof ref.current.select === 'function') {
-          ref.current.select();
+          if (!targetEl || document.activeElement === targetEl) ref.current.select();
         } else if (ref.current.input && typeof ref.current.input.select === 'function') {
-          ref.current.input.select();
+          if (document.activeElement === ref.current.input) ref.current.input.select();
         }
+
+        if (targetEl) return targetEl;
       }
 
       // 3. Fallback table row search for input
@@ -271,25 +289,36 @@ export function useGridKeyboard<TColKey extends string = string>({
           const rowSearchInput = tableRows[rowIdx].querySelector<HTMLInputElement>(
             '.ant-select-selection-search-input, input'
           );
-          if (rowSearchInput && document.activeElement !== rowSearchInput) {
-            rowSearchInput.focus();
-            rowSearchInput.select?.();
-            return;
+          if (rowSearchInput) {
+            if (document.activeElement !== rowSearchInput) {
+              rowSearchInput.focus();
+            }
+            if (document.activeElement === rowSearchInput) rowSearchInput.select?.();
+            return rowSearchInput;
           }
         }
 
         const colInput = tableRows[rowIdx].querySelector<HTMLInputElement>(
           `.col-${colKey} input, [data-col="${colKey}"] input`
         );
-        if (colInput && document.activeElement !== colInput) {
-          colInput.focus();
-          colInput.select?.();
+        if (colInput) {
+          if (document.activeElement !== colInput) {
+            colInput.focus();
+          }
+          if (document.activeElement === colInput) colInput.select?.();
+          return colInput;
         }
       }
+
+      return null;
     };
 
-    doFocus();
-    requestAnimationFrame(doFocus);
+    const focusedEl = doFocus();
+    if (!focusedEl) {
+      requestAnimationFrame(() => {
+        doFocus();
+      });
+    }
   }, []);
 
   // When pendingFocusRef is set (after addRow), fire the focus
