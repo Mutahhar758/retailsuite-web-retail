@@ -1,5 +1,34 @@
 import api from './api';
 
+export type ExpenseCalculationType = 'LumpSum' | 'PerUnit' | 'PercentOfMaterial' | 0 | 1 | 2;
+
+export const normalizeCalculationType = (val?: ExpenseCalculationType | string | number): 'LumpSum' | 'PerUnit' | 'PercentOfMaterial' => {
+  if (val === 0 || val === '0' || String(val).toLowerCase() === 'lumpsum') return 'LumpSum';
+  if (val === 2 || val === '2' || String(val).toLowerCase() === 'percentofmaterial') return 'PercentOfMaterial';
+  return 'PerUnit';
+};
+
+export interface BomExpenseRequest {
+  seq: number;
+  title: string;
+  accountId?: string;
+  calculationType: 'LumpSum' | 'PerUnit' | 'PercentOfMaterial';
+  rate: number;
+  remarks?: string;
+}
+
+export interface BomExpenseResponse {
+  id: number;
+  seq: number;
+  title: string;
+  accountId?: string;
+  accountTitle?: string;
+  calculationType: ExpenseCalculationType;
+  rate: number;
+  estimatedAmount: number;
+  remarks?: string;
+}
+
 export interface BomLineResponse {
   id: number;
   seq: number;
@@ -31,10 +60,12 @@ export interface BomResponse {
   overheadCost: number;
   packagingCost: number;
   totalEstimatedMaterialCost: number;
+  totalEstimatedExpenseCost?: number;
   totalEstimatedCost: number;
   unitEstimatedCost: number;
   notes?: string;
   lines: BomLineResponse[];
+  expenses?: BomExpenseResponse[];
 }
 
 export interface BomLineRequest {
@@ -59,6 +90,7 @@ export interface BomCreateOrUpdateRequest {
   packagingCost: number;
   notes?: string;
   lines: BomLineRequest[];
+  expenses?: BomExpenseRequest[];
 }
 
 export interface BomListFilter {

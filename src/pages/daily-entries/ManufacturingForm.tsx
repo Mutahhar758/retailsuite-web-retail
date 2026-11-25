@@ -2,12 +2,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Card, Form, Input, InputNumber, Button, Space, Typography, 
   Select, DatePicker, Table, Row, Col, Divider, message, Popconfirm, 
-  Statistic, Tag, Alert 
+  Statistic, Tag, Alert, Switch 
 } from 'antd';
 import { 
   PlusOutlined, DeleteOutlined, ArrowLeftOutlined, 
   SettingOutlined, CheckCircleOutlined, ClockCircleOutlined, 
-  ThunderboltOutlined, SyncOutlined 
+  ThunderboltOutlined, SyncOutlined, DollarOutlined 
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -17,11 +17,13 @@ import {
   ProductionStatusEnum, 
   type ProductionStatus 
 } from '../../services/manufacturingService';
-import { bomService, type BomResponse } from '../../services/bomService';
+import { bomService, normalizeCalculationType, type BomResponse } from '../../services/bomService';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { getItemSelectProps } from '../../utils/itemSelectOptions';
 import { unitService, type UnitDto } from '../../services/unitService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
+import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
+import { COA_LEVELS, COA_ROOT_IDS } from '../../constants/chartOfAccountConstants';
 import { 
   getSelectablePrimaryUnits, 
   toBasePrimaryQty, 
@@ -52,6 +54,44 @@ interface ProductionLineRow {
   availableStock: number;
   isIssued: boolean;
 }
+
+interface ProductionExpenseRow {
+  key: string;
+  seq: number;
+  title: string;
+  accountId?: string;
+  calculationType: 'LumpSum' | 'PerUnit' | 'PercentOfMaterial';
+  rate: number;
+  plannedAmount: number;
+  actualAmount: number;
+  remarks?: string;
+  isManualOverride?: boolean;
+}
+
+const createEmptyExpenseRow = (seq: number): ProductionExpenseRow => ({
+  key: `pexp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  seq,
+  title: '',
+  accountId: undefined,
+  calculationType: 'PerUnit',
+  rate: 0,
+  plannedAmount: 0,
+  actualAmount: 0,
+  remarks: '',
+  isManualOverride: false
+});
+
+const calcProdExpenseAmount = (
+  calcType: 'LumpSum' | 'PerUnit' | 'PercentOfMaterial',
+  rate: number,
+  qty: number,
+  materialCost: number
+): number => {
+  const r = Number(rate || 0);
+  if (calcType === 'LumpSum') return Math.round(r * 100) / 100;
+  if (calcType === 'PercentOfMaterial') return Math.round((materialCost * (r / 100)) * 100) / 100;
+  return Math.round((r * (qty || 0)) * 100) / 100;
+};
 
 const createEmptyRow = (seq: number): ProductionLineRow => ({
   key: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -161,14 +201,16 @@ export const ManufacturingForm: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [units, setUnits] = useState<UnitDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
+  const [expenseAccounts, setExpenseAccounts] = useState<ChartOfAccountHeadDto[]>([]);
+  const [supplierAccounts, setSupplierAccounts] = useState<ChartOfAccountHeadDto[]>([]);
+  const [linkedPurchaseVoucherNo, setLinkedPurchaseVoucherNo] = useState<string | undefined>(undefined);
   const [availableBoms, setAvailableBoms] = useState<BomResponse[]>([]);
   const [lines, setLines] = useState<ProductionLineRow[]>(() => (isEdit ? [] : [createEmptyRow(1)]));
+  const [expenses, setExpenses] = useState<ProductionExpenseRow[]>([]);
   const [finishedItemId, setFinishedItemId] = useState<string>('');
 
   const pendingFocusRef = useRef<{ rowIdx: number; colKey: string } | null>(null);
   const laborCostRef = useRef<any>(null);
-  const overheadCostRef = useRef<any>(null);
-  const packagingCostRef = useRef<any>(null);
   const saveBtnRef = useRef<HTMLButtonElement>(null);
 
   // Overhead & Production values
@@ -179,6 +221,7 @@ export const ManufacturingForm: React.FC = () => {
   const [packagingCost, setPackagingCost] = useState<number>(0);
   const [currentStatus, setCurrentStatus] = useState<ProductionStatus>(ProductionStatusEnum.Completed);
   const watchedUnitId = Form.useWatch('unitId', form);
+  const createRawMaterialPurchase = Form.useWatch('createRawMaterialPurchase', form);
 
   const getUnitTitle = useCallback((code?: string, preferShort = true) => {
     if (!code) return '';
@@ -226,8 +269,11 @@ export const ManufacturingForm: React.FC = () => {
         laborCost: 0,
         overheadCost: 0,
         packagingCost: 0,
+        createRawMaterialPurchase: false,
+        purchaseScope: 'ShortageOnly',
         status: ProductionStatusEnum.Completed
       });
+      setLinkedPurchaseVoucherNo(undefined);
       return;
     }
 
@@ -243,11 +289,14 @@ export const ManufacturingForm: React.FC = () => {
         unitId: data.unitId,
         batchNo: data.batchNo,
         expiryDate: data.expiryDate ? dayjs(data.expiryDate) : undefined,
-        laborCost: data.totalOverheadCost ? (data.totalOverheadCost / 3) : 0, // split placeholder
+        laborCost: 0,
         overheadCost: 0,
         packagingCost: 0,
         narration: data.narrationId,
         remarks: data.remarks,
+        createRawMaterialPurchase: Boolean(data.createRawMaterialPurchase),
+        purchaseSupplierAccountId: data.purchaseSupplierAccountId,
+        purchaseScope: data.purchaseScope || 'ShortageOnly',
         status: data.status,
         currentStage: data.currentStage
       });
@@ -256,6 +305,39 @@ export const ManufacturingForm: React.FC = () => {
       setTargetQty(data.targetQty);
       setProducedQty(data.producedQty);
       setCurrentStatus(data.status);
+      setLinkedPurchaseVoucherNo(data.linkedPurchaseVoucherNo);
+
+      if (data.expenses && data.expenses.length > 0) {
+        setExpenses(
+          data.expenses.map((e, idx) => ({
+            key: `pexp-${e.id || idx}`,
+            seq: e.seq,
+            title: e.title,
+            accountId: e.accountId,
+            calculationType: normalizeCalculationType(e.calculationType),
+            rate: e.rate || 0,
+            plannedAmount: e.plannedAmount || 0,
+            actualAmount: e.actualAmount || 0,
+            remarks: e.remarks || '',
+            isManualOverride: true
+          }))
+        );
+      } else if (data.totalOverheadCost > 0) {
+        setExpenses([
+          {
+            key: 'pexp-legacy-1',
+            seq: 1,
+            title: 'Manufacturing Overheads',
+            calculationType: 'LumpSum',
+            rate: data.totalOverheadCost,
+            plannedAmount: data.totalOverheadCost,
+            actualAmount: data.totalOverheadCost,
+            isManualOverride: true
+          }
+        ]);
+      } else {
+        setExpenses([]);
+      }
 
       // Load BOMs for this item
       if (data.finishedItemId) {
@@ -308,16 +390,24 @@ export const ManufacturingForm: React.FC = () => {
   useEffect(() => {
     const loadLookups = async () => {
       try {
-        const [itemList, unitList, narrationList] = await Promise.all([
+        const [itemList, unitList, narrationList, expAccList, supAccList, cbAccList] = await Promise.all([
           inventoryService.getItemsLookup(),
           unitService.getActiveUnits(),
-          narrationService.getActiveNarrations()
+          narrationService.getActiveNarrations(),
+          chartOfAccountService.getLookup(COA_ROOT_IDS.EXPENSES, COA_LEVELS.DETAIL).catch(() => []),
+          chartOfAccountService.getSupplierAccounts().catch(() => []),
+          chartOfAccountService.getCashBankAccounts().catch(() => [])
         ]);
         const validItems = itemList || [];
         const validUnits = unitList || [];
         setItems(validItems);
         setUnits(validUnits);
         setNarrations(narrationList || []);
+        setExpenseAccounts(expAccList || []);
+        const mergedSuppliers = [...(supAccList || []), ...(cbAccList || [])].filter(
+          (acc, idx, arr) => arr.findIndex(a => a.account === acc.account) === idx
+        );
+        setSupplierAccounts(mergedSuppliers);
         fetchVoucher(validItems, validUnits);
       } catch (err) {
         message.error('Failed to load item and unit lookups');
@@ -370,6 +460,60 @@ export const ManufacturingForm: React.FC = () => {
         overheadCost: estimate.estimatedOverheadCost || 0,
         packagingCost: estimate.estimatedPackagingCost || 0
       });
+
+      if (estimate.expenses && estimate.expenses.length > 0) {
+        setExpenses(
+          estimate.expenses.map((e, idx) => ({
+            key: `est-exp-${e.id || idx}-${Date.now()}`,
+            seq: e.seq,
+            title: e.title,
+            accountId: e.accountId,
+            calculationType: normalizeCalculationType(e.calculationType),
+            rate: e.rate || 0,
+            plannedAmount: e.plannedAmount || 0,
+            actualAmount: e.actualAmount || 0,
+            remarks: e.remarks || '',
+            isManualOverride: false
+          }))
+        );
+      } else {
+        const legacyRows: ProductionExpenseRow[] = [];
+        let s = 1;
+        if (estimate.estimatedLaborCost > 0) {
+          legacyRows.push({
+            key: `est-leg-1-${Date.now()}`,
+            seq: s++,
+            title: 'Direct Labor',
+            calculationType: 'LumpSum',
+            rate: estimate.estimatedLaborCost,
+            plannedAmount: estimate.estimatedLaborCost,
+            actualAmount: estimate.estimatedLaborCost
+          });
+        }
+        if (estimate.estimatedOverheadCost > 0) {
+          legacyRows.push({
+            key: `est-leg-2-${Date.now()}`,
+            seq: s++,
+            title: 'Utilities & Overhead',
+            calculationType: 'LumpSum',
+            rate: estimate.estimatedOverheadCost,
+            plannedAmount: estimate.estimatedOverheadCost,
+            actualAmount: estimate.estimatedOverheadCost
+          });
+        }
+        if (estimate.estimatedPackagingCost > 0) {
+          legacyRows.push({
+            key: `est-leg-3-${Date.now()}`,
+            seq: s++,
+            title: 'Packaging',
+            calculationType: 'LumpSum',
+            rate: estimate.estimatedPackagingCost,
+            plannedAmount: estimate.estimatedPackagingCost,
+            actualAmount: estimate.estimatedPackagingCost
+          });
+        }
+        setExpenses(legacyRows);
+      }
 
       const newRows: ProductionLineRow[] = estimate.lines.map((l, index) => {
         const item = items.find(i => i.id === l.rawItemId);
@@ -620,9 +764,62 @@ export const ManufacturingForm: React.FC = () => {
     });
   };
 
+  const handleAddExpenseRow = () => {
+    setExpenses(prev => {
+      const nextSeq = prev.length > 0 ? Math.max(...prev.map(e => e.seq)) + 1 : 1;
+      return [...prev, createEmptyExpenseRow(nextSeq)];
+    });
+  };
+
+  const handleExpenseChange = (key: string, field: keyof ProductionExpenseRow, val: any) => {
+    setExpenses(prev => prev.map(row => {
+      if (row.key !== key) return row;
+      const updated: ProductionExpenseRow = { ...row, [field]: val };
+      if (field === 'accountId' && val && !row.title?.trim()) {
+        const acc = expenseAccounts.find(a => a.account === val);
+        if (acc?.title) {
+          updated.title = acc.title;
+        }
+      }
+      if (field === 'calculationType' || field === 'rate') {
+        const calc = calcProdExpenseAmount(updated.calculationType, updated.rate, producedQty, totalMaterialCost);
+        updated.actualAmount = calc;
+        updated.plannedAmount = calc;
+        updated.isManualOverride = false;
+      } else if (field === 'actualAmount') {
+        updated.isManualOverride = true;
+      }
+      return updated;
+    }));
+  };
+
+  const handleRemoveExpenseRow = (key: string) => {
+    setExpenses(prev => prev.filter(r => r.key !== key));
+  };
+
   // Total Calculations
   const totalMaterialCost = lines.reduce((sum, r) => sum + (r.totalCost || 0), 0);
-  const totalOverheadCost = (laborCost || 0) + (overheadCost || 0) + (packagingCost || 0);
+
+  // Recalculate non-overridden PerUnit / PercentOfMaterial expenses when producedQty or totalMaterialCost changes
+  useEffect(() => {
+    setExpenses(prev => {
+      let changed = false;
+      const next = prev.map(row => {
+        if (row.isManualOverride || row.calculationType === 'LumpSum') return row;
+        const recalculated = calcProdExpenseAmount(row.calculationType, row.rate, producedQty, totalMaterialCost);
+        if (Math.abs((row.actualAmount || 0) - recalculated) > 0.001) {
+          changed = true;
+          return { ...row, actualAmount: recalculated };
+        }
+        return row;
+      });
+      return changed ? next : prev;
+    });
+  }, [producedQty, totalMaterialCost]);
+
+  const totalOverheadCost = expenses.length > 0
+    ? expenses.reduce((sum, e) => sum + Number(e.actualAmount || 0), 0)
+    : ((laborCost || 0) + (overheadCost || 0) + (packagingCost || 0));
   const grandTotalCost = totalMaterialCost + totalOverheadCost;
   const unitProductionCost = producedQty > 0 ? grandTotalCost / producedQty : 0;
   const hasShortage = lines.some(r => Boolean(r.rawItemId) && r.availableStock < r.actualQty);
@@ -642,6 +839,8 @@ export const ManufacturingForm: React.FC = () => {
         return;
       }
 
+      const filledExpenses = expenses.filter(e => Boolean(e.title?.trim()) || Boolean(e.accountId));
+
       const payload: ProductionCreateOrUpdateRequest = {
         date: values.date.format('YYYY-MM-DD'),
         bomMasterId: values.bomMasterId,
@@ -651,11 +850,14 @@ export const ManufacturingForm: React.FC = () => {
         unitId: values.unitId,
         batchNo: values.batchNo,
         expiryDate: values.expiryDate ? values.expiryDate.format('YYYY-MM-DD') : undefined,
-        laborCost: values.laborCost || 0,
-        overheadCost: values.overheadCost || 0,
-        packagingCost: values.packagingCost || 0,
+        laborCost: 0,
+        overheadCost: 0,
+        packagingCost: 0,
         narration: values.narration,
         remarks: values.remarks,
+        createRawMaterialPurchase: Boolean(values.createRawMaterialPurchase),
+        purchaseSupplierAccountId: values.createRawMaterialPurchase ? values.purchaseSupplierAccountId : undefined,
+        purchaseScope: values.createRawMaterialPurchase ? (values.purchaseScope || 'ShortageOnly') : undefined,
         status: status,
         currentStage: status === ProductionStatusEnum.InProgress ? 'Material Issued' : status === ProductionStatusEnum.Completed ? 'Completed' : 'Planned',
         lines: filledLines.map((r, i) => ({
@@ -667,6 +869,16 @@ export const ManufacturingForm: React.FC = () => {
           unitCost: r.unitCost,
           totalCost: r.totalCost,
           isIssued: status === ProductionStatusEnum.InProgress || status === ProductionStatusEnum.Completed
+        })),
+        expenses: filledExpenses.map((e, i) => ({
+          seq: i + 1,
+          title: e.title?.trim() || expenseAccounts.find(a => a.account === e.accountId)?.title || 'Expense',
+          accountId: e.accountId,
+          calculationType: e.calculationType,
+          rate: Number(e.rate || 0),
+          plannedAmount: Number(e.plannedAmount || 0),
+          actualAmount: Number(e.actualAmount || 0),
+          remarks: e.remarks
         }))
       };
 
@@ -1114,6 +1326,60 @@ export const ManufacturingForm: React.FC = () => {
                   </Form.Item>
                 </Col>
               </Row>
+
+              <Divider style={{ margin: '8px 0 12px' }} />
+
+              <Row gutter={16} align="middle">
+                <Col xs={24} md={8}>
+                  <Form.Item
+                    label="Auto-Create Purchase (Raw Materials Only)"
+                    name="createRawMaterialPurchase"
+                    valuePropName="checked"
+                    style={{ marginBottom: 0 }}
+                  >
+                    <Switch checkedChildren="Yes" unCheckedChildren="No" />
+                  </Form.Item>
+                  {linkedPurchaseVoucherNo && (
+                    <div style={{ marginTop: 4 }}>
+                      <Tag color="green">Linked Purchase: PU-{linkedPurchaseVoucherNo}</Tag>
+                    </div>
+                  )}
+                </Col>
+                {createRawMaterialPurchase && (
+                  <>
+                    <Col xs={24} md={9}>
+                      <Form.Item
+                        label="Supplier / Cash Account"
+                        name="purchaseSupplierAccountId"
+                        rules={[{ required: true, message: 'Select supplier or cash account for raw material purchase' }]}
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Select
+                          showSearch
+                          placeholder="Select Supplier / Cash Account"
+                          optionFilterProp="label"
+                          options={supplierAccounts.map(a => ({
+                            value: a.account,
+                            label: `${a.account} - ${a.title}`
+                          }))}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={7}>
+                      <Form.Item
+                        label="Purchase Scope"
+                        name="purchaseScope"
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Select>
+                          <Option value="ShortageOnly">Shortage Qty Only</Option>
+                          <Option value="AllMaterials">All Consumed Raw Materials</Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                  </>
+                )}
+              </Row>
             </Card>
 
             {/* Consumed Raw Materials Table */}
@@ -1155,6 +1421,130 @@ export const ManufacturingForm: React.FC = () => {
                 locale={{ emptyText: 'No materials added. Select a finished product and recipe above.' }}
               />
             </Card>
+
+            {/* Manufacturing Expenses & Overheads Table */}
+            <Card
+              title={
+                <Space>
+                  <DollarOutlined />
+                  <span>Manufacturing Expenses & Overheads (Per Account)</span>
+                </Space>
+              }
+              extra={
+                <Button type="dashed" icon={<PlusOutlined />} onClick={handleAddExpenseRow}>
+                  Add Expense
+                </Button>
+              }
+              loading={loading}
+              style={{ marginTop: 16 }}
+            >
+              <Table
+                dataSource={expenses}
+                rowKey="key"
+                pagination={false}
+                bordered
+                size="small"
+                scroll={{ x: 860 }}
+                locale={{ emptyText: 'No manufacturing expenses added. Expenses from the selected BOM appear here, or click "Add Expense".' }}
+                columns={[
+                  {
+                    title: '#',
+                    key: 'seq',
+                    width: 45,
+                    render: (_: any, __: any, index: number) => index + 1
+                  },
+                  {
+                    title: 'Expense Account',
+                    key: 'accountId',
+                    width: 230,
+                    render: (_: any, record: ProductionExpenseRow) => (
+                      <Select
+                        showSearch
+                        allowClear
+                        placeholder="Select Expense Account"
+                        value={record.accountId || undefined}
+                        onChange={(val) => handleExpenseChange(record.key, 'accountId', val)}
+                        optionFilterProp="label"
+                        options={expenseAccounts.map(a => ({
+                          value: a.account,
+                          label: `${a.account} - ${a.title}`
+                        }))}
+                        style={{ width: '100%' }}
+                      />
+                    )
+                  },
+                  {
+                    title: 'Description',
+                    key: 'title',
+                    width: 170,
+                    render: (_: any, record: ProductionExpenseRow) => (
+                      <Input
+                        placeholder="e.g. Packing, Labor"
+                        value={record.title}
+                        onChange={(e) => handleExpenseChange(record.key, 'title', e.target.value)}
+                      />
+                    )
+                  },
+                  {
+                    title: 'Basis',
+                    key: 'calculationType',
+                    width: 145,
+                    render: (_: any, record: ProductionExpenseRow) => (
+                      <Select
+                        value={record.calculationType}
+                        onChange={(val) => handleExpenseChange(record.key, 'calculationType', val)}
+                        style={{ width: '100%' }}
+                      >
+                        <Option value="PerUnit">Per Unit (Qty)</Option>
+                        <Option value="LumpSum">Lump Sum (Batch)</Option>
+                        <Option value="PercentOfMaterial">% of Material</Option>
+                      </Select>
+                    )
+                  },
+                  {
+                    title: 'Rate / Value',
+                    key: 'rate',
+                    width: 115,
+                    render: (_: any, record: ProductionExpenseRow) => (
+                      <InputNumber
+                        min={0}
+                        step={1}
+                        controls={false}
+                        value={record.rate}
+                        onChange={(val) => handleExpenseChange(record.key, 'rate', val || 0)}
+                        prefix={record.calculationType === 'PercentOfMaterial' ? undefined : 'Rs.'}
+                        suffix={record.calculationType === 'PercentOfMaterial' ? '%' : undefined}
+                        style={{ width: '100%' }}
+                      />
+                    )
+                  },
+                  {
+                    title: 'Actual Amount',
+                    key: 'actualAmount',
+                    width: 130,
+                    render: (_: any, record: ProductionExpenseRow) => (
+                      <InputNumber
+                        min={0}
+                        step={10}
+                        controls={false}
+                        value={record.actualAmount}
+                        onChange={(val) => handleExpenseChange(record.key, 'actualAmount', val || 0)}
+                        prefix="Rs."
+                        style={{ width: '100%', fontWeight: 600 }}
+                      />
+                    )
+                  },
+                  {
+                    title: '',
+                    key: 'action',
+                    width: 45,
+                    render: (_: any, record: ProductionExpenseRow) => (
+                      <Button type="text" danger icon={<DeleteOutlined />} onClick={() => handleRemoveExpenseRow(record.key)} />
+                    )
+                  }
+                ]}
+              />
+            </Card>
           </Col>
 
           {/* Overheads & Unit Cost Side Panel */}
@@ -1164,64 +1554,28 @@ export const ManufacturingForm: React.FC = () => {
               loading={loading}
               style={{ position: 'sticky', top: 20 }}
             >
-              <Form.Item label="Direct Labor Allocated" name="laborCost" className="mfg-summary-labor">
-                <InputNumber
-                  ref={laborCostRef}
-                  min={0}
-                  step={10}
-                  controls={false}
-                  style={{ width: '100%' }}
-                  onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      overheadCostRef.current?.focus();
-                      overheadCostRef.current?.select?.();
-                    }
-                  }}
-                  onChange={(v) => setLaborCost(v || 0)}
-                  prefix="Rs."
-                />
-              </Form.Item>
-
-              <Form.Item label="Machine & Utility Overheads" name="overheadCost">
-                <InputNumber
-                  ref={overheadCostRef}
-                  min={0}
-                  step={10}
-                  controls={false}
-                  style={{ width: '100%' }}
-                  onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      packagingCostRef.current?.focus();
-                      packagingCostRef.current?.select?.();
-                    }
-                  }}
-                  onChange={(v) => setOverheadCost(v || 0)}
-                  prefix="Rs."
-                />
-              </Form.Item>
-
-              <Form.Item label="Packaging & Consumables" name="packagingCost">
-                <InputNumber
-                  ref={packagingCostRef}
-                  min={0}
-                  step={10}
-                  controls={false}
-                  style={{ width: '100%' }}
-                  onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      saveBtnRef.current?.focus();
-                    }
-                  }}
-                  onChange={(v) => setPackagingCost(v || 0)}
-                  prefix="Rs."
-                />
-              </Form.Item>
+              {expenses.length > 0 ? (
+                <div style={{ marginBottom: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                    Allocated Expenses ({expenses.length})
+                  </Text>
+                  {expenses.map(exp => (
+                    <div key={exp.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, fontSize: 13 }}>
+                      <Space size={4} style={{ maxWidth: '66%', overflow: 'hidden' }}>
+                        <Text ellipsis>{exp.title || 'Unnamed'}</Text>
+                        <Tag color={exp.calculationType === 'LumpSum' ? 'purple' : exp.calculationType === 'PercentOfMaterial' ? 'cyan' : 'blue'} style={{ fontSize: 10, margin: 0 }}>
+                          {exp.calculationType === 'LumpSum' ? 'Lump' : exp.calculationType === 'PercentOfMaterial' ? `${exp.rate}%` : `${exp.rate}/u`}
+                        </Tag>
+                      </Space>
+                      <Text strong>Rs. {Number(exp.actualAmount || 0).toFixed(2)}</Text>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 12 }}>
+                  Each expense line posts to its own GL Account when production is completed.
+                </Text>
+              )}
 
               <Divider style={{ margin: '16px 0' }} />
 

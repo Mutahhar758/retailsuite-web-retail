@@ -1,4 +1,29 @@
 import api from './api';
+import type { ExpenseCalculationType } from './bomService';
+
+export interface ProductionExpenseRequest {
+  seq: number;
+  title: string;
+  accountId?: string;
+  calculationType: 'LumpSum' | 'PerUnit' | 'PercentOfMaterial';
+  rate: number;
+  plannedAmount: number;
+  actualAmount: number;
+  remarks?: string;
+}
+
+export interface ProductionExpenseResponse {
+  id: number;
+  seq: number;
+  title: string;
+  accountId?: string;
+  accountTitle?: string;
+  calculationType: ExpenseCalculationType;
+  rate: number;
+  plannedAmount: number;
+  actualAmount: number;
+  remarks?: string;
+}
 
 export type ProductionStatus = 'Planned' | 'InProgress' | 'Completed' | 'Cancelled' | 0 | 1 | 2 | 3 | string;
 
@@ -81,11 +106,16 @@ export interface ProductionResponse {
   currentStage?: string;
   issuedDate?: string;
   completedDate?: string;
+  createRawMaterialPurchase?: boolean;
+  purchaseSupplierAccountId?: string;
+  purchaseScope?: 'ShortageOnly' | 'AllMaterials' | string;
+  linkedPurchaseVoucherNo?: string;
   createdBy?: string;
   createdOn: string;
   lastModifiedBy?: string;
   lastModifiedOn?: string;
   lines: ProductionLineResponse[];
+  expenses?: ProductionExpenseResponse[];
 }
 
 export interface ProductionLineRequest {
@@ -116,7 +146,11 @@ export interface ProductionCreateOrUpdateRequest {
   remarks?: string;
   status: ProductionStatus;
   currentStage?: string;
+  createRawMaterialPurchase?: boolean;
+  purchaseSupplierAccountId?: string;
+  purchaseScope?: 'ShortageOnly' | 'AllMaterials' | string;
   lines: ProductionLineRequest[];
+  expenses?: ProductionExpenseRequest[];
 }
 
 export interface ProductionEstimateRequest {
@@ -146,9 +180,11 @@ export interface ProductionEstimateResponse {
   estimatedLaborCost: number;
   estimatedOverheadCost: number;
   estimatedPackagingCost: number;
+  estimatedExpenseCost?: number;
   estimatedTotalCost: number;
   estimatedUnitCost: number;
   lines: ProductionEstimateLine[];
+  expenses?: ProductionExpenseResponse[];
 }
 
 export interface ProductionListFilter {

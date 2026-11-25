@@ -232,6 +232,55 @@ export const ManufacturingReport: React.FC = () => {
                   pagination={{ pageSize: 20 }}
                   bordered
                   size="middle"
+                  expandable={{
+                    rowExpandable: (record) => Boolean(record.expenses && record.expenses.length > 0),
+                    expandedRowRender: (record) => (
+                      <Table
+                        size="small"
+                        pagination={false}
+                        bordered
+                        rowKey={(e) => `${record.id}-${e.seq}-${e.id}`}
+                        dataSource={record.expenses || []}
+                        columns={[
+                          { title: '#', dataIndex: 'seq', key: 'seq', width: 50 },
+                          { title: 'Expense', dataIndex: 'title', key: 'title' },
+                          {
+                            title: 'GL Account',
+                            key: 'accountTitle',
+                            render: (_: any, e: any) => e.accountTitle ? `${e.accountId} - ${e.accountTitle}` : (e.accountId || 'Default Absorption')
+                          },
+                          {
+                            title: 'Basis',
+                            dataIndex: 'calculationType',
+                            key: 'calculationType',
+                            width: 130,
+                            render: (v: any) => {
+                              const s = String(v);
+                              if (s === '0' || s.toLowerCase() === 'lumpsum') return <Tag color="purple">Lump Sum</Tag>;
+                              if (s === '2' || s.toLowerCase() === 'percentofmaterial') return <Tag color="cyan">% of Material</Tag>;
+                              return <Tag color="blue">Per Unit</Tag>;
+                            }
+                          },
+                          {
+                            title: 'Rate',
+                            dataIndex: 'rate',
+                            key: 'rate',
+                            align: 'right' as const,
+                            width: 100,
+                            render: (v: number) => (v || 0).toFixed(2)
+                          },
+                          {
+                            title: 'Actual Amount',
+                            dataIndex: 'actualAmount',
+                            key: 'actualAmount',
+                            align: 'right' as const,
+                            width: 130,
+                            render: (v: number) => <Text strong>{(v || 0).toFixed(2)}</Text>
+                          }
+                        ]}
+                      />
+                    )
+                  }}
                 />
               )
             }

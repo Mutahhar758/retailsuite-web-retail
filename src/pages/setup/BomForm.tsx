@@ -5,13 +5,15 @@ import {
 } from 'antd';
 import { 
   PlusOutlined, DeleteOutlined, ArrowLeftOutlined, SaveOutlined, 
-  ExperimentOutlined, CalculatorOutlined 
+  ExperimentOutlined, CalculatorOutlined, DollarOutlined 
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
-import { bomService, type BomCreateOrUpdateRequest } from '../../services/bomService';
+import { bomService, normalizeCalculationType, type BomCreateOrUpdateRequest } from '../../services/bomService';
 import { inventoryService, type Item } from '../../services/inventoryService';
 import { getItemSelectProps } from '../../utils/itemSelectOptions';
 import { unitService, type UnitDto } from '../../services/unitService';
+import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
+import { COA_LEVELS, COA_ROOT_IDS } from '../../constants/chartOfAccountConstants';
 import { 
   getSelectablePrimaryUnits, 
   toBasePrimaryQty, 
@@ -41,6 +43,33 @@ interface IngredientRow {
   rate: number;
   totalCost: number;
 }
+
+interface BomExpenseRow {
+  key: string;
+  seq: number;
+  title: string;
+  accountId?: string;
+  calculationType: 'LumpSum' | 'PerUnit' | 'PercentOfMaterial';
+  rate: number;
+  remarks?: string;
+}
+
+const createEmptyExpenseRow = (seq: number): BomExpenseRow => ({
+  key: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  seq,
+  title: '',
+  accountId: undefined,
+  calculationType: 'PerUnit',
+  rate: 0,
+  remarks: ''
+});
+
+const calcBomExpenseAmount = (exp: BomExpenseRow, outputQty: number, totalMaterialCost: number): number => {
+  const rate = Number(exp.rate || 0);
+  if (exp.calculationType === 'LumpSum') return Math.round(rate * 100) / 100;
+  if (exp.calculationType === 'PercentOfMaterial') return Math.round((totalMaterialCost * (rate / 100)) * 100) / 100;
+  return Math.round((rate * (outputQty || 0)) * 100) / 100;
+};
 
 const createEmptyRow = (seq: number): IngredientRow => ({
   key: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -148,14 +177,14 @@ export const BomForm: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [units, setUnits] = useState<UnitDto[]>([]);
+  const [expenseAccounts, setExpenseAccounts] = useState<ChartOfAccountHeadDto[]>([]);
   const [ingredients, setIngredients] = useState<IngredientRow[]>(() => (isEdit ? [] : [createEmptyRow(1)]));
+  const [expenses, setExpenses] = useState<BomExpenseRow[]>([]);
   const [finishedItemId, setFinishedItemId] = useState<string>('');
 
   // Refs for keyboard navigation and summary card focus
   const pendingFocusRef = useRef<{ rowIdx: number; colKey: string } | null>(null);
   const laborCostRef = useRef<any>(null);
-  const overheadCostRef = useRef<any>(null);
-  const packagingCostRef = useRef<any>(null);
   const saveBtnRef = useRef<HTMLButtonElement>(null);
 
   // Overhead values from form state
@@ -238,6 +267,28 @@ export const BomForm: React.FC = () => {
       setOverheadCost(bom.overheadCost || 0);
       setPackagingCost(bom.packagingCost || 0);
 
+      if (bom.expenses && bom.expenses.length > 0) {
+        setExpenses(
+          bom.expenses.map((e, idx) => ({
+            key: `exp-${e.id || idx}`,
+            seq: e.seq,
+            title: e.title,
+            accountId: e.accountId,
+            calculationType: normalizeCalculationType(e.calculationType),
+            rate: e.rate || 0,
+            remarks: e.remarks || ''
+          }))
+        );
+      } else {
+        // Legacy fallback for old BOMs that only had labor/overhead/packaging numbers
+        const legacyRows: BomExpenseRow[] = [];
+        let s = 1;
+        if (bom.laborCost > 0) legacyRows.push({ key: `exp-leg-1`, seq: s++, title: 'Direct Labor', calculationType: 'LumpSum', rate: bom.laborCost });
+        if (bom.overheadCost > 0) legacyRows.push({ key: `exp-leg-2`, seq: s++, title: 'Utilities & Overhead', calculationType: 'LumpSum', rate: bom.overheadCost });
+        if (bom.packagingCost > 0) legacyRows.push({ key: `exp-leg-3`, seq: s++, title: 'Packaging', calculationType: 'LumpSum', rate: bom.packagingCost });
+        setExpenses(legacyRows);
+      }
+
       const rows: IngredientRow[] = bom.lines.map((l, index) => {
         const item = currentItems.find(i => i.id === l.rawItemId);
         const pSize = Number(item?.qtyInPack || 0);
@@ -277,18 +328,20 @@ export const BomForm: React.FC = () => {
     }
   }, [id, isEdit, form]);
 
-  // Load items and units
+  // Load items, units, and all expense accounts
   useEffect(() => {
     const loadLookups = async () => {
       try {
-        const [itemList, unitList] = await Promise.all([
+        const [itemList, unitList, expAccList] = await Promise.all([
           inventoryService.getItemsLookup(),
-          unitService.getActiveUnits()
+          unitService.getActiveUnits(),
+          chartOfAccountService.getLookup(COA_ROOT_IDS.EXPENSES, COA_LEVELS.DETAIL).catch(() => [])
         ]);
         const validItems = itemList || [];
         const validUnits = unitList || [];
         setItems(validItems);
         setUnits(validUnits);
+        setExpenseAccounts(expAccList || []);
         fetchBom(validItems, validUnits);
       } catch (err) {
         message.error('Failed to load item lookup');
@@ -501,9 +554,36 @@ export const BomForm: React.FC = () => {
     });
   };
 
+  const handleAddExpenseRow = () => {
+    setExpenses(prev => {
+      const nextSeq = prev.length > 0 ? Math.max(...prev.map(e => e.seq)) + 1 : 1;
+      return [...prev, createEmptyExpenseRow(nextSeq)];
+    });
+  };
+
+  const handleExpenseChange = (key: string, field: keyof BomExpenseRow, val: any) => {
+    setExpenses(prev => prev.map(row => {
+      if (row.key !== key) return row;
+      const updated = { ...row, [field]: val };
+      if (field === 'accountId' && val && !row.title?.trim()) {
+        const acc = expenseAccounts.find(a => a.account === val);
+        if (acc?.title) {
+          updated.title = acc.title;
+        }
+      }
+      return updated;
+    }));
+  };
+
+  const handleRemoveExpenseRow = (key: string) => {
+    setExpenses(prev => prev.filter(r => r.key !== key));
+  };
+
   // Calculations
   const totalMaterialCost = ingredients.reduce((sum, r) => sum + (r.totalCost || 0), 0);
-  const totalOverheadCost = (laborCost || 0) + (overheadCost || 0) + (packagingCost || 0);
+  const totalOverheadCost = expenses.length > 0
+    ? expenses.reduce((sum, e) => sum + calcBomExpenseAmount(e, outputQty, totalMaterialCost), 0)
+    : ((laborCost || 0) + (overheadCost || 0) + (packagingCost || 0));
   const grandTotalCost = totalMaterialCost + totalOverheadCost;
   const unitProductionCost = outputQty > 0 ? grandTotalCost / outputQty : 0;
 
@@ -520,6 +600,8 @@ export const BomForm: React.FC = () => {
       return;
     }
 
+    const filledExpenses = expenses.filter(e => Boolean(e.title?.trim()) || Boolean(e.accountId));
+
     const payload: BomCreateOrUpdateRequest = {
       code: values.code,
       title: values.title,
@@ -528,9 +610,9 @@ export const BomForm: React.FC = () => {
       unitId: values.unitId,
       isActive: values.isActive ?? true,
       isDefault: values.isDefault ?? true,
-      laborCost: values.laborCost || 0,
-      overheadCost: values.overheadCost || 0,
-      packagingCost: values.packagingCost || 0,
+      laborCost: 0,
+      overheadCost: 0,
+      packagingCost: 0,
       notes: values.notes,
       lines: filledIngredients.map((r, i) => ({
         seq: i + 1,
@@ -539,6 +621,14 @@ export const BomForm: React.FC = () => {
         unitId: r.unitId,
         scrapPercentage: r.scrapPercentage || 0,
         isOptional: r.isOptional || false
+      })),
+      expenses: filledExpenses.map((e, i) => ({
+        seq: i + 1,
+        title: e.title?.trim() || expenseAccounts.find(a => a.account === e.accountId)?.title || 'Expense',
+        accountId: e.accountId,
+        calculationType: e.calculationType,
+        rate: Number(e.rate || 0),
+        remarks: e.remarks
       }))
     };
 
@@ -956,6 +1046,123 @@ export const BomForm: React.FC = () => {
                 locale={{ emptyText: 'No ingredients added yet. Click "Add Ingredient" above.' }}
               />
             </Card>
+
+            {/* Manufacturing Expenses & Overheads Table */}
+            <Card
+              title={
+                <Space>
+                  <DollarOutlined />
+                  <span>Manufacturing Expenses & Overheads (Per Account)</span>
+                </Space>
+              }
+              extra={
+                <Button type="dashed" icon={<PlusOutlined />} onClick={handleAddExpenseRow}>
+                  Add Expense
+                </Button>
+              }
+              loading={loading}
+              style={{ marginTop: 16 }}
+            >
+              <Table
+                dataSource={expenses}
+                rowKey="key"
+                pagination={false}
+                bordered
+                size="small"
+                scroll={{ x: 820 }}
+                locale={{ emptyText: 'No manufacturing expenses added. Click "Add Expense" to add Packing, Labor, Utilities, etc.' }}
+                columns={[
+                  {
+                    title: '#',
+                    key: 'seq',
+                    width: 45,
+                    render: (_: any, __: any, index: number) => index + 1
+                  },
+                  {
+                    title: 'Expense Account',
+                    key: 'accountId',
+                    width: 240,
+                    render: (_: any, record: BomExpenseRow) => (
+                      <Select
+                        showSearch
+                        allowClear
+                        placeholder="Select Expense Account"
+                        value={record.accountId || undefined}
+                        onChange={(val) => handleExpenseChange(record.key, 'accountId', val)}
+                        optionFilterProp="label"
+                        options={expenseAccounts.map(a => ({
+                          value: a.account,
+                          label: `${a.account} - ${a.title}`
+                        }))}
+                        style={{ width: '100%' }}
+                      />
+                    )
+                  },
+                  {
+                    title: 'Expense Description',
+                    key: 'title',
+                    width: 180,
+                    render: (_: any, record: BomExpenseRow) => (
+                      <Input
+                        placeholder="e.g. Packing, Labor"
+                        value={record.title}
+                        onChange={(e) => handleExpenseChange(record.key, 'title', e.target.value)}
+                      />
+                    )
+                  },
+                  {
+                    title: 'Calculation Basis',
+                    key: 'calculationType',
+                    width: 150,
+                    render: (_: any, record: BomExpenseRow) => (
+                      <Select
+                        value={record.calculationType}
+                        onChange={(val) => handleExpenseChange(record.key, 'calculationType', val)}
+                        style={{ width: '100%' }}
+                      >
+                        <Option value="PerUnit">Per Unit (Qty)</Option>
+                        <Option value="LumpSum">Lump Sum (Batch)</Option>
+                        <Option value="PercentOfMaterial">% of Material</Option>
+                      </Select>
+                    )
+                  },
+                  {
+                    title: 'Rate / Value',
+                    key: 'rate',
+                    width: 120,
+                    render: (_: any, record: BomExpenseRow) => (
+                      <InputNumber
+                        min={0}
+                        step={1}
+                        controls={false}
+                        value={record.rate}
+                        onChange={(val) => handleExpenseChange(record.key, 'rate', val || 0)}
+                        prefix={record.calculationType === 'PercentOfMaterial' ? undefined : 'Rs.'}
+                        suffix={record.calculationType === 'PercentOfMaterial' ? '%' : undefined}
+                        style={{ width: '100%' }}
+                      />
+                    )
+                  },
+                  {
+                    title: 'Est. Amount',
+                    key: 'estimatedAmount',
+                    width: 115,
+                    align: 'right' as const,
+                    render: (_: any, record: BomExpenseRow) => (
+                      <Text strong>{calcBomExpenseAmount(record, outputQty, totalMaterialCost).toFixed(2)}</Text>
+                    )
+                  },
+                  {
+                    title: '',
+                    key: 'action',
+                    width: 45,
+                    render: (_: any, record: BomExpenseRow) => (
+                      <Button type="text" danger icon={<DeleteOutlined />} onClick={() => handleRemoveExpenseRow(record.key)} />
+                    )
+                  }
+                ]}
+              />
+            </Card>
           </Col>
 
           {/* Costing & Overheads Side Card */}
@@ -970,64 +1177,31 @@ export const BomForm: React.FC = () => {
               loading={loading}
               style={{ position: 'sticky', top: 20 }}
             >
-              <Form.Item label="Labor Cost per Batch" name="laborCost" className="bom-summary-labor">
-                <InputNumber
-                  ref={laborCostRef}
-                  min={0}
-                  step={10}
-                  controls={false}
-                  style={{ width: '100%' }}
-                  onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      overheadCostRef.current?.focus();
-                      overheadCostRef.current?.select?.();
-                    }
-                  }}
-                  onChange={(v) => setLaborCost(v || 0)}
-                  prefix="Rs."
-                />
-              </Form.Item>
-
-              <Form.Item label="Utilities & Overhead per Batch" name="overheadCost">
-                <InputNumber
-                  ref={overheadCostRef}
-                  min={0}
-                  step={10}
-                  controls={false}
-                  style={{ width: '100%' }}
-                  onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      packagingCostRef.current?.focus();
-                      packagingCostRef.current?.select?.();
-                    }
-                  }}
-                  onChange={(v) => setOverheadCost(v || 0)}
-                  prefix="Rs."
-                />
-              </Form.Item>
-
-              <Form.Item label="Packaging Cost per Batch" name="packagingCost">
-                <InputNumber
-                  ref={packagingCostRef}
-                  min={0}
-                  step={10}
-                  controls={false}
-                  style={{ width: '100%' }}
-                  onFocus={(e) => (e.target as HTMLInputElement)?.select?.()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      saveBtnRef.current?.focus();
-                    }
-                  }}
-                  onChange={(v) => setPackagingCost(v || 0)}
-                  prefix="Rs."
-                />
-              </Form.Item>
+              {expenses.length > 0 ? (
+                <div style={{ marginBottom: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                    Configured Expenses ({expenses.length})
+                  </Text>
+                  {expenses.map(exp => {
+                    const amt = calcBomExpenseAmount(exp, outputQty, totalMaterialCost);
+                    return (
+                      <div key={exp.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, fontSize: 13 }}>
+                        <Space size={4} style={{ maxWidth: '68%', overflow: 'hidden' }}>
+                          <Text ellipsis>{exp.title || 'Unnamed'}</Text>
+                          <Tag color={exp.calculationType === 'LumpSum' ? 'purple' : exp.calculationType === 'PercentOfMaterial' ? 'cyan' : 'blue'} style={{ fontSize: 10, margin: 0 }}>
+                            {exp.calculationType === 'LumpSum' ? 'Lump' : exp.calculationType === 'PercentOfMaterial' ? `${exp.rate}%` : `${exp.rate}/u`}
+                          </Tag>
+                        </Space>
+                        <Text strong>Rs. {amt.toFixed(2)}</Text>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 12 }}>
+                  Add Packing, Labor, or Utility expenses in the table below ingredients to allocate costs to separate GL accounts.
+                </Text>
+              )}
 
               <Divider style={{ margin: '14px 0' }} />
 
