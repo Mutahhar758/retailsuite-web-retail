@@ -23,6 +23,7 @@ export const JournalVoucherForm: React.FC = () => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const isSavingRef = useRef(false);
   const [detailAccounts, setDetailAccounts] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
   const [voucherLines, setVoucherLines] = useState<any[]>([]);
@@ -176,6 +177,8 @@ export const JournalVoucherForm: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
     try {
       const values = await form.validateFields();
       const validLines = voucherLines.filter(l => l.drAccount && l.crAccount && l.amount > 0);
@@ -211,6 +214,7 @@ export const JournalVoucherForm: React.FC = () => {
     } catch (error: any) {
       message.error(error.response?.data?.message || 'Failed to save voucher');
     } finally {
+      isSavingRef.current = false;
       setLoading(false);
     }
   };
@@ -369,6 +373,7 @@ export const JournalVoucherForm: React.FC = () => {
               icon={<SaveOutlined />} 
               data-action="save" className="form-save-btn" onClick={handleSave} 
               loading={loading}
+              disabled={loading}
               style={{ backgroundColor: '#16a34a', borderColor: '#16a34a' }}
             >
               Save Voucher (F5)

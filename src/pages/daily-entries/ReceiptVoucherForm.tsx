@@ -126,6 +126,11 @@ const AccountSelectCell: React.FC<AccountSelectCellProps> = ({
       {...getAccountSelectProps(accounts)}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
+          if (e.repeat) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
           if (!open) {
             e.preventDefault();
             e.stopPropagation();
@@ -152,6 +157,7 @@ export const ReceiptVoucherForm: React.FC = () => {
   const draftData = (location.state as any)?.draftData;
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const isSavingRef = useRef(false);
   const [detailAccounts, setDetailAccounts] = useState<ChartOfAccountHeadDto[]>([]);
   const [cashBankAccounts, setCashBankAccounts] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
@@ -313,6 +319,8 @@ export const ReceiptVoucherForm: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
     try {
       const values = await form.validateFields();
       const validLines = voucherLines.filter(l => l.account && l.amount > 0);
@@ -351,6 +359,7 @@ export const ReceiptVoucherForm: React.FC = () => {
     } catch (error: any) {
       message.error(error.response?.data?.message || 'Failed to save voucher');
     } finally {
+      isSavingRef.current = false;
       setLoading(false);
     }
   };
@@ -516,6 +525,7 @@ export const ReceiptVoucherForm: React.FC = () => {
               icon={<SaveOutlined />} 
               data-action="save" className="form-save-btn" onClick={handleSave} 
               loading={loading}
+              disabled={loading}
               style={{ backgroundColor: '#2563eb', borderColor: '#2563eb' }}
             >
               Save Voucher (F5)

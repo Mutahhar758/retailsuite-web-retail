@@ -339,6 +339,11 @@ export function useGridKeyboard<TColKey extends string = string>({
 
       // Enter: smart forward navigation
       if (key === 'Enter') {
+        if (e.repeat) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         if (isDropdownOpen(e)) return;
         const cols = enterColsRef.current;
         const colIdx = cols.indexOf(colKey);

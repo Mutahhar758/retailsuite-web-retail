@@ -37,6 +37,7 @@ export const NormalPurchaseReturnForm: React.FC = () => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const isSavingRef = useRef(false);
   const [items, setItems] = useState<Item[]>([]);
   const [vendors, setVendors] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
@@ -361,6 +362,8 @@ export const NormalPurchaseReturnForm: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
     try {
       const values = await form.validateFields();
       const validLines = purchaseLines.filter(l => l.itemId && l.qty > 0);
@@ -408,6 +411,7 @@ export const NormalPurchaseReturnForm: React.FC = () => {
     } catch {
       message.error('Failed to save purchase return');
     } finally {
+      isSavingRef.current = false;
       setLoading(false);
     }
   };

@@ -38,6 +38,7 @@ export const NormalSaleReturnForm: React.FC = () => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const isSavingRef = useRef(false);
   
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
@@ -291,6 +292,8 @@ export const NormalSaleReturnForm: React.FC = () => {
   const totalAmount = saleLines.reduce((sum, l) => sum + (l.amount || 0), 0);
 
   const handleSave = async () => {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
     try {
       const values = await form.validateFields();
       const validLines = saleLines.filter(l => l.itemId && l.qty > 0);
@@ -340,6 +343,7 @@ export const NormalSaleReturnForm: React.FC = () => {
     } catch {
       message.error('Failed to save sale return');
     } finally {
+      isSavingRef.current = false;
       setLoading(false);
     }
   };

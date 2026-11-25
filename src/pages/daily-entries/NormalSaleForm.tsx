@@ -172,6 +172,7 @@ export const NormalSaleForm: React.FC = () => {
   const customerSelectRef = useRef<any>(null);
   const narrationSelectRef = useRef<any>(null);
   const [loading, setLoading] = useState(false);
+  const isSavingRef = useRef(false);
   const { isOnline } = useNetworkStatus();
 
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
@@ -1256,6 +1257,7 @@ export const NormalSaleForm: React.FC = () => {
   }, [totalAmount, isEdit, loading, activeTabId]);
 
   const handleSave = async (options: { shouldPrint?: boolean; saveMode?: PrintAction } = {}) => {
+    if (isSavingRef.current) return;
     const saveMode: PrintAction =
       options.saveMode ??
       (options.shouldPrint === true
@@ -1270,6 +1272,7 @@ export const NormalSaleForm: React.FC = () => {
       return;
     }
 
+    isSavingRef.current = true;
     try {
       const values = await form.validateFields();
       const validLines = saleLines.filter(l => l.itemId && l.qty > 0);
@@ -1376,6 +1379,7 @@ export const NormalSaleForm: React.FC = () => {
         message.error('Failed to save sale');
       }
     } finally {
+      isSavingRef.current = false;
       setLoading(false);
     }
   };

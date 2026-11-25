@@ -107,6 +107,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
   const location = useLocation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const isSavingRef = useRef(false);
 
   const [customers, setCustomers] = useState<ChartOfAccountHeadDto[]>([]);
   const [narrations, setNarrations] = useState<NarrationDto[]>([]);
@@ -662,6 +663,8 @@ export const NormalSaleSupplyForm: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
     try {
       const values = await form.validateFields();
       const validLines = supplyLines.filter(l =>
@@ -714,6 +717,7 @@ export const NormalSaleSupplyForm: React.FC = () => {
     } catch {
       message.error('Failed to save sale supply');
     } finally {
+      isSavingRef.current = false;
       setLoading(false);
     }
   };
