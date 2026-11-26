@@ -8,6 +8,7 @@ export interface ChartOfAccountHeadDto {
   parentCustomerAccountId?: string | null;
   parentCustomerTitle?: string | null;
   isSubAccount?: boolean;
+  sortIndex?: number | null;
 }
 
 export interface ChartOfAccountDto {

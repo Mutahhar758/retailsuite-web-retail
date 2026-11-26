@@ -93,6 +93,7 @@ export const CustomerForm: React.FC = () => {
             smsAlert: customer.smsAlert,
             emailAlert: customer.emailAlert,
             active: customer.active,
+            sortIndex: customer.sortIndex ?? null,
             mediaId: customer.mediaId,
             customerCategoryId: customer.customerCategoryId || undefined,
           });
@@ -200,6 +201,7 @@ export const CustomerForm: React.FC = () => {
           smsAlert: !!values.smsAlert,
           emailAlert: !!values.emailAlert,
           active: values.active !== undefined ? values.active : true,
+          sortIndex: values.sortIndex ?? null,
           mediaId: values.mediaId || null,
           customerCategoryId: values.customerCategoryId || null,
           parentCustomerAccountId: isSubAccount ? (values.parentCustomerAccountId || null) : null,
@@ -223,6 +225,7 @@ export const CustomerForm: React.FC = () => {
           smsAlert: !!values.smsAlert,
           emailAlert: !!values.emailAlert,
           active: values.active !== undefined ? values.active : true,
+          sortIndex: values.sortIndex ?? null,
           mediaId: values.mediaId || null,
           customerCategoryId: values.customerCategoryId || null,
           parentCustomerAccountId: isSubAccount ? (values.parentCustomerAccountId || null) : null,
@@ -533,7 +536,7 @@ export const CustomerForm: React.FC = () => {
           <Col xs={24} md={18}>
             <Title level={5} className="mb-4">Identity & Contact Info</Title>
             <Row gutter={16}>
-              <Col xs={24} md={12}>
+              <Col xs={24} md={10}>
                 <Form.Item
                   name="title"
                   label="Customer Name / Organization"
@@ -542,7 +545,7 @@ export const CustomerForm: React.FC = () => {
                   <Input placeholder="e.g. John Doe / Apex Enterprises" />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={6}>
+              <Col xs={24} md={5}>
                 <Form.Item
                   name="customerCategoryId"
                   label="Customer Category"
@@ -559,12 +562,21 @@ export const CustomerForm: React.FC = () => {
                   </Select>
                 </Form.Item>
               </Col>
-              <Col xs={24} md={6}>
+              <Col xs={24} md={5}>
                 <Form.Item
                   name="cnic"
                   label="National ID / Registration"
                 >
                   <Input placeholder="e.g. 42101-1234567-1" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={4}>
+                <Form.Item
+                  name="sortIndex"
+                  label="Index"
+                  tooltip="Optional sort order. Lower numbers appear first; decimals like 2.5 let you insert between existing items."
+                >
+                  <InputNumber style={{ width: '100%' }} placeholder="e.g. 1, 2, 2.5" step={1} />
                 </Form.Item>
               </Col>
             </Row>

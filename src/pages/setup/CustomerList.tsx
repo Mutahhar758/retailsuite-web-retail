@@ -82,6 +82,20 @@ export const CustomerList: React.FC = () => {
 
   const columns = [
     {
+      title: 'Index',
+      dataIndex: 'sortIndex',
+      key: 'sortIndex',
+      width: '85px',
+      align: 'center' as const,
+      sorter: (a: CustomerResponse, b: CustomerResponse) => {
+        if (a.sortIndex == null && b.sortIndex == null) return 0;
+        if (a.sortIndex == null) return 1;
+        if (b.sortIndex == null) return -1;
+        return a.sortIndex - b.sortIndex;
+      },
+      render: (val?: number | null) => val != null ? <Tag color="geekblue">{val}</Tag> : <Text type="secondary">-</Text>,
+    },
+    {
       title: 'Customer Name',
       key: 'title',
       sorter: (a: CustomerResponse, b: CustomerResponse) => a.title.localeCompare(b.title),

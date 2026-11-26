@@ -82,6 +82,20 @@ export const VendorList: React.FC = () => {
 
   const columns = [
     {
+      title: 'Index',
+      dataIndex: 'sortIndex',
+      key: 'sortIndex',
+      width: '85px',
+      align: 'center' as const,
+      sorter: (a: VendorResponse, b: VendorResponse) => {
+        if (a.sortIndex == null && b.sortIndex == null) return 0;
+        if (a.sortIndex == null) return 1;
+        if (b.sortIndex == null) return -1;
+        return a.sortIndex - b.sortIndex;
+      },
+      render: (val?: number | null) => val != null ? <Tag color="geekblue">{val}</Tag> : <Text type="secondary">-</Text>,
+    },
+    {
       title: 'Vendor Name',
       key: 'title',
       sorter: (a: VendorResponse, b: VendorResponse) => a.title.localeCompare(b.title),

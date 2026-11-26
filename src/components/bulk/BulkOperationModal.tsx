@@ -38,6 +38,7 @@ export interface BulkOperationModalProps {
 export const mapProductToBulkRow = (p: any) => ({
   _key: `prod-${p.id}`,
   id: p.id,
+  sortIndex: p.sortIndex ?? null,
   itemType: p.itemType || 'Product',
   barcode: p.barcode || '',
   itemCategoryCode: p.itemCategoryCode || '',
@@ -115,10 +116,10 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           title: 'Customers',
           idField: 'account',
           idLabel: 'Account Code',
-          sampleHeaders: ['A/C No.', 'Customer', 'Contact', 'Mobile', 'Phone', 'Balance', 'Category', 'Address', 'Email', 'Active'],
+          sampleHeaders: ['A/C No.', 'Index', 'Customer', 'Contact', 'Mobile', 'Phone', 'Balance', 'Category', 'Address', 'Email', 'Active'],
           sampleData: [
-            ['1200', 'FOOD JUNCTION MAFAT', '', '03001234567', '', '0.00', 'Wholesale', 'Main Market', 'customer@example.com', 'true'],
-            ['1119', 'Yawar', '', '03217654321', '', '0.00', 'Retail', 'Lahore', '', 'true']
+            ['1200', '1', 'FOOD JUNCTION MAFAT', '', '03001234567', '', '0.00', 'Wholesale', 'Main Market', 'customer@example.com', 'true'],
+            ['1119', '2', 'Yawar', '', '03217654321', '', '0.00', 'Retail', 'Lahore', '', 'true']
           ]
         };
       case 'vendors':
@@ -126,10 +127,10 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           title: 'Vendors / Suppliers',
           idField: 'account',
           idLabel: 'Account Code',
-          sampleHeaders: ['A/C No.', 'Vendor', 'Contact', 'Mobile', 'Phone', 'Balance', 'Address', 'Email', 'ShowInSales', 'Active'],
+          sampleHeaders: ['A/C No.', 'Index', 'Vendor', 'Contact', 'Mobile', 'Phone', 'Balance', 'Address', 'Email', 'ShowInSales', 'Active'],
           sampleData: [
-            ['2001', 'Global Traders', '', '03007654321', '', '0.00', 'Industrial Estate', 'supplier@global.com', 'false', 'true'],
-            ['2010', 'Prime Distributors', '', '03211122334', '', '15000', 'Railway Road', 'info@prime.com', 'false', 'true']
+            ['2001', '1', 'Global Traders', '', '03007654321', '', '0.00', 'Industrial Estate', 'supplier@global.com', 'false', 'true'],
+            ['2010', '2', 'Prime Distributors', '', '03211122334', '', '15000', 'Railway Road', 'info@prime.com', 'false', 'true']
           ]
         };
       case 'products': {
@@ -139,17 +140,17 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           idField: 'id',
           idLabel: 'Item ID',
           sampleHeaders: [
-            'Id', 'Type', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId',
+            'Id', 'Index', 'Type', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId',
             'PrimaryUnit', 'SecondaryUnit', 'QtyInPack', 'PriRate',
             'SecRate',
             ...activeCcList.map(c => `Rate_${c.code}`),
             'OpnStock', 'OpnRate'
           ],
           sampleData: [
-            ['', 'Product', '', '01', 'Cooking Oil 1L', '', 'PCS', '', '1', '450', '450', ...activeCcList.map(() => '420'), '50', '380'],
-            ['', 'Product', '', '01', 'Basmati Rice 5kg', '', 'KG', '', '1', '1200', '1200', ...activeCcList.map(() => '1150'), '100', '1050'],
-            ['', 'Service', '', '02', 'General Service / Labor', '', '', '', '1', '500', '0', ...activeCcList.map(() => '0'), '0', '0'],
-            ['000001', 'Product', '1000001', '01', 'Sugar 1kg Pack', '', 'KG', '', '1', '150', '150', ...activeCcList.map(() => '140'), '0', '0']
+            ['', '1', 'Product', '', '01', 'Cooking Oil 1L', '', 'PCS', '', '1', '450', '450', ...activeCcList.map(() => '420'), '50', '380'],
+            ['', '2', 'Product', '', '01', 'Basmati Rice 5kg', '', 'KG', '', '1', '1200', '1200', ...activeCcList.map(() => '1150'), '100', '1050'],
+            ['', '3', 'Service', '', '02', 'General Service / Labor', '', '', '', '1', '500', '0', ...activeCcList.map(() => '0'), '0', '0'],
+            ['000001', '4', 'Product', '1000001', '01', 'Sugar 1kg Pack', '', 'KG', '', '1', '150', '150', ...activeCcList.map(() => '140'), '0', '0']
           ]
         };
       }
@@ -260,6 +261,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
         newRows = list.map(c => ({
           _key: `cust-${c.account}`,
           account: c.account,
+          sortIndex: c.sortIndex ?? null,
           title: c.title,
           phone1: c.phone1 || '',
           phone2: c.phone2 || '',
@@ -276,6 +278,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
         newRows = list.map(v => ({
           _key: `vend-${v.account}`,
           account: v.account,
+          sortIndex: v.sortIndex ?? null,
           title: v.title,
           phone1: v.phone1 || '',
           phone2: v.phone2 || '',
@@ -519,16 +522,16 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
 
       if (entityType === 'customers') {
         const list = await customerService.getCustomers();
-        headers = ['Account', 'Customer', 'Phone1', 'Phone2', 'Email', 'CNIC', 'Address', 'Category', 'Balance', 'Active'];
+        headers = ['Account', 'Index', 'Customer', 'Phone1', 'Phone2', 'Email', 'CNIC', 'Address', 'Category', 'Balance', 'Active'];
         dataRows = list.map(c => [
-          c.account, c.title, c.phone1 || '', c.phone2 || '', c.email || '',
+          c.account, c.sortIndex ?? '', c.title, c.phone1 || '', c.phone2 || '', c.email || '',
           c.cnic || '', c.address || '', c.customerCategoryTitle || c.customerCategoryId || '', '0.00', c.active ? 'true' : 'false'
         ]);
       } else if (entityType === 'vendors') {
         const list = await vendorService.getVendors();
-        headers = ['Account', 'Vendor', 'Phone1', 'Phone2', 'Email', 'CNIC', 'Address', 'Balance', 'ShowInSales', 'Active'];
+        headers = ['Account', 'Index', 'Vendor', 'Phone1', 'Phone2', 'Email', 'CNIC', 'Address', 'Balance', 'ShowInSales', 'Active'];
         dataRows = list.map(v => [
-          v.account, v.title, v.phone1 || '', v.phone2 || '', v.email || '',
+          v.account, v.sortIndex ?? '', v.title, v.phone1 || '', v.phone2 || '', v.email || '',
           v.cnic || '', v.address || '', '0.00', v.showInSales ? 'true' : 'false', v.active ? 'true' : 'false'
         ]);
       } else if (entityType === 'products') {
@@ -546,13 +549,13 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
 
         const catHeaders = activeCcList.map(c => `Rate_${c.code}`);
         headers = [
-          'Id', 'Type', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId',
+          'Id', 'Index', 'Type', 'Barcode', 'ItemCategoryCode', 'Title', 'BrandId',
           'PrimaryUnit', 'SecondaryUnit', 'QtyInPack', 'PriRate', 'SecRate',
           ...catHeaders,
           'OpnStock', 'OpnRate'
         ];
         dataRows = list.map(p => [
-          p.id, p.itemType || 'Product', p.barcode || '', p.itemCategoryCode || '', p.title, p.brandId || '',
+          p.id, p.sortIndex ?? '', p.itemType || 'Product', p.barcode || '', p.itemCategoryCode || '', p.title, p.brandId || '',
           p.primaryUnit || '', p.secondaryUnit || '', p.qtyInPack ?? 1, p.priRate, p.secRate,
           ...activeCcList.map(c => getPriceForProductCategory(priceMap, p.id, c.code, c.title, Number(p.priRate) || 0)),
           p.itemType === 'Service' ? 0 : (p.opnStock ?? 0), p.itemType === 'Service' ? 0 : (p.opnRate ?? 0)
@@ -778,6 +781,9 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           rowObj.active = val.toLowerCase() !== 'false' && val !== '0';
         } else if (h === 'showinsales') {
           rowObj.showInSales = val.toLowerCase() === 'true' || val === '1';
+        } else if (h === 'index' || h === 'sortindex' || h === 'sortorder' || h === 'order') {
+          const parsed = parseFloat(val);
+          rowObj.sortIndex = !isNaN(parsed) ? parsed : null;
         } else {
           for (const cc of customerCategoriesRef.current) {
             const codeNorm = cc.code.toLowerCase().replace(/[\s_-]/g, '');
@@ -930,6 +936,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           address: r.address || undefined,
           qualification: r.qualification || undefined,
           active: r.active ?? true,
+          sortIndex: r.sortIndex != null && r.sortIndex !== '' && !isNaN(Number(r.sortIndex)) ? Number(r.sortIndex) : null,
           customerCategoryId: r.customerCategoryId?.trim() || undefined,
           openingBalance: r.openingBalance != null && !isNaN(Number(r.openingBalance)) ? Number(r.openingBalance) : undefined
         }));
@@ -946,6 +953,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
           qualification: r.qualification || undefined,
           active: r.active ?? true,
           showInSales: r.showInSales ?? false,
+          sortIndex: r.sortIndex != null && r.sortIndex !== '' && !isNaN(Number(r.sortIndex)) ? Number(r.sortIndex) : null,
           openingBalance: r.openingBalance != null && !isNaN(Number(r.openingBalance)) ? Number(r.openingBalance) : undefined
         }));
         result = await vendorService.bulkUpsert({ vendors: payload });
@@ -975,6 +983,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
             secRate: isService ? 0 : (r.secRate ? Number(r.secRate) : 0),
             opnStock: isService ? 0 : (r.opnStock ? Number(r.opnStock) : 0),
             opnRate: isService ? 0 : (r.opnRate ? Number(r.opnRate) : 0),
+            sortIndex: r.sortIndex != null && r.sortIndex !== '' && !isNaN(Number(r.sortIndex)) ? Number(r.sortIndex) : null,
             customerCategoryPrices: customerCategoryPrices.length > 0 ? customerCategoryPrices : undefined
           };
         });
@@ -1081,6 +1090,22 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
               size="small"
               style={{ fontFamily: 'monospace' }}
               onChange={e => handleCellChange(record._key, 'account', e.target.value)}
+            />
+          )
+        },
+        {
+          title: 'Index',
+          dataIndex: 'sortIndex',
+          key: 'sortIndex',
+          width: 90,
+          render: (val: number | null | undefined, record: any) => (
+            <InputNumber
+              value={val ?? undefined}
+              placeholder="-"
+              size="small"
+              step={1}
+              style={{ width: '100%' }}
+              onChange={v => handleCellChange(record._key, 'sortIndex', v ?? null)}
             />
           )
         },
@@ -1293,6 +1318,22 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
               size="small"
               style={{ fontFamily: 'monospace' }}
               onChange={e => handleCellChange(record._key, 'id', e.target.value)}
+            />
+          )
+        },
+        {
+          title: 'Index',
+          dataIndex: 'sortIndex',
+          key: 'sortIndex',
+          width: 90,
+          render: (val: number | null | undefined, record: any) => (
+            <InputNumber
+              value={val ?? undefined}
+              placeholder="-"
+              size="small"
+              step={1}
+              style={{ width: '100%' }}
+              onChange={v => handleCellChange(record._key, 'sortIndex', v ?? null)}
             />
           )
         },

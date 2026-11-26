@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Card, Button, Space, Typography, Form, Input, Row, Col, Checkbox, 
+  Card, Button, Space, Typography, Form, Input, InputNumber, Row, Col, Checkbox, 
   message, Divider, Avatar, Tag, Upload
 } from 'antd';
 import { 
@@ -51,6 +51,7 @@ export const VendorForm: React.FC = () => {
             emailAlert: vendor.emailAlert,
             active: vendor.active,
             showInSales: vendor.showInSales,
+            sortIndex: vendor.sortIndex ?? null,
             mediaId: vendor.mediaId,
           });
           if (vendor.mediaUrl) {
@@ -94,6 +95,7 @@ export const VendorForm: React.FC = () => {
           emailAlert: !!values.emailAlert,
           active: values.active !== undefined ? values.active : true,
           showInSales: !!values.showInSales,
+          sortIndex: values.sortIndex ?? null,
           mediaId: values.mediaId || null,
         };
 
@@ -116,6 +118,7 @@ export const VendorForm: React.FC = () => {
           emailAlert: !!values.emailAlert,
           active: values.active !== undefined ? values.active : true,
           showInSales: !!values.showInSales,
+          sortIndex: values.sortIndex ?? null,
           mediaId: values.mediaId || null,
         };
 
@@ -306,7 +309,7 @@ export const VendorForm: React.FC = () => {
               style={{ background: '#fafafa' }}
             >
               <Row gutter={16}>
-                <Col xs={24} md={isEdit ? 12 : 24}>
+                <Col xs={24} md={isEdit ? 10 : 16}>
                   <Form.Item
                     name="title"
                     label="Vendor Full Name (Ledger Title)"
@@ -316,12 +319,21 @@ export const VendorForm: React.FC = () => {
                   </Form.Item>
                 </Col>
                 {isEdit && (
-                  <Col xs={24} md={12}>
+                  <Col xs={24} md={8}>
                     <Form.Item label="Account Ledger Code">
                       <Input value={account} disabled style={{ fontFamily: 'monospace', fontWeight: 'bold' }} />
                     </Form.Item>
                   </Col>
                 )}
+                <Col xs={24} md={isEdit ? 6 : 8}>
+                  <Form.Item
+                    name="sortIndex"
+                    label="Index"
+                    tooltip="Optional sort order. Lower numbers appear first; decimals like 2.5 let you insert between existing items."
+                  >
+                    <InputNumber style={{ width: '100%' }} placeholder="e.g. 1, 2, 2.5" step={1} />
+                  </Form.Item>
+                </Col>
               </Row>
               {!isEdit && (
                 <Text type="secondary" style={{ fontSize: '12px', fontStyle: 'italic' }}>

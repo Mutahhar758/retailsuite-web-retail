@@ -165,6 +165,7 @@ export const InventoryItemForm: React.FC = () => {
             storage: item.storage ?? undefined,
             ram: item.ram ?? undefined,
             color: item.color ?? undefined,
+            sortIndex: item.sortIndex ?? null,
             quickQtyPresets: quickQtyPresetsArray,
             overrideSubUnits: hasCustomSubUnits,
             customAdditionalUnits: customSubUnitsList,
@@ -212,6 +213,7 @@ export const InventoryItemForm: React.FC = () => {
         ...values,
         lowStockQty: values.lowStockAlert ? (values.lowStockQty ?? null) : null,
         minSalePrice: values.minSalePrice ?? null,
+        sortIndex: values.sortIndex ?? null,
         quickQtyPresets: values.quickQtyPresets && values.quickQtyPresets.length > 0
           ? JSON.stringify(values.quickQtyPresets)
           : null,
@@ -397,7 +399,7 @@ export const InventoryItemForm: React.FC = () => {
             </Row>
 
             <Row gutter={16}>
-              <Col xs={24} md={18}>
+              <Col xs={24} md={14}>
                 <Form.Item
                   name="title"
                   label="Product Title"
@@ -406,12 +408,21 @@ export const InventoryItemForm: React.FC = () => {
                   <Input placeholder="Enter full product name" />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={6}>
+              <Col xs={24} md={5}>
                 <Form.Item
                   name="itemKey"
                   label="Search Key"
                 >
                   <Input placeholder="Quick search key" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={5}>
+                <Form.Item
+                  name="sortIndex"
+                  label="Index"
+                  tooltip="Optional sort order. Lower numbers appear first; decimals like 2.5 let you insert between existing items."
+                >
+                  <InputNumber style={{ width: '100%' }} placeholder="e.g. 1, 2, 2.5" step={1} />
                 </Form.Item>
               </Col>
             </Row>

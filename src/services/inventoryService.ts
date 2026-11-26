@@ -38,6 +38,7 @@ export interface Item {
   storage?: string;
   ram?: string;
   color?: string;
+  sortIndex?: number | null;
   customerCategoryPrices?: ItemCustomerCategoryPriceUpsertRequest[];
 }
 
@@ -69,6 +70,7 @@ export interface InventoryItemUpsertRequest {
   storage?: string;
   ram?: string;
   color?: string;
+  sortIndex?: number | null;
   customerCategoryPrices?: ItemCustomerCategoryPriceUpsertRequest[];
 }
 
@@ -228,6 +230,7 @@ export interface InventoryItemBulkItemDto {
   storage?: string;
   ram?: string;
   color?: string;
+  sortIndex?: number | null;
   customerCategoryPrices?: ItemCustomerCategoryPriceUpsertRequest[];
 }
 

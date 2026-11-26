@@ -114,6 +114,14 @@ export const InventoryItemList: React.FC = () => {
 
   const columns = [
     {
+      title: 'Index',
+      dataIndex: 'sortIndex',
+      key: 'sortIndex',
+      width: '80px',
+      align: 'center' as const,
+      render: (val?: number | null) => val != null ? <Tag color="geekblue">{val}</Tag> : <Text type="secondary">-</Text>,
+    },
+    {
       title: 'Title',
       key: 'title',
       render: (_: any, record: Item) => (
