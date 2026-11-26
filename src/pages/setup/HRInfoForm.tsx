@@ -14,6 +14,7 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import { hrInfoService, type HRInfoUpsertRequest } from '../../services/hrInfoService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
+import { salaryStructureService, type SalaryStructureDto } from '../../services/payrollService';
 import { getPresentableUploadErrorMessage } from '../../utils/errorUtils';
 
 const { Title, Text } = Typography;
@@ -27,6 +28,7 @@ export const HRInfoForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [employeeName, setEmployeeName] = useState<string>('');
   const [accounts, setAccounts] = useState<ChartOfAccountHeadDto[]>([]);
+  const [salaryStructures, setSalaryStructures] = useState<SalaryStructureDto[]>([]);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -35,8 +37,12 @@ export const HRInfoForm: React.FC = () => {
     try {
       setLoading(true);
       // Fetch Chart of Account Level 5 detail accounts for payroll mapping
-      const accountsRes = await chartOfAccountService.getDetailAccounts();
+      const [accountsRes, structuresRes] = await Promise.all([
+        chartOfAccountService.getDetailAccounts(),
+        salaryStructureService.getAll().catch(() => []),
+      ]);
       setAccounts(accountsRes || []);
+      setSalaryStructures(structuresRes || []);
 
       if (isEdit) {
         const emp = await hrInfoService.getById(id!);
@@ -59,6 +65,15 @@ export const HRInfoForm: React.FC = () => {
             expenseAccount: emp.expenseAccount || null,
             payableAccount: emp.payableAccount || null,
             mediaId: emp.mediaId || null,
+            department: emp.department || null,
+            employmentStatus: emp.employmentStatus || 'Active',
+            paymentMethod: emp.paymentMethod || 'Cash',
+            bankName: emp.bankName || null,
+            bankAccountTitle: emp.bankAccountTitle || null,
+            bankAccountNo: emp.bankAccountNo || null,
+            iban: emp.iban || null,
+            salaryStructureId: emp.salaryStructureId || null,
+            loanReceivableAccountId: emp.loanReceivableAccountId || null,
           });
           if (emp.mediaUrl) {
             setImageUrl(emp.mediaUrl);
@@ -101,6 +116,15 @@ export const HRInfoForm: React.FC = () => {
         expenseAccount: values.expenseAccount || null,
         payableAccount: values.payableAccount || null,
         mediaId: values.mediaId || null,
+        department: values.department || undefined,
+        employmentStatus: values.employmentStatus || 'Active',
+        paymentMethod: values.paymentMethod || 'Cash',
+        bankName: values.bankName || undefined,
+        bankAccountTitle: values.bankAccountTitle || undefined,
+        bankAccountNo: values.bankAccountNo || undefined,
+        iban: values.iban || undefined,
+        salaryStructureId: values.salaryStructureId || null,
+        loanReceivableAccountId: values.loanReceivableAccountId || null,
       };
 
       if (isEdit) {
@@ -534,6 +558,73 @@ export const HRInfoForm: React.FC = () => {
                         </Select.Option>
                       ))}
                     </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Card>
+
+            {/* Section 5: Enterprise Payroll & Bank Details */}
+            <Card
+              size="small"
+              title={
+                <Space>
+                  <DollarOutlined style={{ color: '#13c2c2' }} />
+                  <Text strong>5. Enterprise Payroll & Bank Details</Text>
+                </Space>
+              }
+              className="bg-gray-50 border-gray-200 mb-6 rounded-lg shadow-xs"
+              style={{ background: '#fafafa', marginTop: '24px' }}
+            >
+              <Row gutter={16}>
+                <Col xs={24} md={8}>
+                  <Form.Item name="department" label="Department">
+                    <Input placeholder="e.g. Sales, Operations, Finance" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Form.Item name="employmentStatus" label="Employment Status" initialValue="Active">
+                    <Select>
+                      <Select.Option value="Active">Active</Select.Option>
+                      <Select.Option value="OnLeave">On Leave</Select.Option>
+                      <Select.Option value="Suspended">Suspended</Select.Option>
+                      <Select.Option value="Resigned">Resigned</Select.Option>
+                      <Select.Option value="Terminated">Terminated</Select.Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Form.Item name="salaryStructureId" label="Salary Structure Template">
+                    <Select allowClear placeholder="Default for frequency">
+                      {salaryStructures.map(s => (
+                        <Select.Option key={s.id} value={s.id}>{s.code} - {s.name}</Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Row gutter={16}>
+                <Col xs={24} md={6}>
+                  <Form.Item name="paymentMethod" label="Payment Mode" initialValue="Cash">
+                    <Select>
+                      <Select.Option value="Cash">Cash</Select.Option>
+                      <Select.Option value="BankTransfer">Bank Transfer</Select.Option>
+                      <Select.Option value="Cheque">Cheque</Select.Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={6}>
+                  <Form.Item name="bankName" label="Bank Name">
+                    <Input placeholder="e.g. Meezan Bank" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={6}>
+                  <Form.Item name="bankAccountNo" label="Account Number">
+                    <Input placeholder="Account #" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={6}>
+                  <Form.Item name="iban" label="IBAN">
+                    <Input placeholder="PK..." />
                   </Form.Item>
                 </Col>
               </Row>

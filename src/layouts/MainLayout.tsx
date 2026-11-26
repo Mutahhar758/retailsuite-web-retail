@@ -264,10 +264,20 @@ export const MainLayout: React.FC = () => {
         { key: '/daily-entries/stock-adjustment', label: 'Stock Adjustment' },
         { key: '/daily-entries/daily-stock-closing', label: 'Daily Stock Closing' },
         { key: '/daily-entries/bank-reconciliation', label: 'Bank Reconciliation' },
-        { key: '/daily-entries/payroll', label: 'Payroll' },
         { key: '/daily-entries/recurring-vouchers', label: 'Recurring Vouchers' },
         hasKdsFeature ? { key: '/daily-entries/kitchen-display', label: 'Kitchen Display (KDS)' } : null,
       ].filter(Boolean) as any[]
+    },
+    {
+      key: '/payroll',
+      icon: <WalletOutlined />,
+      label: 'Payroll',
+      children: [
+        { key: '/payroll/runs', label: 'Payroll Runs' },
+        { key: '/payroll/loans', label: 'Loans & Advances' },
+        { key: '/payroll/structures', label: 'Salary Structures' },
+        { key: '/payroll/components', label: 'Payroll Components' },
+      ]
     },
     hasMobileShopFeature ? {
       key: '/devices-repairs',

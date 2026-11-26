@@ -20,6 +20,16 @@ export interface HRInfoResponse {
   payableAccount?: string;
   mediaId?: string;
   mediaUrl?: string;
+  department?: string;
+  employmentStatus?: string;
+  terminationDate?: string;
+  paymentMethod?: string;
+  bankName?: string;
+  bankAccountTitle?: string;
+  bankAccountNo?: string;
+  iban?: string;
+  salaryStructureId?: number;
+  loanReceivableAccountId?: string;
   createdBy?: string;
   createdOn?: string;
   lastModifiedBy?: string;
@@ -43,6 +53,16 @@ export interface HRInfoUpsertRequest {
   expenseAccount?: string;
   payableAccount?: string;
   mediaId?: string;
+  department?: string;
+  employmentStatus?: string;
+  terminationDate?: string | null;
+  paymentMethod?: string;
+  bankName?: string;
+  bankAccountTitle?: string;
+  bankAccountNo?: string;
+  iban?: string;
+  salaryStructureId?: number | null;
+  loanReceivableAccountId?: string | null;
 }
 
 export const hrInfoService = {

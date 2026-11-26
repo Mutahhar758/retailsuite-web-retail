@@ -92,6 +92,11 @@ import { ManufacturingForm } from './pages/daily-entries/ManufacturingForm';
 import { DailyStockClosingList } from './pages/daily-entries/DailyStockClosingList';
 import { DailyStockClosingForm } from './pages/daily-entries/DailyStockClosingForm';
 import { ManufacturingReport } from './pages/reports/ManufacturingReport';
+import { PayrollRunList } from './pages/payroll/PayrollRunList';
+import { PayrollRunWorkspace } from './pages/payroll/PayrollRunWorkspace';
+import { EmployeeLoanList } from './pages/payroll/EmployeeLoanList';
+import { SalaryStructureList } from './pages/payroll/SalaryStructureList';
+import { PayrollComponentList } from './pages/payroll/PayrollComponentList';
 import { useAppStore } from './stores/useAppStore';
 import { useAuthStore } from './stores/useAuthStore';
 import { useOfflineStore } from './stores/useOfflineStore';
@@ -213,6 +218,14 @@ function App() {
             <Route path="daily-entries/daily-stock-closing" element={<DailyStockClosingList />} />
             <Route path="daily-entries/daily-stock-closing/new" element={<DailyStockClosingForm />} />
             <Route path="daily-entries/daily-stock-closing/:closingDate" element={<DailyStockClosingForm />} />
+            <Route path="daily-entries/payroll" element={<Navigate to="/payroll/runs" replace />} />
+
+            {/* Enterprise Payroll */}
+            <Route path="payroll/runs" element={<PayrollRunList />} />
+            <Route path="payroll/runs/:id" element={<PayrollRunWorkspace />} />
+            <Route path="payroll/loans" element={<EmployeeLoanList />} />
+            <Route path="payroll/structures" element={<SalaryStructureList />} />
+            <Route path="payroll/components" element={<PayrollComponentList />} />
             
             {/* Reports */}
             <Route path="reports/account-statement" element={<AccountStatement />} />
