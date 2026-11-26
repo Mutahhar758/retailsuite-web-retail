@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Layout, Menu, Button, Avatar, Dropdown, Space, theme, Breadcrumb, Tooltip, Badge, message, Modal } from 'antd';
+import { Layout, Menu, Button, Avatar, Dropdown, Space, theme, Breadcrumb, Tooltip, Badge, message, Modal, Alert, Tag } from 'antd';
 import { 
   MenuFoldOutlined, 
   MenuUnfoldOutlined, 
@@ -26,6 +26,7 @@ import {
   ArrowDownOutlined,
   ArrowUpOutlined,
   WalletOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -33,12 +34,14 @@ import { useAppStore } from '../stores/useAppStore';
 import { useSettingsStore, RESTAURANT_ENABLE_KOT_KEY, RESTAURANT_ENABLE_DINE_IN_KEY, RESTAURANT_ENABLE_KDS_KEY, SUPPLY_ENABLE_KEY, MOBILE_SHOP_ENABLE_KEY, MANUFACTURING_ENABLE_KEY } from '../stores/useSettingsStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useOfflineStore } from '../stores/useOfflineStore';
+import { useAppUpdateStore } from '../stores/useAppUpdateStore';
 import { profileService, logoutService } from '../services/profileService';
 import api from '../services/api';
-import { CURRENT_APP_VERSION } from '../utils/autoVersionRefresh';
+import { CURRENT_APP_VERSION, applyPendingUpdate } from '../utils/autoVersionRefresh';
 import { GeminiAssistantWidget } from '../components/ai/GeminiAssistantWidget';
 import { NavigationCommandModal, type SearchableNavItem } from '../components/common/NavigationCommandModal';
 import { OfflineSyncReviewModal } from '../components/OfflineSyncReviewModal';
+import { OfflineModePromptModal } from '../components/OfflineModePromptModal';
 import { offlineSyncService } from '../services/offlineSyncService';
 
 const { Header, Sider, Content } = Layout;
@@ -51,15 +54,16 @@ export const MainLayout: React.FC = () => {
   const { logout, user, setUser, setPermissions } = useAuthStore();
   const { theme: appTheme, setTheme, layout, setLayout, currentTenantIdentifier, licenses, updateLicenseFeatures } = useAppStore();
   const { token } = theme.useToken();
-  const { isOnline } = useNetworkStatus();
-  const { pendingCount } = useOfflineStore();
+  const { isOnline, isConnected, isOfflineMode } = useNetworkStatus();
+  const { pendingCount, setOfflineMode, setOfflinePromptDismissed } = useOfflineStore();
+  const { updateAvailable, availableVersion } = useAppUpdateStore();
 
-  // Prompt user to review pending offline sales when online
+  // Prompt user to review pending offline sales when connected
   React.useEffect(() => {
-    if (isOnline && pendingCount > 0) {
+    if (isConnected && pendingCount > 0) {
       offlineSyncService.promptForSyncReview().catch(console.error);
     }
-  }, [isOnline, pendingCount]);
+  }, [isConnected, pendingCount]);
 
   // Global Ctrl+K / Cmd+K listener for quick search modal
   useEffect(() => {
@@ -74,7 +78,7 @@ export const MainLayout: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
-    if (!currentTenantIdentifier || !isOnline) return;
+    if (!currentTenantIdentifier || !isConnected) return;
     const syncFeatures = async () => {
       try {
         const response = await api.get('/api/license/features');
@@ -94,7 +98,7 @@ export const MainLayout: React.FC = () => {
       }
     };
     syncFeatures();
-  }, [currentTenantIdentifier, isOnline]);
+  }, [currentTenantIdentifier, isConnected]);
 
   React.useEffect(() => {
     const fetchProfileAndPermissions = async () => {
@@ -121,7 +125,7 @@ export const MainLayout: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
-    if (!isOnline) {
+    if (isOfflineMode) {
       const allowedPaths = ['/daily-entries/sale', '/daily-entries/pos-sale'];
       const currentPath = location.pathname;
       const isAllowed = allowedPaths.some(path => currentPath.startsWith(path));
@@ -129,7 +133,7 @@ export const MainLayout: React.FC = () => {
         navigate('/daily-entries/sale', { replace: true });
       }
     }
-  }, [isOnline, location.pathname, navigate]);
+  }, [isOfflineMode, location.pathname, navigate]);
 
   const breadcrumbItems = location.pathname.split('/').filter(i => i).map((path, index, array) => {
     const url = `/${array.slice(0, index + 1).join('/')}`;
@@ -609,7 +613,21 @@ export const MainLayout: React.FC = () => {
               userSelect: 'none'
             }}>
               <span>RetailSuite</span>
-              <span style={{ fontWeight: 600 }}>v{CURRENT_APP_VERSION}</span>
+              <Space size={6}>
+                {updateAvailable && (
+                  <Tooltip title={`Update to v${availableVersion || 'latest'} now`}>
+                    <Tag
+                      color="processing"
+                      icon={<ReloadOutlined />}
+                      onClick={() => applyPendingUpdate()}
+                      style={{ margin: 0, cursor: 'pointer', fontSize: 10, lineHeight: '16px', padding: '0 5px' }}
+                    >
+                      Update
+                    </Tag>
+                  </Tooltip>
+                )}
+                <span style={{ fontWeight: 600 }}>v{CURRENT_APP_VERSION}</span>
+              </Space>
             </div>
           )}
         </Sider>
@@ -749,6 +767,28 @@ export const MainLayout: React.FC = () => {
           </Space>
         </Header>
         
+        {!isConnected && !isOfflineMode && (
+          <Alert
+            type="warning"
+            banner
+            showIcon
+            icon={<DisconnectOutlined />}
+            message="No internet connection — your current work is safe. Waiting to reconnect…"
+            action={
+              <Button
+                size="small"
+                danger
+                onClick={() => {
+                  setOfflinePromptDismissed(false);
+                  setOfflineMode(true);
+                }}
+              >
+                Switch to Offline Mode
+              </Button>
+            }
+          />
+        )}
+
         <div style={{ padding: '16px 24px 0' }}>
           <Breadcrumb items={breadcrumbItems} />
         </div>
@@ -781,6 +821,7 @@ export const MainLayout: React.FC = () => {
 
       <GeminiAssistantWidget />
       <OfflineSyncReviewModal />
+      <OfflineModePromptModal />
     </Layout>
   );
 };

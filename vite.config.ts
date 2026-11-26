@@ -35,7 +35,7 @@ export default defineConfig({
     },
     VitePWA({
       injectRegister: 'inline',
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       manifestFilename: 'manifest.json',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
@@ -61,9 +61,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Activate new SW immediately — don't wait for all tabs to close
-        skipWaiting: true,
-        clientsClaim: true,
+        // Wait for explicit user confirmation before activating a new service worker
+        skipWaiting: false,
+        clientsClaim: false,
         // Cache the app shell (HTML, JS, CSS, fonts)
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // Raise limit to 4 MiB — the main bundle is ~2.16 MB

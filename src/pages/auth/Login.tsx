@@ -6,6 +6,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { AddLicenseModal } from './AddLicenseModal';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { useOfflineStore } from '../../stores/useOfflineStore';
 import { offlineCacheService } from '../../services/offlineCacheService';
 import api from '../../services/api';
 
@@ -16,7 +17,7 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isLicenseModalOpen, setIsLicenseModalOpen] = useState(false);
   const navigate = useNavigate();
-  const { isOnline } = useNetworkStatus();
+  const { isConnected: isOnline } = useNetworkStatus();
   
   const { licenses, currentTenantIdentifier, setCurrentTenant } = useAppStore();
   const { setTokens, setUser, isAuthenticated } = useAuthStore();
@@ -46,6 +47,7 @@ export const Login: React.FC = () => {
 
     setTokens('offline-mode-token', 'offline-mode-refresh-token');
     setUser({ userName: 'Offline User' });
+    useOfflineStore.getState().setOfflineMode(true);
     message.success('Logged in to Offline Mode successfully!');
     navigate('/daily-entries/sale');
   };
@@ -68,6 +70,7 @@ export const Login: React.FC = () => {
       if (body && (body.token || body.accessToken)) {
         setTokens(body.token || body.accessToken, body.refreshToken);
         setUser({ userName: values.username });
+        useOfflineStore.getState().setOfflineMode(false);
         
         // Warm cache for the newly logged-in tenant!
         offlineCacheService.warmCache().catch(console.error);

@@ -11,6 +11,10 @@ interface OfflineState {
   deviceId: string | null;
   /** False when browser is online locally but API server is unreachable */
   isServerReachable: boolean;
+  /** True ONLY when the user explicitly switched into Offline Mode (or used Offline Login) */
+  isOfflineMode: boolean;
+  /** True if user chose "Stay Online" during the current outage (resets when reconnected) */
+  offlinePromptDismissed: boolean;
   /** Controls the Offline Sync Review & Confirmation modal */
   syncReviewOpen: boolean;
 
@@ -19,6 +23,8 @@ interface OfflineState {
   setLastSyncedAt: (d: Date) => void;
   setDeviceId: (id: string) => void;
   setServerReachable: (b: boolean) => void;
+  setOfflineMode: (b: boolean) => void;
+  setOfflinePromptDismissed: (b: boolean) => void;
   setSyncReviewOpen: (b: boolean) => void;
 }
 
@@ -32,6 +38,8 @@ export const useOfflineStore = create<OfflineState>()((set) => ({
   lastSyncedAt: null,
   deviceId: null,
   isServerReachable: typeof navigator !== 'undefined' ? navigator.onLine : true,
+  isOfflineMode: false,
+  offlinePromptDismissed: false,
   syncReviewOpen: false,
 
   setPendingCount: (pendingCount) => set({ pendingCount }),
@@ -39,5 +47,7 @@ export const useOfflineStore = create<OfflineState>()((set) => ({
   setLastSyncedAt: (lastSyncedAt) => set({ lastSyncedAt }),
   setDeviceId: (deviceId) => set({ deviceId }),
   setServerReachable: (isServerReachable) => set({ isServerReachable }),
+  setOfflineMode: (isOfflineMode) => set({ isOfflineMode }),
+  setOfflinePromptDismissed: (offlinePromptDismissed) => set({ offlinePromptDismissed }),
   setSyncReviewOpen: (syncReviewOpen) => set({ syncReviewOpen }),
 }));

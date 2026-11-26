@@ -1,4 +1,4 @@
-import { message } from 'antd';
+import { useAppUpdateStore } from '../stores/useAppUpdateStore';
 
 declare const __APP_VERSION__: string;
 declare const __BUILD_TIME__: string;
@@ -9,7 +9,7 @@ export const CURRENT_BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? __BUIL
 const LAST_VERSION_KEY = 'app_installed_version';
 const LAST_BUILD_TIME_KEY = 'app_installed_build_time';
 const RELOAD_GUARD_KEY = 'app_auto_reload_guard';
-const LAST_ATTEMPTED_BUILD_KEY = 'app_last_attempted_build';
+const DISMISSED_BUILD_KEY = 'app_dismissed_update_build';
 
 // Clean up any lingering _v parameter from the URL bar immediately without reloading
 if (typeof window !== 'undefined' && window.location.search.includes('_v=')) {
@@ -20,32 +20,47 @@ if (typeof window !== 'undefined' && window.location.search.includes('_v=')) {
 }
 
 let isRefreshing = false;
+let isUserInitiatedRefresh = false;
 
 /**
- * Perform a clean hard-refresh, clearing browser/PWA caches.
+ * Perform a clean hard-refresh, activating any waiting Service Worker and clearing caches.
+ * Called ONLY after explicit user confirmation.
  */
 export const performHardRefresh = async () => {
   if (isRefreshing) return;
   isRefreshing = true;
+  isUserInitiatedRefresh = true;
 
-  console.log('[AutoRefresh] Initiating refresh to load new build...');
+  console.log('[AppUpdate] User confirmed update — initiating refresh to load new build...');
+
+  const { availableVersion, availableBuildTime } = useAppUpdateStore.getState();
+  if (availableVersion) {
+    localStorage.setItem(LAST_VERSION_KEY, availableVersion);
+  }
+  if (availableBuildTime) {
+    localStorage.setItem(LAST_BUILD_TIME_KEY, availableBuildTime);
+  }
+  sessionStorage.removeItem(DISMISSED_BUILD_KEY);
 
   try {
-    // 1. Clear all CacheStorage entries (SW caches)
-    if ('caches' in window) {
-      const cacheKeys = await caches.keys();
-      await Promise.all(cacheKeys.map(k => caches.delete(k)));
-    }
-
-    // 2. Unregister / update service workers
+    // 1. Tell any waiting service worker to take over now
     if ('serviceWorker' in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
       for (const reg of registrations) {
-        await reg.update();
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+        await reg.update().catch(() => {});
       }
     }
+
+    // 2. Clear all CacheStorage entries (SW caches)
+    if ('caches' in window) {
+      const cacheKeys = await caches.keys();
+      await Promise.all(cacheKeys.map((k) => caches.delete(k)));
+    }
   } catch (err) {
-    console.warn('[AutoRefresh] Cache purge warning:', err);
+    console.warn('[AppUpdate] Cache purge warning:', err);
   }
 
   // Set guard to prevent rapid consecutive loops
@@ -56,14 +71,63 @@ export const performHardRefresh = async () => {
 };
 
 /**
+ * Explicit user action: confirm and apply the pending update.
+ */
+export const applyPendingUpdate = () => {
+  void performHardRefresh();
+};
+
+/**
+ * Explicit user action: ignore / defer the pending update for this session.
+ * The app will NOT reload and will NOT re-open the notification for this build.
+ */
+export const dismissPendingUpdate = () => {
+  const { availableBuildTime, availableVersion, dismissUpdate } = useAppUpdateStore.getState();
+  const buildId = availableBuildTime || availableVersion || 'sw-waiting';
+  sessionStorage.setItem(DISMISSED_BUILD_KEY, buildId);
+  dismissUpdate();
+};
+
+const notifyUpdateAvailable = (version: string | null, buildTime: string | null) => {
+  const buildId = buildTime || version || 'sw-waiting';
+  const dismissedBuild = sessionStorage.getItem(DISMISSED_BUILD_KEY);
+  const store = useAppUpdateStore.getState();
+
+  // If user already ignored/dismissed this exact build, keep footer badge available
+  // without re-opening the notification popup.
+  if (dismissedBuild === buildId) {
+    if (!store.updateAvailable) {
+      useAppUpdateStore.setState({
+        updateAvailable: true,
+        availableVersion: version,
+        availableBuildTime: buildTime,
+        isDismissed: true,
+      });
+    }
+    return;
+  }
+
+  if (
+    store.updateAvailable &&
+    store.availableBuildTime === buildTime &&
+    store.availableVersion === version
+  ) {
+    return;
+  }
+
+  store.setUpdateAvailable(version, buildTime);
+};
+
+/**
  * Fetch /version.json with cache-busting headers to see if server has a newer build.
+ * Never auto-reloads — only flags an available update for user confirmation.
  */
 export const checkForNewVersion = async () => {
   // Do not run in local development mode
   if (import.meta.env.DEV) return;
   if (isRefreshing) return;
 
-  // Protect against rapid reload loops within 30 seconds
+  // Protect against rapid checks immediately after a reload
   const lastReload = sessionStorage.getItem(RELOAD_GUARD_KEY);
   if (lastReload && Date.now() - Number(lastReload) < 30000) {
     return;
@@ -74,8 +138,8 @@ export const checkForNewVersion = async () => {
       cache: 'no-store',
       headers: {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache'
-      }
+        Pragma: 'no-cache',
+      },
     });
 
     if (!res.ok) return;
@@ -87,29 +151,25 @@ export const checkForNewVersion = async () => {
     const storedBuildTime = localStorage.getItem(LAST_BUILD_TIME_KEY);
     const storedVersion = localStorage.getItem(LAST_VERSION_KEY);
 
-    // If we already attempted a reload for this server build during this session, stop looping
-    const lastAttempted = sessionStorage.getItem(LAST_ATTEMPTED_BUILD_KEY);
-    if (serverBuildTime && lastAttempted === serverBuildTime) {
-      return;
-    }
+    // Detect if server has a newer release than the currently running bundle
+    const isNewVersion = !!(
+      serverVersion &&
+      CURRENT_APP_VERSION &&
+      serverVersion !== CURRENT_APP_VERSION &&
+      serverVersion !== storedVersion
+    );
+    const isNewBuildTime = !!(
+      serverBuildTime &&
+      CURRENT_BUILD_TIME &&
+      serverBuildTime !== CURRENT_BUILD_TIME &&
+      serverBuildTime !== storedBuildTime
+    );
 
-    // Detect if server has a newer release that client hasn't acknowledged yet
-    const isNewVersion = !!(serverVersion && CURRENT_APP_VERSION && serverVersion !== CURRENT_APP_VERSION && serverVersion !== storedVersion);
-    const isNewBuildTime = !!(serverBuildTime && CURRENT_BUILD_TIME && serverBuildTime !== CURRENT_BUILD_TIME && serverBuildTime !== storedBuildTime);
-    const isNewBuild = isNewVersion || isNewBuildTime;
-
-    if (isNewBuild) {
-      console.log(`[AutoRefresh] Newer web app build detected! Server: v${serverVersion} (${serverBuildTime}) vs Client: v${CURRENT_APP_VERSION} (${CURRENT_BUILD_TIME})`);
-      localStorage.setItem(LAST_VERSION_KEY, serverVersion || CURRENT_APP_VERSION);
-      localStorage.setItem(LAST_BUILD_TIME_KEY, serverBuildTime || CURRENT_BUILD_TIME);
-      if (serverBuildTime) {
-        sessionStorage.setItem(LAST_ATTEMPTED_BUILD_KEY, serverBuildTime);
-      }
-
-      message.loading({ content: 'New update available! Refreshing to latest version...', key: 'version-update', duration: 2 });
-      setTimeout(() => {
-        performHardRefresh();
-      }, 500);
+    if (isNewVersion || isNewBuildTime) {
+      console.log(
+        `[AppUpdate] Newer web app build detected! Server: v${serverVersion} (${serverBuildTime}) vs Client: v${CURRENT_APP_VERSION} (${CURRENT_BUILD_TIME})`
+      );
+      notifyUpdateAvailable(serverVersion || null, serverBuildTime || null);
     }
   } catch {
     // Offline or network error — ignore silently
@@ -117,11 +177,45 @@ export const checkForNewVersion = async () => {
 };
 
 /**
- * Initialize automatic background version checkers:
+ * Watch for waiting Service Workers so PWA updates also ask the user instead of auto-reloading.
+ */
+const monitorServiceWorkerUpdates = () => {
+  if (!('serviceWorker' in navigator)) return;
+
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((registrations) => {
+      for (const reg of registrations) {
+        if (reg.waiting) {
+          notifyUpdateAvailable(null, null);
+        }
+        reg.addEventListener('updatefound', () => {
+          const installing = reg.installing;
+          if (!installing) return;
+          installing.addEventListener('statechange', () => {
+            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+              notifyUpdateAvailable(null, null);
+            }
+          });
+        });
+      }
+    })
+    .catch(() => {});
+
+  // Never auto-reload on controllerchange unless the user explicitly clicked Update Now
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (isUserInitiatedRefresh && !isRefreshing) {
+      window.location.reload();
+    }
+  });
+};
+
+/**
+ * Initialize background version checkers (prompt-only, never auto-reloads):
  * - Immediate check
- * - Service worker controllerchange event listener
  * - Periodic check every 45 seconds
- * - Tab visibility / focus event listener
+ * - Tab visibility / focus check
+ * - Service worker waiting state monitor
  */
 export const initAutoVersionRefresh = () => {
   // Never run in local development mode
@@ -143,7 +237,7 @@ export const initAutoVersionRefresh = () => {
   // 2. Periodic polling every 45s
   setInterval(checkForNewVersion, 45 * 1000);
 
-  // 3. Tab focus / visibility changes (when cashier returns to POS)
+  // 3. Tab focus / visibility changes
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       checkForNewVersion();
@@ -154,15 +248,6 @@ export const initAutoVersionRefresh = () => {
     checkForNewVersion();
   });
 
-  // 4. Service Worker controller change (PWA auto-update trigger)
-  if ('serviceWorker' in navigator) {
-    let swRefreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!swRefreshing) {
-        swRefreshing = true;
-        console.log('[AutoRefresh] Service Worker controller changed. Performing refresh...');
-        performHardRefresh();
-      }
-    });
-  }
+  // 4. Service Worker waiting monitor (never auto-refreshes)
+  monitorServiceWorkerUpdates();
 };

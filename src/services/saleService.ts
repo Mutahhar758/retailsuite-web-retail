@@ -189,7 +189,8 @@ export const saleService = {
     request: SaleCreateRequest,
     options: { offlineFallback?: boolean } = {}
   ): Promise<string> {
-    if (navigator.onLine) {
+    const isExplicitOfflineMode = useOfflineStore.getState().isOfflineMode;
+    if (navigator.onLine && !isExplicitOfflineMode) {
       try {
         const response = await api.post('/api/sales', request);
         return response.data.body as string;

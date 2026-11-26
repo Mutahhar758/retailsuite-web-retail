@@ -105,6 +105,7 @@ import { getOrCreateDeviceId } from './services/offlineDb';
 import { offlineCacheService } from './services/offlineCacheService';
 import { offlineSyncService } from './services/offlineSyncService';
 import { saleService } from './services/saleService';
+import { AppUpdateNotifier } from './components/AppUpdateNotifier';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuthStore();
@@ -157,6 +158,7 @@ function App() {
 
   return (
     <ConfigProvider theme={theme === 'light' ? lightTheme : darkTheme}>
+      <AppUpdateNotifier />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />

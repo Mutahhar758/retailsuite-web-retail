@@ -1,16 +1,28 @@
 import { useState, useEffect } from 'react';
 import { useOfflineStore } from '../stores/useOfflineStore';
+import { useAuthStore } from '../stores/useAuthStore';
 import { offlineSyncService } from '../services/offlineSyncService';
 import api from '../services/api';
 
 /**
- * Reactive hook that tracks real online/offline status:
- * Combines browser navigator.onLine with live API server reachability
- * (so dropping internet while still on Wi-Fi/LAN also switches to Offline Mode).
+ * Reactive hook that tracks network connectivity separately from Offline Mode:
+ * - `isConnected`: actual live connectivity (browser online && API server reachable)
+ * - `isOfflineMode`: true ONLY when the user explicitly switched to Offline Mode
+ * - `isOnline`: `!isOfflineMode` (so losing internet never auto-switches the UI or discards vouchers)
  */
-export function useNetworkStatus(): { isOnline: boolean } {
+export function useNetworkStatus(): {
+  isOnline: boolean;
+  isConnected: boolean;
+  isOfflineMode: boolean;
+} {
   const [browserOnline, setBrowserOnline] = useState<boolean>(navigator.onLine);
-  const { isServerReachable, setServerReachable } = useOfflineStore();
+  const {
+    isServerReachable,
+    setServerReachable,
+    isOfflineMode,
+    setOfflineMode,
+    setOfflinePromptDismissed,
+  } = useOfflineStore();
 
   useEffect(() => {
     const handleOnline = () => {
@@ -31,7 +43,25 @@ export function useNetworkStatus(): { isOnline: boolean } {
     };
   }, [setServerReachable]);
 
-  // When browser thinks it's online but API failed, probe every 10s to auto-recover & sync
+  const isConnected = browserOnline && isServerReachable;
+
+  // When connectivity recovers, reset dismissal flag and smoothly return to Online Mode
+  // if the user has a real authenticated session (not offline-only login).
+  useEffect(() => {
+    if (!isConnected) return;
+
+    setOfflinePromptDismissed(false);
+
+    if (isOfflineMode) {
+      const { accessToken } = useAuthStore.getState();
+      if (accessToken && accessToken !== 'offline-mode-token') {
+        setOfflineMode(false);
+        offlineSyncService.promptForSyncReview().catch(console.error);
+      }
+    }
+  }, [isConnected, isOfflineMode, setOfflineMode, setOfflinePromptDismissed]);
+
+  // When browser thinks it's online but API failed, probe every 10s to detect recovery
   useEffect(() => {
     if (!browserOnline || isServerReachable) return;
 
@@ -54,5 +84,9 @@ export function useNetworkStatus(): { isOnline: boolean } {
     return () => window.clearInterval(timer);
   }, [browserOnline, isServerReachable, setServerReachable]);
 
-  return { isOnline: browserOnline && isServerReachable };
+  return {
+    isOnline: !isOfflineMode,
+    isConnected,
+    isOfflineMode,
+  };
 }
