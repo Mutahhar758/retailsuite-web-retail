@@ -15,12 +15,14 @@ import { journalVoucherService, type JournalVoucherLineRequest } from '../../ser
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 import { useGridKeyboard } from '../../hooks/useGridKeyboard';
+import { usePeriodLockStore } from '../../stores/usePeriodLockStore';
 
 const { Title, Text } = Typography;
 
 export const JournalVoucherForm: React.FC = () => {
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const navigate = useNavigate();
+  const isDateLocked = usePeriodLockStore((s) => s.isDateLocked);
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const isSavingRef = useRef(false);
@@ -399,6 +401,7 @@ export const JournalVoucherForm: React.FC = () => {
                   ref={datePickerRef}
                   style={{ width: '100%' }}
                   format="DD-MMM-YYYY"
+                  disabledDate={isDateLocked}
                   onKeyDown={handleDatePickerKeyDown}
                 />
               </Form.Item>

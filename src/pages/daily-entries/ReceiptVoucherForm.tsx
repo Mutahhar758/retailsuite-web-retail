@@ -15,6 +15,7 @@ import { receiptService, type ReceiptLineRequest } from '../../services/receiptS
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 import { useGridKeyboard, selectInputOnFocus } from '../../hooks/useGridKeyboard';
+import { usePeriodLockStore } from '../../stores/usePeriodLockStore';
 
 const { Title, Text } = Typography;
 
@@ -153,6 +154,7 @@ const AccountSelectCell: React.FC<AccountSelectCellProps> = ({
 export const ReceiptVoucherForm: React.FC = () => {
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const navigate = useNavigate();
+  const isDateLocked = usePeriodLockStore((s) => s.isDateLocked);
   const location = useLocation();
   const draftData = (location.state as any)?.draftData;
   const [form] = Form.useForm();
@@ -551,6 +553,7 @@ export const ReceiptVoucherForm: React.FC = () => {
                   ref={datePickerRef}
                   style={{ width: '100%' }}
                   format="DD-MMM-YYYY"
+                  disabledDate={isDateLocked}
                   onKeyDown={handleDatePickerKeyDown}
                 />
               </Form.Item>

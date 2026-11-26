@@ -31,6 +31,7 @@ import {
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useAppStore } from '../stores/useAppStore';
+import { usePeriodLockStore } from '../stores/usePeriodLockStore';
 import { useSettingsStore, RESTAURANT_ENABLE_KOT_KEY, RESTAURANT_ENABLE_DINE_IN_KEY, RESTAURANT_ENABLE_KDS_KEY, SUPPLY_ENABLE_KEY, MOBILE_SHOP_ENABLE_KEY, MANUFACTURING_ENABLE_KEY } from '../stores/useSettingsStore';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useOfflineStore } from '../stores/useOfflineStore';
@@ -117,6 +118,7 @@ export const MainLayout: React.FC = () => {
           isOwner: profile.isOwner
         });
         setPermissions(perms || []);
+        usePeriodLockStore.getState().fetchLockStatus();
       } catch (error) {
         console.error('Failed to fetch profile and permissions', error);
       }
@@ -245,6 +247,7 @@ export const MainLayout: React.FC = () => {
         { key: '/setup/settings', label: 'Settings' },
         { key: '/setup/printer-settings', label: 'Printer Settings' },
         { key: '/setup/opening-balance', label: 'Opening Balance' },
+        { key: '/setup/period-closing', label: 'Period Closing' },
         hasDineInFeature ? { key: '/setup/dining-tables', label: 'Dining Tables' } : null,
       ].filter(Boolean) as any[]
     },

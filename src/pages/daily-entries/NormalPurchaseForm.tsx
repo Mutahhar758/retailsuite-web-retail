@@ -16,6 +16,7 @@ import { inventoryService, type Item } from '../../services/inventoryService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
 import { narrationService, type NarrationDto } from '../../services/narrationService';
 import { useAppStore } from '../../stores/useAppStore';
+import { usePeriodLockStore } from '../../stores/usePeriodLockStore';
 import { useSettingsStore, INVENTORY_ENABLE_SECONDARY_QTY_KEY, MOBILE_SHOP_ENABLE_KEY, PURCHASE_ALLOW_SALE_PRICE_UPDATE_KEY } from '../../stores/useSettingsStore';
 import { round } from '../../utils/numberUtils';
 import { getSelectablePrimaryUnits, toBasePrimaryQty, resolveDisplayQtyAndUnit } from '../../utils/unitConversion';
@@ -126,6 +127,7 @@ export const NormalPurchaseForm: React.FC = () => {
 
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const navigate = useNavigate();
+  const isDateLocked = usePeriodLockStore((s) => s.isDateLocked);
   const location = useLocation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -1121,6 +1123,7 @@ export const NormalPurchaseForm: React.FC = () => {
                   ref={datePickerRef}
                   style={{ width: '100%' }}
                   format="DD-MMM-YYYY"
+                  disabledDate={isDateLocked}
                   onKeyDown={handleDatePickerKeyDown}
                 />
               </Form.Item>

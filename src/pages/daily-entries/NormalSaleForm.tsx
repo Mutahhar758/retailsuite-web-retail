@@ -20,6 +20,7 @@ import type { NarrationDto } from '../../services/narrationService';
 import { inventoryService, type Item, type ItemCustomerCategoryPriceDto } from '../../services/inventoryService';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useAppStore } from '../../stores/useAppStore';
+import { usePeriodLockStore } from '../../stores/usePeriodLockStore';
 import {
   useSettingsStore,
   INVENTORY_ENABLE_SECONDARY_QTY_KEY,
@@ -163,6 +164,7 @@ export const NormalSaleForm: React.FC = () => {
   const { voucherNo } = useParams<{ voucherNo: string }>();
   const isEdit = !!voucherNo && voucherNo !== 'new';
   const navigate = useNavigate();
+  const isDateLocked = usePeriodLockStore((s) => s.isDateLocked);
   const location = useLocation();
   const [form] = Form.useForm();
 
@@ -2057,6 +2059,7 @@ export const NormalSaleForm: React.FC = () => {
                 ref={datePickerRef}
                 style={{ width: '100%' }}
                 format="DD-MMM-YYYY"
+                disabledDate={isDateLocked}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();

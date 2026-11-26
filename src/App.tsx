@@ -78,6 +78,7 @@ import { UserForm } from './pages/setup/UserForm';
 import { RoleList } from './pages/setup/RoleList';
 import { RoleForm } from './pages/setup/RoleForm';
 import { OpeningBalance } from './pages/setup/OpeningBalance';
+import { PeriodClosingPage } from './pages/setup/PeriodClosingPage';
 import { DiningTableList } from './pages/setup/DiningTableList';
 import { BrandList } from './pages/setup/BrandList';
 import { RepairJobList } from './pages/devices-repairs/RepairJobList';
@@ -292,6 +293,7 @@ function App() {
             <Route path="setup/settings" element={<SettingsPage />} />
             <Route path="setup/printer-settings" element={<PrinterSettings />} />
             <Route path="setup/opening-balance" element={<OpeningBalance />} />
+            <Route path="setup/period-closing" element={<PeriodClosingPage />} />
             <Route path="setup/dining-tables" element={<DiningTableList />} />
             
             {/* Devices & Repairs */}

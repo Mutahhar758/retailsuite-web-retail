@@ -8,6 +8,7 @@ import {
 } from '@ant-design/icons';
 import { openingBalanceService, type OpeningBalanceDto } from '../../services/openingBalanceService';
 import { chartOfAccountService, type ChartOfAccountHeadDto } from '../../services/chartOfAccountService';
+import { usePeriodLockStore } from '../../stores/usePeriodLockStore';
 
 const { Title, Text } = Typography;
 const { Search } = Input;
@@ -25,6 +26,7 @@ export const OpeningBalance: React.FC = () => {
   const [searchValue, setSearchValue] = useState('');
   const [parentAccounts, setParentAccounts] = useState<ChartOfAccountHeadDto[]>([]);
   const [selectedParent, setSelectedParent] = useState<string | undefined>(undefined);
+  const lockDate = usePeriodLockStore((s) => s.lockDate);
   
 
   const fetchParentAccounts = useCallback(async () => {
@@ -83,6 +85,10 @@ export const OpeningBalance: React.FC = () => {
   const difference = totalDr - totalCr;
 
   const handleSave = () => {
+    if (lockDate) {
+      message.warning(`Opening balances are locked because an accounting period is closed through ${lockDate}.`);
+      return;
+    }
     Modal.confirm({
       title: 'Save Opening Balances',
       content: 'Are you sure you want to save these opening balances?',
